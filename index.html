@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seguimiento de Pedidos — Innovex</title>
+<style>
+  :root{
+    --bg:#F5F4EF;
+    --surface:#FFFFFF;
+    --surface-alt:#EFEEE6;
+    --border:#DEDCD1;
+    --ink:#1B2321;
+    --ink-muted:#5C665F;
+    --accent:#1B4B43;
+    --accent-hover:#143A34;
+    --accent-warm:#A6692E;
+    --accent-warm-bg:#F3E6D6;
+
+    --st-proceso:#6B7563;  --st-proceso-bg:#EEF0EC;
+    --st-transito:#2E5C8A; --st-transito-bg:#E7EEF5;
+    --st-aduana:#A6761D;   --st-aduana-bg:#F5EEDD;
+    --st-destino:#1B4B43;  --st-destino-bg:#E4EEEC;
+    --st-recibido:#2F6B3A; --st-recibido-bg:#E7F0E8;
+    --st-atrasado:#A6332F; --st-atrasado-bg:#F6E5E4;
+
+    --font-display: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-ui);
+    font-size:14px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  #app{min-height:100vh;}
+  .center-loading{
+    display:flex;align-items:center;justify-content:center;height:100vh;
+    color:var(--ink-muted); font-family:var(--font-display); font-size:18px;
+  }
+
+  /* Topbar */
+  .topbar{
+    padding:28px 40px 22px;
+    border-bottom:1px solid var(--border);
+    background:var(--surface);
+  }
+  .topbar-inner{
+    display:flex; justify-content:space-between; align-items:flex-end;
+    gap:24px; flex-wrap:wrap; max-width:1280px; margin:0 auto;
+  }
+  .page-title{
+    font-family:var(--font-display);
+    font-size:26px; font-weight:600; margin:0 0 4px 0; letter-spacing:-0.01em;
+  }
+  .page-sub{ color:var(--ink-muted); font-size:13px; margin:0; }
+  .stats-row{ display:flex; gap:22px; flex-wrap:wrap; }
+  .stat-chip{ border-left:3px solid var(--accent); padding-left:10px; min-width:90px; }
+  .stat-chip.warn{ border-left-color:var(--st-atrasado); }
+  .stat-chip.amber{ border-left-color:var(--st-aduana); }
+  .stat-value{ font-family:var(--font-display); font-size:22px; font-weight:600; line-height:1.1; }
+  .stat-label{ font-size:11.5px; color:var(--ink-muted); margin-top:2px; }
+
+  /* Controls */
+  .controls{
+    display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+    padding:14px 40px; background:var(--surface-alt); border-bottom:1px solid var(--border);
+  }
+  .controls-inner{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; max-width:1280px; margin:0 auto; width:100%; }
+  .controls input[type=text], .controls select{
+    font-family:var(--font-ui); font-size:13.5px; color:var(--ink);
+    background:var(--surface); border:1px solid var(--border); border-radius:4px;
+    padding:8px 10px; outline:none;
+  }
+  .controls input[type=text]:focus, .controls select:focus{ border-color:var(--accent); }
+  .controls input[type=text]{ min-width:200px; flex:1; }
+  .spacer{ flex:1; }
+
+  .btn{
+    font-family:var(--font-ui); font-size:13.5px; font-weight:500; cursor:pointer;
+    border-radius:4px; padding:9px 16px; border:1px solid transparent;
+  }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-primary:hover{ background:var(--accent-hover); }
+  .btn-ghost{ background:transparent; border-color:var(--border); color:var(--ink); }
+  .btn-ghost:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn-sm{ padding:5px 10px; font-size:12.5px; }
+  .btn:disabled{ opacity:0.55; cursor:default; }
+  .link-btn{
+    background:none;border:none;color:var(--ink-muted);font-size:12.5px;
+    text-decoration:underline; cursor:pointer; font-family:var(--font-ui); padding:0;
+  }
+  .link-btn:hover{ color:var(--ink); }
+
+  /* Main / list */
+  .main{ max-width:1280px; margin:0 auto; padding:24px 40px 80px; }
+  .info-banner{
+    background:var(--accent-warm-bg); border:1px solid #E0C9A6; color:#5C4322;
+    border-radius:4px; padding:10px 14px; font-size:13px; margin-bottom:18px;
+  }
+  .list-header{
+    display:flex; gap:16px; padding:0 16px 8px; font-size:11.5px; color:var(--ink-muted);
+    border-bottom:1px solid var(--border);
+  }
+  .list-header .col{ }
+  .pedido-row{
+    display:flex; gap:16px; align-items:center;
+    padding:14px 16px; border-bottom:1px solid var(--border);
+    border-left:4px solid var(--st-proceso); background:var(--surface);
+  }
+  .col{ min-width:0; }
+  .col-proveedor{ flex:2.2; }
+  .col-destino{ flex:1; color:var(--ink-muted); }
+  .col-monto{ flex:1.3; }
+  .col-estado{ flex:1.8; }
+  .col-fecha{ flex:1; }
+  .col-acciones{ flex:1.2; text-align:right; }
+
+  .proveedor-name{ font-weight:600; margin-bottom:3px; }
+  .tracking-line{ display:flex; align-items:center; gap:6px; color:var(--ink-muted); font-size:12.5px; }
+  .courier-badge{
+    font-size:11px; font-weight:600; padding:1px 6px; border-radius:3px;
+    background:var(--surface-alt); border:1px solid var(--border); color:var(--ink-muted);
+  }
+  .tracking-num{ font-family:var(--font-mono); font-size:12px; }
+
+  .badge{ display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; }
+  .badge-agente{ background:var(--accent-warm-bg); color:var(--accent-warm); margin-left:8px; }
+  .badge-atrasado{ background:var(--st-atrasado-bg); color:var(--st-atrasado); }
+  .dias-label{ font-size:11.5px; color:var(--ink-muted); }
+
+  .estado-select{
+    font-family:var(--font-ui); font-size:12.5px; font-weight:600;
+    border-radius:20px; padding:4px 22px 4px 10px; border:1px solid var(--border);
+    background-color:var(--surface); color:var(--sel-color, var(--ink)); cursor:pointer;
+    margin-bottom:4px; display:block;
+  }
+  .fecha-label{ font-size:10.5px; color:var(--ink-muted); text-transform:lowercase; }
+  .fecha-value{ font-size:13px; }
+
+  .empty-state{
+    padding:48px 16px; text-align:center; color:var(--ink-muted); font-family:var(--font-display); font-size:16px;
+  }
+  .footer-actions{ margin-top:22px; display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+
+  .toast{
+    position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:60;
+    background:var(--ink); color:#fff; padding:11px 22px; border-radius:6px;
+    font-size:13.5px; font-weight:500; box-shadow:0 8px 22px rgba(0,0,0,0.25);
+  }
+
+  /* Modal */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(20,20,18,0.45); z-index:50;
+    display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; overflow-y:auto;
+  }
+  .modal{
+    background:var(--surface); border-radius:6px; max-width:600px; width:100%;
+    padding:28px 30px 26px; box-shadow:0 12px 32px rgba(0,0,0,0.18);
+  }
+  .modal-title{ font-family:var(--font-display); font-size:20px; margin:0 0 4px; }
+  .modal-close{
+    float:right; background:none; border:none; font-size:20px; color:var(--ink-muted); cursor:pointer; line-height:1;
+  }
+  .modal-tabs{ display:flex; gap:4px; margin:18px 0 18px; border-bottom:1px solid var(--border); }
+  .tab-btn{
+    background:none; border:none; padding:9px 4px; margin-right:18px; font-size:13.5px;
+    color:var(--ink-muted); cursor:pointer; border-bottom:2px solid transparent; font-family:var(--font-ui);
+  }
+  .tab-btn.active{ color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+  .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .form-field{ display:flex; flex-direction:column; gap:5px; }
+  .form-field.full{ grid-column:1 / -1; }
+  .form-field label{ font-size:12px; color:var(--ink-muted); }
+  .form-field input, .form-field select, .form-field textarea{
+    font-family:var(--font-ui); font-size:14px; padding:9px 10px; border:1px solid var(--border);
+    border-radius:4px; background:var(--surface); color:var(--ink); outline:none;
+  }
+  .form-field input:focus, .form-field select:focus, .form-field textarea:focus{ border-color:var(--accent); }
+  .form-field textarea{ resize:vertical; min-height:120px; font-family:var(--font-ui); }
+  .form-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:22px; }
+  .extract-status{ font-size:12.5px; color:var(--ink-muted); margin-top:8px; min-height:16px; }
+  .field-note{ font-size:12px; color:var(--accent-warm); background:var(--accent-warm-bg); padding:8px 10px; border-radius:4px; margin-bottom:14px; }
+
+  /* Assistant panel */
+  .assistant-toggle{
+    position:fixed; bottom:24px; right:24px; z-index:40;
+    background:var(--accent); color:#fff; border:none; border-radius:24px;
+    padding:12px 20px; font-family:var(--font-ui); font-size:13.5px; font-weight:600; cursor:pointer;
+    box-shadow:0 6px 18px rgba(27,75,67,0.35);
+  }
+  .assistant-toggle:hover{ background:var(--accent-hover); }
+  .assistant-panel{
+    position:fixed; top:0; right:0; height:100vh; width:390px; max-width:92vw;
+    background:var(--surface); border-left:1px solid var(--border); z-index:45;
+    display:flex; flex-direction:column; box-shadow:-8px 0 24px rgba(0,0,0,0.10);
+  }
+  .assistant-header{ padding:20px 20px 14px; border-bottom:1px solid var(--border); }
+  .assistant-header h3{ font-family:var(--font-display); font-size:18px; margin:0 0 2px; }
+  .assistant-header p{ font-size:12px; color:var(--ink-muted); margin:0; }
+  .assistant-close{ float:right; background:none; border:none; font-size:19px; color:var(--ink-muted); cursor:pointer; }
+  .quick-prompts{ display:flex; flex-wrap:wrap; gap:6px; padding:12px 20px; border-bottom:1px solid var(--border); }
+  .quick-prompt-btn{
+    font-size:11.5px; padding:5px 10px; border-radius:20px; border:1px solid var(--border);
+    background:var(--surface-alt); color:var(--ink); cursor:pointer; font-family:var(--font-ui);
+  }
+  .quick-prompt-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .chat-log{ flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:12px; }
+  .chat-empty{ color:var(--ink-muted); font-size:13px; padding-top:12px; }
+  .chat-msg{ max-width:88%; padding:9px 12px; border-radius:8px; font-size:13.5px; white-space:pre-wrap; }
+  .chat-msg.user{ align-self:flex-end; background:var(--accent); color:#fff; }
+  .chat-msg.assistant{ align-self:flex-start; background:var(--surface-alt); color:var(--ink); }
+  .chat-typing{ align-self:flex-start; color:var(--ink-muted); font-size:12.5px; padding:0 4px; }
+  .assistant-input-row{ display:flex; gap:8px; padding:14px 20px 20px; border-top:1px solid var(--border); }
+  .assistant-input-row input{
+    flex:1; font-family:var(--font-ui); font-size:13.5px; padding:9px 10px;
+    border:1px solid var(--border); border-radius:4px; outline:none;
+  }
+  .assistant-input-row input:focus{ border-color:var(--accent); }
+
+  @media (max-width:760px){
+    .topbar, .controls, .main{ padding-left:18px; padding-right:18px; }
+    .pedido-row{ flex-wrap:wrap; }
+    .col-proveedor{ flex:1 1 100%; }
+    .col-destino, .col-monto, .col-estado, .col-fecha, .col-acciones{ flex:1 1 45%; }
+    .list-header{ display:none; }
+    .form-grid{ grid-template-columns:1fr; }
+    .assistant-panel{ width:100%; max-width:100%; }
+  }
+</style>
+</head>
+<body>
+<div id="app"><div class="center-loading">Cargando sistema…</div></div>
+
+<script>
+/* ---------- Configuración y datos ---------- */
+const SUPABASE_URL = 'https://wncejgicemnaneptrrsq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_DrQ2zuhGaxF09jQUrssLWQ_lLKtVbnL';
+const ESTADOS = ['En proceso','En tránsito','En aduana','En destino','Recibido'];
+const COURIERS = ['DHL','UPS','MercadoLibre','Otro'];
+const DESTINOS = ['Puerto Montt','Valdivia'];
+const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const DEFAULT_TC = 930; // Tipo de cambio de referencia (CLP por US$) — editable en el formulario, no se actualiza solo
+
+const STATUS_META = {
+  'En proceso':  {color:'var(--st-proceso)',  bg:'var(--st-proceso-bg)'},
+  'En tránsito': {color:'var(--st-transito)', bg:'var(--st-transito-bg)'},
+  'En aduana':   {color:'var(--st-aduana)',   bg:'var(--st-aduana-bg)'},
+  'En destino':  {color:'var(--st-destino)',  bg:'var(--st-destino-bg)'},
+  'Recibido':    {color:'var(--st-recibido)', bg:'var(--st-recibido-bg)'}
+};
+
+let state = {
+  pedidos: [],
+  filters: { search:'', destino:'Todos', estado:'Todos' },
+  showModal: false,
+  showAssistant: false,
+  chatHistory: [],
+  assistantLoading: false,
+  agenteSummaryModal: null, // {pedidoId, text, loading}
+  confirmAction: null, // null | 'reset' | 'clear'
+  deleteConfirmId: null,
+  loadError: null,
+  toast: null
+};
+
+/* ---------- Utilidades ---------- */
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function addDaysISO(n){ const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+function daysSince(iso){
+  if(!iso) return 0;
+  const d = new Date(iso+'T00:00:00'); const t = new Date(); t.setHours(0,0,0,0);
+  return Math.max(0, Math.round((t-d)/86400000));
+}
+function fmtDate(iso){
+  if(!iso) return '—';
+  const d = new Date(iso+'T00:00:00');
+  return d.getDate()+' '+MESES[d.getMonth()];
+}
+function fmtUSD(n){
+  if(n===null || n===undefined || n==='') return '—';
+  return Number(n).toLocaleString('es-CL');
+}
+function fmtCLP(n){
+  if(n===null || n===undefined || n==='') return '—';
+  return Math.round(n).toLocaleString('es-CL');
+}
+function escapeHTML(str){
+  if(str===null || str===undefined) return '';
+  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function uid(){ return 'p'+Date.now()+Math.random().toString(16).slice(2,7); }
+
+/* ---------- Datos de ejemplo ---------- */
+function seedPedidos(){
+  const mk = (monto_usd) => ({ monto_usd, monto_clp: Math.round(monto_usd*DEFAULT_TC), moneda_ingreso:'USD', tipo_cambio:DEFAULT_TC });
+  return [
+    { id:uid(), proveedor:'Guangzhou Tools Co.', ...mk(4200), numero_seguimiento:'1Z999AA10123456784', courier:'UPS', destino:'Puerto Montt', estado:'En tránsito', fecha_registro:addDaysISO(-10), fecha_estimada:addDaysISO(3), fecha_ultima_actualizacion:addDaysISO(-6), agente_aduanero:true },
+    { id:uid(), proveedor:'Ferretería del Sur SpA', ...mk(850), numero_seguimiento:'DHL7788990011', courier:'DHL', destino:'Valdivia', estado:'En proceso', fecha_registro:addDaysISO(-2), fecha_estimada:addDaysISO(7), fecha_ultima_actualizacion:addDaysISO(-2), agente_aduanero:false },
+    { id:uid(), proveedor:'Industrial Supply US Inc.', ...mk(5600), numero_seguimiento:'DHL1122334455', courier:'DHL', destino:'Puerto Montt', estado:'En aduana', fecha_registro:addDaysISO(-15), fecha_estimada:addDaysISO(1), fecha_ultima_actualizacion:addDaysISO(-4), agente_aduanero:true },
+    { id:uid(), proveedor:'Repuestos Maestranza Ltda.', ...mk(320), numero_seguimiento:'ML445566778', courier:'MercadoLibre', destino:'Valdivia', estado:'En destino', fecha_registro:addDaysISO(-6), fecha_estimada:addDaysISO(0), fecha_ultima_actualizacion:addDaysISO(-1), agente_aduanero:false },
+    { id:uid(), proveedor:'Global Parts Trading', ...mk(1500), numero_seguimiento:'UPS998877665', courier:'UPS', destino:'Puerto Montt', estado:'Recibido', fecha_registro:addDaysISO(-20), fecha_estimada:addDaysISO(-3), fecha_ultima_actualizacion:addDaysISO(-3), agente_aduanero:false }
+  ];
+}
+
+/* ---------- Conexión con Supabase ---------- */
+function withTimeout(promise, ms){
+  return Promise.race([
+    promise,
+    new Promise((_, reject)=> setTimeout(()=> reject(new Error('La operación tardó demasiado')), ms))
+  ]);
+}
+function supaHeaders(extra){
+  return Object.assign({
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_KEY,
+    'Content-Type': 'application/json'
+  }, extra || {});
+}
+async function checkOk(res, accion){
+  if(!res.ok){
+    let detalle = '';
+    try{ const body = await res.json(); detalle = body.message || body.error || JSON.stringify(body); }catch(e){}
+    throw new Error('Error ' + res.status + (detalle ? ' (' + detalle + ')' : '') + ' al ' + accion);
+  }
+}
+async function apiGet(){
+  const url = SUPABASE_URL + '/rest/v1/pedidos?select=*&order=fecha_registro.desc';
+  const res = await withTimeout(fetch(url, { headers: supaHeaders() }), 10000);
+  await checkOk(res, 'leer los pedidos');
+  return await res.json();
+}
+async function apiCreate(pedido){
+  const url = SUPABASE_URL + '/rest/v1/pedidos';
+  const res = await withTimeout(fetch(url, {
+    method: 'POST',
+    headers: supaHeaders({ 'Prefer': 'return=minimal' }),
+    body: JSON.stringify(pedido)
+  }), 10000);
+  await checkOk(res, 'crear el pedido');
+}
+async function apiUpdate(id, updates){
+  const url = SUPABASE_URL + '/rest/v1/pedidos?id=eq.' + encodeURIComponent(id);
+  const res = await withTimeout(fetch(url, {
+    method: 'PATCH',
+    headers: supaHeaders({ 'Prefer': 'return=minimal' }),
+    body: JSON.stringify(updates)
+  }), 10000);
+  await checkOk(res, 'actualizar el pedido');
+}
+async function apiDelete(id){
+  const url = SUPABASE_URL + '/rest/v1/pedidos?id=eq.' + encodeURIComponent(id);
+  const res = await withTimeout(fetch(url, {
+    method: 'DELETE',
+    headers: supaHeaders({ 'Prefer': 'return=minimal' })
+  }), 10000);
+  await checkOk(res, 'eliminar el pedido');
+}
+
+/* ---------- IA (Claude API) ---------- */
+async function callClaude(systemPrompt, userMessage){
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens:1000,
+      system: systemPrompt,
+      messages:[{ role:'user', content:userMessage }]
+    })
+  });
+  const data = await response.json();
+  if(!data || !data.content){ throw new Error((data && data.error && data.error.message) || 'Error de API'); }
+  return data.content.map(b=>b.text||'').join('\n');
+}
+function parseJSONLoose(text){
+  try{
+    const clean = text.replace(/```json/gi,'').replace(/```/g,'').trim();
+    return JSON.parse(clean);
+  }catch(e){ return {}; }
+}
+
+const EXTRACT_SYSTEM_PROMPT = `Eres un extractor de datos para el sistema de seguimiento de pedidos de Innovex.
+A partir del texto de un correo o mensaje de confirmación de envío, extrae los datos del pedido.
+Responde ÚNICAMENTE con un objeto JSON, sin texto adicional, sin explicaciones, sin backticks de markdown.
+Usa exactamente estas claves:
+- proveedor (string o null)
+- monto (número, sin símbolo ni separadores de miles, o null)
+- moneda (uno de "USD" o "CLP" según el símbolo o contexto del texto; si no es claro, usa "USD")
+- numero_seguimiento (string o null)
+- courier (uno de "DHL", "UPS", "MercadoLibre", "Otro", o null si no se identifica con certeza)
+- fecha_estimada (formato YYYY-MM-DD, o null si no se menciona)
+- destino ("Puerto Montt", "Valdivia" o null si no se menciona)
+Si un dato no aparece explícitamente en el texto, usa null. No inventes información.`;
+
+function assistantSystemPrompt(contextData){
+  return `Eres el asistente de IA del sistema de seguimiento de pedidos del área de Adquisiciones de Innovex.
+Respondes en español, de forma breve, clara y directa, basándote únicamente en los datos de pedidos entregados a continuación.
+Cada pedido tiene su monto en dólares (monto_usd) y su equivalente en pesos chilenos (monto_clp).
+Si la pregunta no se puede responder con estos datos, dilo con honestidad.
+Hoy es ${todayISO()}.
+
+Datos de pedidos (JSON):
+${JSON.stringify(contextData)}`;
+}
+
+const AGENTE_SYSTEM_PROMPT = `Genera un resumen breve y formal en español de este pedido de compra internacional, listo para enviar por correo a un agente de aduana externo que gestionará el trámite.
+Incluye: proveedor, monto, número de seguimiento, empresa transportista, destino y fecha estimada de llegada.
+Formato de texto plano, listo para copiar y pegar, sin markdown, sin encabezados de correo (sin "Asunto:" ni "Estimado/a").`;
+
+/* ---------- Acciones ---------- */
+function openModal(){ state.showModal = true; render(); validateForm(); }
+function closeModal(){ state.showModal = false; render(); }
+
+function isFormValid(){
+  const proveedor = document.getElementById('f-proveedor').value.trim();
+  const monto = parseFloat(document.getElementById('f-monto').value);
+  const tracking = document.getElementById('f-tracking').value.trim();
+  const courier = document.getElementById('f-courier').value;
+  const destino = document.getElementById('f-destino').value;
+  const fecha = document.getElementById('f-fecha').value;
+  const moneda = document.getElementById('f-moneda').value;
+  let tcOk = true;
+  if(moneda === 'CLP'){
+    const tc = parseFloat(document.getElementById('f-tc').value);
+    tcOk = !isNaN(tc) && tc > 0;
+  }
+  return proveedor !== '' && !isNaN(monto) && monto > 0 && tracking !== '' &&
+         courier !== '' && destino !== '' && fecha !== '' && tcOk;
+}
+function validateForm(){
+  updateMontoPreview();
+  const btn = document.getElementById('btn-guardar');
+  const hint = document.getElementById('form-hint');
+  if(!btn) return;
+  const ok = isFormValid();
+  btn.disabled = !ok;
+  if(hint) hint.style.display = ok ? 'none' : 'block';
+}
+
+function askDeleteConfirm(id){ state.deleteConfirmId = id; renderPedidosList(); }
+function cancelDeleteConfirm(){ state.deleteConfirmId = null; renderPedidosList(); }
+async function confirmDelete(id){
+  state.deleteConfirmId = null;
+  try{
+    await apiDelete(id);
+    state.pedidos = state.pedidos.filter(p=>p.id!==id);
+    state.toast = 'Pedido eliminado.';
+  }catch(e){
+    state.toast = 'No se pudo eliminar el pedido en la base de datos. Intenta de nuevo.';
+  }
+  render();
+  setTimeout(()=>{ state.toast = null; render(); }, 2600);
+}
+
+async function handleExtract(){
+  const btn = document.getElementById('btn-extract');
+  const status = document.getElementById('extract-status');
+  const text = document.getElementById('f-pegado').value.trim();
+  if(!text){ status.textContent = 'Pega primero el texto del correo o mensaje.'; return; }
+  btn.disabled = true; status.textContent = 'Extrayendo datos con IA…';
+  try{
+    const raw = await callClaude(EXTRACT_SYSTEM_PROMPT, text);
+    const data = parseJSONLoose(raw);
+    if(data.proveedor) document.getElementById('f-proveedor').value = data.proveedor;
+    if(data.moneda === 'CLP' || data.moneda === 'USD'){ document.getElementById('f-moneda').value = data.moneda; handleMonedaChange(); }
+    if(data.monto) document.getElementById('f-monto').value = data.monto;
+    if(data.numero_seguimiento) document.getElementById('f-tracking').value = data.numero_seguimiento;
+    if(data.courier && COURIERS.includes(data.courier)) document.getElementById('f-courier').value = data.courier;
+    if(data.destino && DESTINOS.includes(data.destino)) document.getElementById('f-destino').value = data.destino;
+    if(data.fecha_estimada) document.getElementById('f-fecha').value = data.fecha_estimada;
+    validateForm();
+    showTab('manual');
+    document.getElementById('extract-note').style.display = 'block';
+    status.textContent = '';
+  }catch(e){
+    status.textContent = 'No se pudo extraer la información. Puedes completar los datos manualmente.';
+  }
+  btn.disabled = false;
+}
+
+function handleMonedaChange(){
+  const moneda = document.getElementById('f-moneda').value;
+  document.getElementById('tc-row').style.display = moneda==='CLP' ? 'block' : 'none';
+  validateForm();
+}
+function updateMontoPreview(){
+  const moneda = document.getElementById('f-moneda').value;
+  const monto = parseFloat(document.getElementById('f-monto').value);
+  const tc = parseFloat(document.getElementById('f-tc').value) || DEFAULT_TC;
+  const preview = document.getElementById('monto-preview');
+  if(!preview) return;
+  if(isNaN(monto)){ preview.textContent = ''; return; }
+  if(moneda==='USD'){ preview.textContent = '≈ CLP $' + fmtCLP(monto*tc); }
+  else{ preview.textContent = '≈ US$ ' + fmtUSD(+(monto/tc).toFixed(2)); }
+}
+
+function showTab(tab){
+  document.getElementById('tab-manual').style.display = tab==='manual' ? 'grid' : 'none';
+  document.getElementById('tab-pegar').style.display = tab==='pegar' ? 'block' : 'none';
+  document.getElementById('tabbtn-manual').classList.toggle('active', tab==='manual');
+  document.getElementById('tabbtn-pegar').classList.toggle('active', tab==='pegar');
+}
+
+async function handleGuardar(){
+  const errorEl = document.getElementById('form-error');
+  errorEl.style.display = 'none';
+  if(!isFormValid()){
+    errorEl.textContent = 'No se puede guardar: completa todos los campos.';
+    errorEl.style.display = 'block';
+    validateForm();
+    return;
+  }
+  const proveedor = document.getElementById('f-proveedor').value.trim();
+  const submitBtn = document.getElementById('btn-guardar');
+  submitBtn.disabled = true; submitBtn.textContent = 'Guardando…';
+  try{
+    const moneda = document.getElementById('f-moneda').value;
+    const montoInput = parseFloat(document.getElementById('f-monto').value);
+    const tc = parseFloat(document.getElementById('f-tc').value) || DEFAULT_TC;
+    let monto_usd = null, monto_clp = null;
+    if(!isNaN(montoInput)){
+      if(moneda === 'CLP'){ monto_clp = montoInput; monto_usd = +(montoInput/tc).toFixed(2); }
+      else{ monto_usd = montoInput; monto_clp = Math.round(montoInput*tc); }
+    }
+    const pedido = {
+      id: uid(),
+      proveedor,
+      monto_usd, monto_clp, moneda_ingreso: moneda, tipo_cambio: tc,
+      numero_seguimiento: document.getElementById('f-tracking').value.trim() || null,
+      courier: document.getElementById('f-courier').value,
+      destino: document.getElementById('f-destino').value,
+      fecha_estimada: document.getElementById('f-fecha').value || null,
+      estado: 'En proceso',
+      fecha_registro: todayISO(),
+      fecha_ultima_actualizacion: todayISO(),
+      agente_aduanero: !!(monto_usd && monto_usd > 3000)
+    };
+    await apiCreate(pedido);
+    state.pedidos.unshift(pedido);
+    state.showModal = false;
+    state.toast = 'Pedido guardado — ' + proveedor;
+    render();
+    setTimeout(()=>{ state.toast = null; render(); }, 2600);
+  }catch(err){
+    submitBtn.disabled = false; submitBtn.textContent = 'Guardar pedido';
+    errorEl.textContent = 'Ocurrió un error al guardar: ' + (err && err.message ? err.message : 'error desconocido') + '. Intenta nuevamente.';
+    errorEl.style.display = 'block';
+  }
+}
+
+async function updateEstado(id, value){
+  const p = state.pedidos.find(x=>x.id===id);
+  if(!p) return;
+  const prevEstado = p.estado, prevFecha = p.fecha_ultima_actualizacion;
+  p.estado = value;
+  p.fecha_ultima_actualizacion = todayISO();
+  render();
+  try{
+    await apiUpdate(id, { estado: value, fecha_ultima_actualizacion: p.fecha_ultima_actualizacion });
+  }catch(e){
+    p.estado = prevEstado; p.fecha_ultima_actualizacion = prevFecha;
+    state.toast = 'No se pudo guardar el cambio de estado en la base de datos. Intenta de nuevo.';
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 3200);
+  }
+}
+
+async function handleAgenteSummary(id){
+  const p = state.pedidos.find(x=>x.id===id);
+  if(!p) return;
+  state.agenteSummaryModal = { pedidoId:id, text:null, loading:true };
+  render();
+  try{
+    const text = await callClaude(AGENTE_SYSTEM_PROMPT, JSON.stringify(p));
+    state.agenteSummaryModal = { pedidoId:id, text, loading:false };
+  }catch(e){
+    state.agenteSummaryModal = { pedidoId:id, text:'No se pudo generar el resumen. Intenta nuevamente.', loading:false };
+  }
+  render();
+}
+function closeAgenteModal(){ state.agenteSummaryModal = null; render(); }
+async function copyAgenteText(){
+  const t = state.agenteSummaryModal && state.agenteSummaryModal.text;
+  if(!t) return;
+  let ok = false;
+  try{ await navigator.clipboard.writeText(t); ok = true; }
+  catch(e){
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+    }catch(e2){ ok = false; }
+  }
+  const el = document.getElementById('copy-feedback');
+  if(el) el.textContent = ok ? 'Copiado ✓' : 'No se pudo copiar automáticamente — selecciona el texto y cópialo manualmente.';
+}
+
+function toggleAssistant(){ state.showAssistant = !state.showAssistant; render(); }
+
+async function handleAskAssistant(preset){
+  const input = document.getElementById('assistant-input');
+  const question = preset || (input ? input.value.trim() : '');
+  if(!question) return;
+  state.chatHistory.push({ role:'user', text:question });
+  state.assistantLoading = true;
+  render();
+  try{
+    const contextData = state.pedidos.map(p=>({
+      proveedor:p.proveedor, monto_usd:p.monto_usd, monto_clp:p.monto_clp, moneda_ingreso:p.moneda_ingreso,
+      courier:p.courier, numero_seguimiento:p.numero_seguimiento,
+      destino:p.destino, estado:p.estado, fecha_estimada:p.fecha_estimada,
+      dias_sin_actualizacion: daysSince(p.fecha_ultima_actualizacion), agente_aduanero:p.agente_aduanero
+    }));
+    const answer = await callClaude(assistantSystemPrompt(contextData), question);
+    state.chatHistory.push({ role:'assistant', text:answer });
+  }catch(e){
+    state.chatHistory.push({ role:'assistant', text:'No pude conectarme con la IA. Intenta nuevamente.' });
+  }
+  state.assistantLoading = false;
+  render();
+  setTimeout(()=>{ const el=document.getElementById('chat-log'); if(el) el.scrollTop = el.scrollHeight; },0);
+}
+
+function askConfirm(action){ state.confirmAction = action; render(); }
+function cancelConfirm(){ state.confirmAction = null; render(); }
+async function handleResetDemo(){
+  state.confirmAction = null;
+  const seeds = seedPedidos();
+  try{
+    for(const p of seeds){ await apiCreate(p); }
+    state.pedidos = await apiGet();
+    state.toast = 'Datos de ejemplo agregados a la base de datos.';
+  }catch(e){
+    state.toast = 'Hubo un problema agregando los datos de ejemplo: ' + (e && e.message ? e.message : 'error desconocido');
+    try{ state.pedidos = await apiGet(); }catch(e2){}
+  }
+  render();
+  setTimeout(()=>{ state.toast = null; render(); }, 2800);
+}
+async function handleClearAll(){
+  state.confirmAction = null;
+  const idsAEliminar = state.pedidos.map(p=>p.id);
+  try{
+    for(const id of idsAEliminar){ await apiDelete(id); }
+    state.pedidos = [];
+    state.toast = 'Todos los pedidos fueron eliminados de la base de datos.';
+  }catch(e){
+    state.toast = 'Hubo un problema eliminando algunos pedidos: ' + (e && e.message ? e.message : 'error desconocido');
+    try{ state.pedidos = await apiGet(); }catch(e2){}
+  }
+  render();
+  setTimeout(()=>{ state.toast = null; render(); }, 2800);
+}
+
+/* ---------- Render ---------- */
+function computeStats(){
+  const activos = state.pedidos.filter(p=>p.estado!=='Recibido').length;
+  const atrasados = state.pedidos.filter(p=>p.estado!=='Recibido' && daysSince(p.fecha_ultima_actualizacion)>=5).length;
+  const conAgente = state.pedidos.filter(p=>p.agente_aduanero).length;
+  return { activos, atrasados, conAgente };
+}
+
+function getFilteredPedidos(){
+  const { search, destino, estado } = state.filters;
+  return state.pedidos.filter(p=>{
+    if(destino!=='Todos' && p.destino!==destino) return false;
+    if(estado!=='Todos' && p.estado!==estado) return false;
+    if(search){
+      const s = search.toLowerCase();
+      const hay = (p.proveedor||'').toLowerCase().includes(s) || (p.numero_seguimiento||'').toLowerCase().includes(s);
+      if(!hay) return false;
+    }
+    return true;
+  });
+}
+
+function pedidoRowHTML(p){
+  const meta = STATUS_META[p.estado] || STATUS_META['En proceso'];
+  const dias = daysSince(p.fecha_ultima_actualizacion);
+  const atrasado = p.estado!=='Recibido' && dias>=5;
+  return `
+  <div class="pedido-row" style="border-left-color:${meta.color}">
+    <div class="col col-proveedor">
+      <div class="proveedor-name">${escapeHTML(p.proveedor)}</div>
+      <div class="tracking-line">
+        <span class="courier-badge">${escapeHTML(p.courier||'—')}</span>
+        <span class="tracking-num">${escapeHTML(p.numero_seguimiento||'sin N° de seguimiento')}</span>
+      </div>
+    </div>
+    <div class="col col-destino">${escapeHTML(p.destino||'—')}</div>
+    <div class="col col-monto">
+      ${p.moneda_ingreso==='CLP'
+        ? `CLP $${fmtCLP(p.monto_clp)}<div class="dias-label">≈ US$ ${fmtUSD(p.monto_usd)}</div>`
+        : `US$ ${fmtUSD(p.monto_usd)}<div class="dias-label">≈ CLP $${fmtCLP(p.monto_clp)}</div>`}
+      ${p.agente_aduanero ? '<span class="badge badge-agente">Agente aduanero</span>' : ''}
+    </div>
+    <div class="col col-estado">
+      <select class="estado-select" style="--sel-color:${meta.color}" onchange="updateEstado('${p.id}', this.value)">
+        ${ESTADOS.map(e=>`<option value="${e}" ${e===p.estado?'selected':''}>${e}</option>`).join('')}
+      </select>
+      ${atrasado
+        ? `<span class="badge badge-atrasado">⚠ Sin novedades hace ${dias} días</span>`
+        : `<span class="dias-label">Actualizado ${dias===0?'hoy':'hace '+dias+' días'}</span>`}
+    </div>
+    <div class="col col-fecha">
+      <div class="fecha-label">llega</div>
+      <div class="fecha-value">${fmtDate(p.fecha_estimada)}</div>
+    </div>
+    <div class="col col-acciones" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+      ${state.deleteConfirmId === p.id ? `
+        <span class="dias-label">¿Eliminar este pedido?</span>
+        <div style="display:flex;gap:8px;">
+          <button class="link-btn" onclick="confirmDelete('${p.id}')">Sí, eliminar</button>
+          <button class="link-btn" onclick="cancelDeleteConfirm()">Cancelar</button>
+        </div>
+      ` : `
+        ${p.agente_aduanero ? `<button class="btn-ghost btn-sm" onclick="handleAgenteSummary('${p.id}')">Resumen para agente</button>` : ''}
+        <button class="btn-ghost btn-sm" onclick="askDeleteConfirm('${p.id}')">Eliminar</button>
+      `}
+    </div>
+  </div>`;
+}
+
+function pedidosListInnerHTML(){
+  const list = getFilteredPedidos();
+  if(state.pedidos.length===0){
+    return `<div class="empty-state">Aún no hay pedidos registrados.<br><span style="font-family:var(--font-ui);font-size:13px;">Usa «Nuevo pedido» para agregar el primero.</span></div>`;
+  }
+  if(list.length===0){
+    return `<div class="empty-state">Ningún pedido coincide con el filtro actual.</div>`;
+  }
+  return `
+    <div class="list-header">
+      <div class="col col-proveedor">Proveedor / seguimiento</div>
+      <div class="col col-destino">Destino</div>
+      <div class="col col-monto">Monto</div>
+      <div class="col col-estado">Estado</div>
+      <div class="col col-fecha">Llegada</div>
+      <div class="col col-acciones"></div>
+    </div>
+    ${list.map(pedidoRowHTML).join('')}
+  `;
+}
+function renderPedidosList(){
+  const c = document.getElementById('pedidos-list-container');
+  if(c) c.innerHTML = pedidosListInnerHTML();
+}
+
+function modalHTML(){
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+    <div class="modal">
+      <button class="modal-close" onclick="closeModal()">×</button>
+      <h2 class="modal-title">Nuevo pedido</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0;">Registra el pedido manualmente o pega el correo de confirmación para que la IA complete los datos.</p>
+      <div class="modal-tabs">
+        <button class="tab-btn active" id="tabbtn-manual" onclick="showTab('manual')">Datos manuales</button>
+        <button class="tab-btn" id="tabbtn-pegar" onclick="showTab('pegar')">Pegar correo / mensaje</button>
+      </div>
+
+      <div id="tab-pegar" style="display:none;">
+        <div class="form-field full">
+          <label>Texto del correo o WhatsApp de confirmación de envío</label>
+          <textarea id="f-pegado" placeholder="Pega aquí el texto completo del mensaje…"></textarea>
+        </div>
+        <button class="btn btn-primary" id="btn-extract" onclick="handleExtract()" type="button">Extraer datos con IA</button>
+        <div class="extract-status" id="extract-status"></div>
+      </div>
+
+      <div id="tab-manual" class="form-grid">
+        <div class="field-note" id="extract-note" style="display:none;grid-column:1 / -1;">Datos completados automáticamente por IA — revisa antes de guardar.</div>
+        <div class="field-note" id="form-error" style="display:none;grid-column:1 / -1;background:var(--st-atrasado-bg);color:var(--st-atrasado);">No se puede guardar: completa todos los campos.</div>
+        <div class="form-field full">
+          <label>Proveedor *</label>
+          <input type="text" id="f-proveedor" placeholder="Ej: Guangzhou Tools Co." oninput="validateForm()">
+        </div>
+        <div class="form-field full">
+          <label>Monto del pedido *</label>
+          <div style="display:flex; gap:8px;">
+            <select id="f-moneda" style="flex:0 0 110px;" onchange="handleMonedaChange()">
+              <option value="USD">USD (US$)</option>
+              <option value="CLP">CLP ($)</option>
+            </select>
+            <input type="number" id="f-monto" placeholder="0" step="0.01" style="flex:1;" oninput="validateForm()">
+          </div>
+          <div id="tc-row" style="display:none;">
+            <label style="font-size:11.5px;">Tipo de cambio de referencia (CLP por US$) — ajústalo si es necesario</label>
+            <input type="number" id="f-tc" value="${DEFAULT_TC}" step="0.01" oninput="validateForm()">
+          </div>
+          <div class="dias-label" id="monto-preview"></div>
+        </div>
+        <div class="form-field">
+          <label>N° de seguimiento *</label>
+          <input type="text" id="f-tracking" placeholder="Ej: 1Z999AA1012345678" oninput="validateForm()">
+        </div>
+        <div class="form-field">
+          <label>Empresa transportista *</label>
+          <select id="f-courier" onchange="validateForm()">
+            <option value="" disabled selected>Selecciona…</option>
+            ${COURIERS.map(c=>`<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Destino *</label>
+          <select id="f-destino" onchange="validateForm()">
+            <option value="" disabled selected>Selecciona…</option>
+            ${DESTINOS.map(d=>`<option value="${d}">${d}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Fecha estimada de llegada *</label>
+          <input type="date" id="f-fecha" onchange="validateForm()">
+        </div>
+        <div class="dias-label" id="form-hint" style="grid-column:1 / -1;">Completa todos los campos marcados con * para poder guardar.</div>
+        <div class="form-actions" style="grid-column:1 / -1;">
+          <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+          <button type="button" id="btn-guardar" class="btn btn-primary" onclick="handleGuardar()" disabled>Guardar pedido</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function agenteModalHTML(){
+  const m = state.agenteSummaryModal;
+  if(!m) return '';
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeAgenteModal()">
+    <div class="modal" style="max-width:480px;">
+      <button class="modal-close" onclick="closeAgenteModal()">×</button>
+      <h2 class="modal-title">Resumen para agente aduanero</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0 0 14px;">Generado por IA a partir de los datos del pedido. Revísalo antes de enviarlo.</p>
+      ${m.loading
+        ? `<div style="padding:24px 0;color:var(--ink-muted);">Generando resumen…</div>`
+        : `<div style="white-space:pre-wrap;background:var(--surface-alt);border-radius:4px;padding:14px;font-size:13.5px;">${escapeHTML(m.text)}</div>
+           <div class="form-actions" style="align-items:center;">
+             <span id="copy-feedback" style="font-size:12px;color:var(--ink-muted);flex:1;"></span>
+             <button class="btn btn-ghost" onclick="closeAgenteModal()">Cerrar</button>
+             <button class="btn btn-primary" onclick="copyAgenteText()">Copiar texto</button>
+           </div>`
+      }
+    </div>
+  </div>`;
+}
+
+function assistantPanelHTML(){
+  const chatContent = state.chatHistory.length===0
+    ? `<div class="chat-empty">Pregúntame por ejemplo: «¿qué pedidos llegan esta semana a Valdivia?» o «¿cuáles están atrasados?».</div>`
+    : state.chatHistory.map(m=>`<div class="chat-msg ${m.role}">${escapeHTML(m.text)}</div>`).join('');
+  return `
+  <div class="assistant-panel">
+    <div class="assistant-header">
+      <button class="assistant-close" onclick="toggleAssistant()">×</button>
+      <h3>Asistente de Adquisiciones</h3>
+      <p>Responde según los pedidos registrados en el sistema.</p>
+    </div>
+    <div class="quick-prompts">
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('Dame un resumen del estado de todos los pedidos activos.')">Resumen diario</button>
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('¿Qué pedidos están atrasados y hace cuántos días?')">¿Qué está atrasado?</button>
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('¿Qué pedidos requieren agente aduanero?')">Con agente aduanero</button>
+    </div>
+    <div class="chat-log" id="chat-log">
+      ${chatContent}
+      ${state.assistantLoading ? '<div class="chat-typing">Pensando…</div>' : ''}
+    </div>
+    <div class="assistant-input-row">
+      <input type="text" id="assistant-input" placeholder="Escribe tu pregunta…" onkeydown="if(event.key==='Enter'){handleAskAssistant();}">
+      <button class="btn btn-primary btn-sm" ${state.assistantLoading?'disabled':''} onclick="handleAskAssistant()">Preguntar</button>
+    </div>
+  </div>`;
+}
+
+function render(){
+  if(state.loadError){
+    document.getElementById('app').innerHTML = `
+      <div class="center-loading" style="flex-direction:column;gap:16px;text-align:center;padding:0 24px;">
+        <div>${escapeHTML(state.loadError)}</div>
+        <button class="btn btn-primary" onclick="reloadPedidos()">Reintentar</button>
+      </div>`;
+    return;
+  }
+  const stats = computeStats();
+  const html = `
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div>
+          <h1 class="page-title">Seguimiento de Pedidos</h1>
+          <p class="page-sub">Innovex — Adquisiciones · Conectado a Supabase — datos reales y compartidos</p>
+        </div>
+        <div class="stats-row">
+          <div class="stat-chip"><div class="stat-value">${stats.activos}</div><div class="stat-label">pedidos activos</div></div>
+          <div class="stat-chip warn"><div class="stat-value">${stats.atrasados}</div><div class="stat-label">sin novedades &gt;5 días</div></div>
+          <div class="stat-chip amber"><div class="stat-value">${stats.conAgente}</div><div class="stat-label">con agente aduanero</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="controls-inner">
+        <input type="text" placeholder="Buscar por proveedor o N° de seguimiento…" value="${escapeHTML(state.filters.search)}"
+               oninput="state.filters.search=this.value; renderPedidosList();">
+        <select onchange="state.filters.destino=this.value; renderPedidosList();">
+          <option ${state.filters.destino==='Todos'?'selected':''}>Todos</option>
+          ${DESTINOS.map(d=>`<option ${state.filters.destino===d?'selected':''}>${d}</option>`).join('')}
+        </select>
+        <select onchange="state.filters.estado=this.value; renderPedidosList();">
+          <option ${state.filters.estado==='Todos'?'selected':''}>Todos</option>
+          ${ESTADOS.map(e=>`<option ${state.filters.estado===e?'selected':''}>${e}</option>`).join('')}
+        </select>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" onclick="openModal()">+ Nuevo pedido</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="info-banner">En este prototipo el estado se actualiza manualmente desde el menú de cada pedido. La versión final conectaría directamente con las páginas de seguimiento de DHL, UPS, MercadoLibre, etc. para actualizarlo sin intervención manual.</div>
+      <div id="pedidos-list-container">${pedidosListInnerHTML()}</div>
+      <div class="footer-actions">
+        ${state.confirmAction === 'reset' ? `
+          <span class="dias-label">Esto agrega 5 pedidos de ejemplo a la base de datos real. ¿Continuar?</span>
+          <button class="link-btn" onclick="handleResetDemo()">Sí, agregar</button>
+          <button class="link-btn" onclick="cancelConfirm()">Cancelar</button>
+        ` : state.confirmAction === 'clear' ? `
+          <span class="dias-label">Esto elimina TODOS los pedidos de la base de datos real — no se puede deshacer. ¿Continuar?</span>
+          <button class="link-btn" onclick="handleClearAll()">Sí, borrar todo</button>
+          <button class="link-btn" onclick="cancelConfirm()">Cancelar</button>
+        ` : `
+          <button class="link-btn" onclick="askConfirm('reset')">Agregar datos de ejemplo</button>
+          <button class="link-btn" onclick="askConfirm('clear')">Borrar todos los pedidos</button>
+        `}
+      </div>
+    </div>
+
+    ${!state.showAssistant ? '<button class="assistant-toggle" onclick="toggleAssistant()">✦ Asistente IA</button>' : ''}
+    ${state.showAssistant ? assistantPanelHTML() : ''}
+    ${state.showModal ? modalHTML() : ''}
+    ${state.agenteSummaryModal ? agenteModalHTML() : ''}
+    ${state.toast ? `<div class="toast">${escapeHTML(state.toast)}</div>` : ''}
+  `;
+  document.getElementById('app').innerHTML = html;
+}
+
+/* ---------- Inicio ---------- */
+async function reloadPedidos(){
+  document.getElementById('app').innerHTML = '<div class="center-loading">Conectando con la base de datos…</div>';
+  try{
+    state.pedidos = await apiGet();
+    state.loadError = null;
+  }catch(e){
+    state.loadError = 'No se pudo conectar con la base de datos (Supabase) (' + (e && e.message ? e.message : 'error desconocido') + '). Revisa la conexión e inténtalo de nuevo.';
+  }
+  render();
+}
+reloadPedidos();
+</script>
+</body>
+</html>
