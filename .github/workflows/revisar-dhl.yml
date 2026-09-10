@@ -1,0 +1,20 @@
+name: Revisar estado DHL
+
+on:
+  schedule:
+    - cron: '0 */4 * * *'   # cada 4 horas
+  workflow_dispatch: {}      # permite correrlo manualmente desde la pestaña "Actions"
+
+jobs:
+  revisar-dhl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/revisar-dhl.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          DHL_API_KEY: ${{ secrets.DHL_API_KEY }}
