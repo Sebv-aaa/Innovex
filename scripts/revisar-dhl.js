@@ -10,16 +10,16 @@
 //
 // Variables de entorno necesarias:
 //   SUPABASE_URL   -> ej: https://wncejgicemnaneptrrsq.supabase.co
-//   SUPABASE_KEY   -> la clave "publishable" de Supabase
+//   SUPABASE_SERVICE_KEY   -> la clave "service_role" (secreta) de Supabase — NO la publishable
 //   DHL_API_KEY    -> tu clave de developer.dhl.com (o "demo-key" para probar)
 // ============================================================
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const DHL_API_KEY = process.env.DHL_API_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_KEY || !DHL_API_KEY) {
-  console.error('Faltan variables de entorno: SUPABASE_URL, SUPABASE_KEY o DHL_API_KEY.');
+if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !DHL_API_KEY) {
+  console.error('Faltan variables de entorno: SUPABASE_URL, SUPABASE_SERVICE_KEY o DHL_API_KEY.');
   process.exit(1);
 }
 
@@ -41,8 +41,8 @@ async function obtenerPedidosDHL() {
   const url = `${SUPABASE_URL}/rest/v1/pedidos?courier=eq.DHL&estado=neq.Recibido&select=id,proveedor,numero_seguimiento,estado`;
   const res = await fetch(url, {
     headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
+      apikey: SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
     },
   });
   if (!res.ok) throw new Error(`No se pudo leer los pedidos de Supabase (código ${res.status})`);
@@ -68,8 +68,8 @@ async function actualizarEstado(id, nuevoEstado) {
   const res = await fetch(url, {
     method: 'PATCH',
     headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
+      apikey: SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
       'Content-Type': 'application/json',
       Prefer: 'return=minimal',
     },
