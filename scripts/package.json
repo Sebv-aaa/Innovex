@@ -1,0 +1,9 @@
+{
+  "name": "lector-correo-innovex",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "imapflow": "^1.0.0",
+    "mailparser": "^3.7.0"
+  }
+}
