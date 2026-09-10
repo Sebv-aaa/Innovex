@@ -20,7 +20,7 @@ jobs:
         run: node scripts/lector-correo.js
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           IONOS_EMAIL: ${{ secrets.IONOS_EMAIL }}
           IONOS_PASSWORD: ${{ secrets.IONOS_PASSWORD }}
