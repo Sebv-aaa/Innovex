@@ -30,11 +30,18 @@ for (const [nombre, valor] of Object.entries({ SUPABASE_URL, SUPABASE_KEY, ANTHR
   }
 }
 
-const CLASIFICAR_PROMPT = `Eres un clasificador de correos para el sistema de seguimiento de pedidos de Innovex (área de Adquisiciones).
-Analiza el correo y determina si tiene que ver con un pedido de compra (confirmación de envío, número de seguimiento, aviso de aduana, actualización de un envío, etc.).
+function clasificarPrompt(pedidosActivos) {
+  return `Eres un clasificador de correos para el sistema de seguimiento de pedidos de Innovex (área de Adquisiciones).
+Analiza el correo y determina si tiene que ver con un pedido de compra (confirmación de envío, número de seguimiento, aviso de aduana, actualización de un envío, un recordatorio, etc.).
+
+Te doy además la lista de pedidos que YA EXISTEN en el sistema (activos, no entregados todavía). Es muy importante que revises si este correo se refiere a uno de ellos — por ejemplo, un recordatorio o una segunda notificación del mismo envío — comparando proveedor, monto, destino y número de seguimiento en conjunto, no solo si el número de seguimiento se repite literalmente. Si el texto no repite el número de seguimiento pero todo lo demás (proveedor, monto aproximado, destino) coincide claramente con uno de la lista, trátalo como el MISMO pedido, no como uno nuevo.
+
+Pedidos activos existentes (JSON):
+${JSON.stringify(pedidosActivos)}
 
 Responde ÚNICAMENTE con un objeto JSON, sin texto adicional, sin backticks. Usa exactamente estas claves:
 - relevante (true o false)
+- pedido_existente_id (el "id" de la lista de arriba si el correo se refiere a uno de esos pedidos, o null si es un pedido genuinamente nuevo que no está en la lista)
 - proveedor (string o null)
 - monto (número o null)
 - moneda ("USD", "CLP" o null)
@@ -46,6 +53,7 @@ Responde ÚNICAMENTE con un objeto JSON, sin texto adicional, sin backticks. Usa
 
 Si el correo no tiene relación con un pedido (spam, boletines, temas internos no relacionados a compras), responde solo {"relevante": false}.
 No inventes datos que no aparezcan explícitamente en el texto.`;
+}
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 function nuevoId() { return 'p' + Date.now() + Math.random().toString(16).slice(2, 7); }
@@ -74,7 +82,11 @@ async function supaPatch(path, body) {
   if (!res.ok) throw new Error(`Supabase PATCH ${path} -> ${res.status}: ${await res.text()}`);
 }
 
-async function clasificarCorreo(asunto, texto) {
+async function obtenerPedidosActivos() {
+  return supaGet('pedidos?estado=neq.Recibido&select=id,proveedor,numero_seguimiento,monto_usd,monto_clp,destino,estado');
+}
+
+async function clasificarCorreo(asunto, texto, pedidosActivos) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -85,7 +97,7 @@ async function clasificarCorreo(asunto, texto) {
     body: JSON.stringify({
       model: 'claude-sonnet-5',
       max_tokens: 500,
-      system: CLASIFICAR_PROMPT,
+      system: clasificarPrompt(pedidosActivos),
       messages: [{ role: 'user', content: `Asunto: ${asunto}\n\n${texto}`.slice(0, 6000) }],
     }),
   });
@@ -129,6 +141,7 @@ async function main() {
 
     console.log(`Revisando correos con UID mayor a ${ultimoUid}...`);
     let maxUidVisto = ultimoUid;
+    let pedidosActivos = await obtenerPedidosActivos();
 
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -143,18 +156,21 @@ async function main() {
         const texto = parsed.text || parsed.html || '';
         console.log(`- Correo UID ${msg.uid}: "${asunto}"`);
 
-        const resultado = await clasificarCorreo(asunto, texto);
+        const resultado = await clasificarCorreo(asunto, texto, pedidosActivos);
         if (!resultado.relevante) {
           console.log('  No relacionado con pedidos, se omite.');
           continue;
         }
 
+        // Prioridad: la coincidencia que indicó la IA (entiende contexto,
+        // no solo el número exacto). Si no indicó ninguna, como respaldo
+        // se busca por número de seguimiento exacto, por si acaso.
         let pedidoExistente = null;
-        if (resultado.numero_seguimiento) {
-          const encontrados = await supaGet(
-            `pedidos?numero_seguimiento=eq.${encodeURIComponent(resultado.numero_seguimiento)}&select=id,estado`
-          );
-          pedidoExistente = encontrados[0] || null;
+        if (resultado.pedido_existente_id) {
+          pedidoExistente = pedidosActivos.find((p) => p.id === resultado.pedido_existente_id) || null;
+        }
+        if (!pedidoExistente && resultado.numero_seguimiento) {
+          pedidoExistente = pedidosActivos.find((p) => p.numero_seguimiento === resultado.numero_seguimiento) || null;
         }
 
         if (pedidoExistente) {
@@ -163,9 +179,10 @@ async function main() {
               estado: resultado.estado_sugerido,
               fecha_ultima_actualizacion: todayISO(),
             });
-            console.log(`  Pedido existente actualizado -> ${resultado.estado_sugerido}`);
+            pedidoExistente.estado = resultado.estado_sugerido;
+            console.log(`  Pedido existente actualizado (${pedidoExistente.proveedor}) -> ${resultado.estado_sugerido}`);
           } else {
-            console.log('  Pedido existente, sin cambio de estado que aplicar.');
+            console.log(`  Correo sobre un pedido que ya existe (${pedidoExistente.proveedor}), sin cambio de estado que aplicar. No se duplica.`);
           }
           continue;
         }
@@ -192,6 +209,7 @@ async function main() {
           pendiente_revision: true,
         };
         await supaPost('pedidos', nuevoPedido);
+        pedidosActivos.push(nuevoPedido); // para que correos siguientes en esta misma corrida lo vean
         console.log(`  Pedido nuevo creado, pendiente de revisión: ${resultado.proveedor}`);
       }
     } finally {
