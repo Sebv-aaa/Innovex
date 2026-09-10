@@ -6,7 +6,8 @@
 // lleva su propio registro de qué ya revisó (tabla correo_estado).
 //
 // Variables de entorno necesarias:
-//   SUPABASE_URL, SUPABASE_KEY   -> igual que en el resto del sistema
+//   SUPABASE_URL      -> igual que en el resto del sistema
+//   SUPABASE_SERVICE_KEY -> la clave "service_role" (secreta) de Supabase — NO la publishable
 //   ANTHROPIC_API_KEY            -> clave de console.anthropic.com
 //   IONOS_EMAIL, IONOS_PASSWORD  -> la casilla y su contraseña de buzón (IMAP)
 //   IMAP_HOST (opcional)         -> servidor IMAP; por defecto imap.ionos.com.
@@ -18,12 +19,12 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const IONOS_EMAIL = process.env.IONOS_EMAIL;
 const IONOS_PASSWORD = process.env.IONOS_PASSWORD;
 
-for (const [nombre, valor] of Object.entries({ SUPABASE_URL, SUPABASE_KEY, ANTHROPIC_API_KEY, IONOS_EMAIL, IONOS_PASSWORD })) {
+for (const [nombre, valor] of Object.entries({ SUPABASE_URL, SUPABASE_SERVICE_KEY, ANTHROPIC_API_KEY, IONOS_EMAIL, IONOS_PASSWORD })) {
   if (!valor) {
     console.error(`Falta la variable de entorno: ${nombre}`);
     process.exit(1);
@@ -60,7 +61,7 @@ function nuevoId() { return 'p' + Date.now() + Math.random().toString(16).slice(
 
 async function supaGet(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
   });
   if (!res.ok) throw new Error(`Supabase GET ${path} -> ${res.status}`);
   return res.json();
@@ -68,7 +69,7 @@ async function supaGet(path) {
 async function supaPost(path, body) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     method: 'POST',
-    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Supabase POST ${path} -> ${res.status}: ${await res.text()}`);
@@ -76,7 +77,7 @@ async function supaPost(path, body) {
 async function supaPatch(path, body) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     method: 'PATCH',
-    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Supabase PATCH ${path} -> ${res.status}: ${await res.text()}`);
