@@ -1,0 +1,27 @@
+name: Lector de correo
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # cada 30 minutos
+  workflow_dispatch: {}       # permite correrlo manualmente desde la pestaña "Actions"
+
+jobs:
+  lector-correo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Instalar dependencias
+        working-directory: scripts
+        run: npm install
+      - name: Ejecutar el lector de correo
+        run: node scripts/lector-correo.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          IONOS_EMAIL: ${{ secrets.IONOS_EMAIL }}
+          IONOS_PASSWORD: ${{ secrets.IONOS_PASSWORD }}
+          IMAP_HOST: ${{ secrets.IMAP_HOST }}
