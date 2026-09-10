@@ -1,0 +1,23 @@
+name: Revisar estado UPS
+
+on:
+  schedule:
+    - cron: '30 */4 * * *'   # cada 4 horas (a la media hora, para no chocar con el de DHL)
+  workflow_dispatch: {}       # permite correrlo manualmente desde la pestaña "Actions"
+
+jobs:
+  revisar-ups:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/revisar-ups.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          UPS_CLIENT_ID: ${{ secrets.UPS_CLIENT_ID }}
+          UPS_CLIENT_SECRET: ${{ secrets.UPS_CLIENT_SECRET }}
+          UPS_AUTH_URL: ${{ secrets.UPS_AUTH_URL }}
+          UPS_API_URL: ${{ secrets.UPS_API_URL }}
