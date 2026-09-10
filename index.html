@@ -44,6 +44,10 @@
     display:flex;align-items:center;justify-content:center;height:100vh;
     color:var(--ink-muted); font-family:var(--font-display); font-size:18px;
   }
+  .login-box{
+    background:var(--surface); border:1px solid var(--border); border-radius:6px;
+    padding:36px 34px; width:100%; max-width:380px; text-align:left;
+  }
 
   /* Topbar */
   .topbar{
@@ -273,7 +277,10 @@ let state = {
   deleteConfirmId: null,
   loadError: null,
   toast: null,
-  realtimeConectado: false
+  realtimeConectado: false,
+  session: null,
+  loginError: null,
+  loginLoading: false
 };
 
 /* ---------- Utilidades ---------- */
@@ -322,63 +329,39 @@ function withTimeout(promise, ms){
     new Promise((_, reject)=> setTimeout(()=> reject(new Error('La operación tardó demasiado')), ms))
   ]);
 }
-function supaHeaders(extra){
-  return Object.assign({
-    'apikey': SUPABASE_KEY,
-    'Authorization': 'Bearer ' + SUPABASE_KEY,
-    'Content-Type': 'application/json'
-  }, extra || {});
-}
-async function checkOk(res, accion){
-  if(!res.ok){
-    let detalle = '';
-    try{ const body = await res.json(); detalle = body.message || body.error || JSON.stringify(body); }catch(e){}
-    throw new Error('Error ' + res.status + (detalle ? ' (' + detalle + ')' : '') + ' al ' + accion);
-  }
-}
 async function apiGet(){
-  const url = SUPABASE_URL + '/rest/v1/pedidos?select=*&order=fecha_registro.desc';
-  const res = await withTimeout(fetch(url, { headers: supaHeaders() }), 10000);
-  await checkOk(res, 'leer los pedidos');
-  return await res.json();
+  const { data, error } = await withTimeout(
+    supabaseClient.from('pedidos').select('*').order('fecha_registro', { ascending:false }),
+    10000
+  );
+  if(error) throw new Error('Error al leer los pedidos: ' + error.message);
+  return data;
 }
 async function apiCreate(pedido){
-  const url = SUPABASE_URL + '/rest/v1/pedidos';
-  const res = await withTimeout(fetch(url, {
-    method: 'POST',
-    headers: supaHeaders({ 'Prefer': 'return=minimal' }),
-    body: JSON.stringify(pedido)
-  }), 10000);
-  await checkOk(res, 'crear el pedido');
+  const { error } = await withTimeout(supabaseClient.from('pedidos').insert(pedido), 10000);
+  if(error) throw new Error('Error al crear el pedido: ' + error.message);
 }
 async function apiUpdate(id, updates){
-  const url = SUPABASE_URL + '/rest/v1/pedidos?id=eq.' + encodeURIComponent(id);
-  const res = await withTimeout(fetch(url, {
-    method: 'PATCH',
-    headers: supaHeaders({ 'Prefer': 'return=minimal' }),
-    body: JSON.stringify(updates)
-  }), 10000);
-  await checkOk(res, 'actualizar el pedido');
+  const { error } = await withTimeout(supabaseClient.from('pedidos').update(updates).eq('id', id), 10000);
+  if(error) throw new Error('Error al actualizar el pedido: ' + error.message);
 }
 async function apiDelete(id){
-  const url = SUPABASE_URL + '/rest/v1/pedidos?id=eq.' + encodeURIComponent(id);
-  const res = await withTimeout(fetch(url, {
-    method: 'DELETE',
-    headers: supaHeaders({ 'Prefer': 'return=minimal' })
-  }), 10000);
-  await checkOk(res, 'eliminar el pedido');
+  const { error } = await withTimeout(supabaseClient.from('pedidos').delete().eq('id', id), 10000);
+  if(error) throw new Error('Error al eliminar el pedido: ' + error.message);
 }
 
 /* ---------- IA (Claude API) ---------- */
 const CLAUDE_PROXY_URL = SUPABASE_URL + '/functions/v1/claude-proxy';
 
 async function callClaude(systemPrompt, userMessage){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if(!session) throw new Error('Sesión no válida. Vuelve a iniciar sesión.');
   const response = await fetch(CLAUDE_PROXY_URL, {
     method:'POST',
     headers:{
       'Content-Type':'application/json',
       'apikey': SUPABASE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_KEY
+      'Authorization': 'Bearer ' + session.access_token
     },
     body: JSON.stringify({ system: systemPrompt, message: userMessage })
   });
@@ -410,6 +393,8 @@ function assistantSystemPrompt(contextData){
   return `Eres el asistente de IA del sistema de seguimiento de pedidos del área de Adquisiciones de Innovex.
 Respondes en español, de forma breve, clara y directa, basándote únicamente en los datos de pedidos entregados a continuación.
 Cada pedido tiene su monto en dólares (monto_usd) y su equivalente en pesos chilenos (monto_clp).
+"fecha_registro" es cuándo se agregó el pedido al sistema — úsala para responder preguntas sobre pedidos nuevos o recientes.
+"pendiente_revision" en true significa que el pedido lo creó automáticamente el lector de correo con IA y nadie lo ha confirmado todavía.
 Si la pregunta no se puede responder con estos datos, dilo con honestidad.
 Hoy es ${todayISO()}.
 
@@ -639,8 +624,9 @@ async function handleAskAssistant(preset){
     const contextData = state.pedidos.map(p=>({
       proveedor:p.proveedor, monto_usd:p.monto_usd, monto_clp:p.monto_clp, moneda_ingreso:p.moneda_ingreso,
       courier:p.courier, numero_seguimiento:p.numero_seguimiento,
-      destino:p.destino, estado:p.estado, fecha_estimada:p.fecha_estimada,
-      dias_sin_actualizacion: daysSince(p.fecha_ultima_actualizacion), agente_aduanero:p.agente_aduanero
+      destino:p.destino, estado:p.estado, fecha_registro:p.fecha_registro, fecha_estimada:p.fecha_estimada,
+      dias_sin_actualizacion: daysSince(p.fecha_ultima_actualizacion), agente_aduanero:p.agente_aduanero,
+      pendiente_revision: !!p.pendiente_revision
     }));
     const answer = await callClaude(assistantSystemPrompt(contextData), question);
     state.chatHistory.push({ role:'assistant', text:answer });
@@ -903,7 +889,61 @@ function assistantPanelHTML(){
   </div>`;
 }
 
+function loginScreenHTML(){
+  return `
+  <div class="center-loading" style="flex-direction:column;">
+    <div class="login-box">
+      <h1 class="page-title" style="margin-bottom:4px;">Seguimiento de Pedidos</h1>
+      <p class="page-sub" style="margin-bottom:24px;">Innovex — Adquisiciones</p>
+      ${state.loginError ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-bottom:14px;">${escapeHTML(state.loginError)}</div>` : ''}
+      <div class="form-field full" style="margin-bottom:12px;">
+        <label>Correo</label>
+        <input type="email" id="login-email" placeholder="tu@innovex.cl" onkeydown="if(event.key==='Enter') handleLogin()">
+      </div>
+      <div class="form-field full" style="margin-bottom:20px;">
+        <label>Contraseña</label>
+        <input type="password" id="login-password" onkeydown="if(event.key==='Enter') handleLogin()">
+      </div>
+      <button class="btn btn-primary" style="width:100%;" id="btn-login" onclick="handleLogin()" ${state.loginLoading?'disabled':''}>${state.loginLoading?'Ingresando…':'Iniciar sesión'}</button>
+    </div>
+  </div>`;
+}
+
+async function handleLogin(){
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if(!email || !password){
+    state.loginError = 'Ingresa tu correo y contraseña.';
+    render();
+    return;
+  }
+  state.loginLoading = true;
+  state.loginError = null;
+  render();
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  state.loginLoading = false;
+  if(error){
+    state.loginError = 'No se pudo iniciar sesión: ' + error.message;
+    render();
+    return;
+  }
+  state.session = data.session;
+  await reloadPedidos();
+}
+
+async function handleLogout(){
+  await supabaseClient.auth.signOut();
+  state.session = null;
+  state.pedidos = [];
+  if(realtimeChannel){ supabaseClient.removeChannel(realtimeChannel); realtimeChannel = null; }
+  render();
+}
+
 function render(){
+  if(!state.session){
+    document.getElementById('app').innerHTML = loginScreenHTML();
+    return;
+  }
   if(state.loadError){
     document.getElementById('app').innerHTML = `
       <div class="center-loading" style="flex-direction:column;gap:16px;text-align:center;padding:0 24px;">
@@ -925,6 +965,10 @@ function render(){
           <div class="stat-chip warn"><div class="stat-value">${stats.atrasados}</div><div class="stat-label">sin novedades &gt;5 días</div></div>
           <div class="stat-chip amber"><div class="stat-value">${stats.conAgente}</div><div class="stat-label">con agente aduanero</div></div>
           <div class="stat-chip" style="border-left-color:var(--st-transito)"><div class="stat-value">${stats.pendientesRevision}</div><div class="stat-label">pendientes de revisión</div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <span class="dias-label">${escapeHTML(state.session.user.email)}</span>
+          <button class="btn-ghost btn-sm" onclick="handleLogout()">Cerrar sesión</button>
         </div>
       </div>
     </div>
@@ -1021,7 +1065,40 @@ async function reloadPedidos(){
   }
   render();
 }
-reloadPedidos();
+
+async function init(){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  state.session = session;
+  if(session){
+    await reloadPedidos();
+  }else{
+    render();
+  }
+}
+init();
+
+// Reacciona si la sesión cambia (ej. el usuario cierra sesión en otra
+// pestaña, o el token se renueva solo).
+supabaseClient.auth.onAuthStateChange((event, session)=>{
+  if(event === 'SIGNED_OUT'){
+    state.session = null;
+    state.pedidos = [];
+    if(realtimeChannel){ supabaseClient.removeChannel(realtimeChannel); realtimeChannel = null; }
+    render();
+  }
+});
+
+// Red de seguridad: aunque el canal de "tiempo real" se corte en silencio
+// (ej. la pestaña estuvo mucho rato en segundo plano), esto vuelve a
+// sincronizar con la base de datos cada 90 segundos, sin interrumpir si
+// hay un formulario abierto.
+setInterval(async ()=>{
+  if(!state.session || state.showModal || state.loadError) return;
+  try{
+    state.pedidos = await apiGet();
+    render();
+  }catch(e){ /* silencioso: Realtime sigue siendo la vía principal, esto es solo respaldo */ }
+}, 90000);
 </script>
 </body>
 </html>
