@@ -3,66 +3,33 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Seguimiento de Pedidos — Innovex</title>
+<title>Innovex — Adquisiciones</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
-    --bg:#F5F4EF;
-    --surface:#FFFFFF;
-    --surface-alt:#EFEEE6;
-    --border:#DEDCD1;
-    --ink:#1B2321;
-    --ink-muted:#5C665F;
-    --accent:#1B4B43;
-    --accent-hover:#143A34;
-    --accent-warm:#A6692E;
-    --accent-warm-bg:#F3E6D6;
-
+    --bg:#F5F4EF; --surface:#FFFFFF; --surface-alt:#EFEEE6; --border:#DEDCD1;
+    --ink:#1B2321; --ink-muted:#5C665F; --accent:#1B4B43; --accent-hover:#143A34;
+    --accent-warm:#A6692E; --accent-warm-bg:#F3E6D6;
     --st-proceso:#6B7563;  --st-proceso-bg:#EEF0EC;
     --st-transito:#2E5C8A; --st-transito-bg:#E7EEF5;
     --st-aduana:#A6761D;   --st-aduana-bg:#F5EEDD;
     --st-destino:#1B4B43;  --st-destino-bg:#E4EEEC;
     --st-recibido:#2F6B3A; --st-recibido-bg:#E7F0E8;
     --st-atrasado:#A6332F; --st-atrasado-bg:#F6E5E4;
-
     --font-display: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
     --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
-  body{
-    background:var(--bg);
-    color:var(--ink);
-    font-family:var(--font-ui);
-    font-size:14px;
-    line-height:1.5;
-    -webkit-font-smoothing:antialiased;
-  }
+  body{ background:var(--bg); color:var(--ink); font-family:var(--font-ui); font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
   #app{min-height:100vh;}
-  .center-loading{
-    display:flex;align-items:center;justify-content:center;height:100vh;
-    color:var(--ink-muted); font-family:var(--font-display); font-size:18px;
-  }
-  .login-box{
-    background:var(--surface); border:1px solid var(--border); border-radius:6px;
-    padding:36px 34px; width:100%; max-width:380px; text-align:left;
-  }
+  .center-loading{ display:flex;align-items:center;justify-content:center;height:100vh; color:var(--ink-muted); font-family:var(--font-display); font-size:18px; }
+  .login-box{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:36px 34px; width:100%; max-width:380px; text-align:left; }
 
-  /* Topbar */
-  .topbar{
-    padding:28px 40px 22px;
-    border-bottom:1px solid var(--border);
-    background:var(--surface);
-  }
-  .topbar-inner{
-    display:flex; justify-content:space-between; align-items:flex-end;
-    gap:24px; flex-wrap:wrap; max-width:1280px; margin:0 auto;
-  }
-  .page-title{
-    font-family:var(--font-display);
-    font-size:26px; font-weight:600; margin:0 0 4px 0; letter-spacing:-0.01em;
-  }
+  .topbar{ padding:24px 40px 0; border-bottom:1px solid var(--border); background:var(--surface); }
+  .topbar-inner{ display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap; max-width:1280px; margin:0 auto; padding-bottom:18px; }
+  .page-title{ font-family:var(--font-display); font-size:26px; font-weight:600; margin:0 0 4px 0; letter-spacing:-0.01em; }
   .page-sub{ color:var(--ink-muted); font-size:13px; margin:0; }
   .live-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-left:6px; vertical-align:middle; }
   .live-dot.on{ background:var(--st-recibido); }
@@ -70,156 +37,99 @@
   .stats-row{ display:flex; gap:22px; flex-wrap:wrap; }
   .stat-chip{ border-left:3px solid var(--accent); padding-left:10px; min-width:90px; }
   .stat-chip.warn{ border-left-color:var(--st-atrasado); }
-  .stat-chip.amber{ border-left-color:var(--st-aduana); }
   .stat-value{ font-family:var(--font-display); font-size:22px; font-weight:600; line-height:1.1; }
   .stat-label{ font-size:11.5px; color:var(--ink-muted); margin-top:2px; }
 
-  /* Controls */
-  .controls{
-    display:flex; gap:12px; align-items:center; flex-wrap:wrap;
-    padding:14px 40px; background:var(--surface-alt); border-bottom:1px solid var(--border);
-  }
+  .tabs-row{ max-width:1280px; margin:0 auto; display:flex; gap:4px; }
+  .tab-item{ background:none; border:none; padding:10px 4px; margin-right:22px; font-size:14px; font-family:var(--font-ui);
+    color:var(--ink-muted); cursor:pointer; border-bottom:2px solid transparent; }
+  .tab-item.active{ color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+
+  .controls{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:14px 40px; background:var(--surface-alt); border-bottom:1px solid var(--border); }
   .controls-inner{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; max-width:1280px; margin:0 auto; width:100%; }
   .controls input[type=text], .controls select{
-    font-family:var(--font-ui); font-size:13.5px; color:var(--ink);
-    background:var(--surface); border:1px solid var(--border); border-radius:4px;
-    padding:8px 10px; outline:none;
+    font-family:var(--font-ui); font-size:13.5px; color:var(--ink); background:var(--surface); border:1px solid var(--border);
+    border-radius:4px; padding:8px 10px; outline:none;
   }
   .controls input[type=text]:focus, .controls select:focus{ border-color:var(--accent); }
   .controls input[type=text]{ min-width:200px; flex:1; }
   .spacer{ flex:1; }
 
-  .btn{
-    font-family:var(--font-ui); font-size:13.5px; font-weight:500; cursor:pointer;
-    border-radius:4px; padding:9px 16px; border:1px solid transparent;
-  }
+  .btn{ font-family:var(--font-ui); font-size:13.5px; font-weight:500; cursor:pointer; border-radius:4px; padding:9px 16px; border:1px solid transparent; }
   .btn-primary{ background:var(--accent); color:#fff; }
   .btn-primary:hover{ background:var(--accent-hover); }
   .btn-ghost{ background:transparent; border-color:var(--border); color:var(--ink); }
   .btn-ghost:hover{ border-color:var(--accent); color:var(--accent); }
   .btn-sm{ padding:5px 10px; font-size:12.5px; }
   .btn:disabled{ opacity:0.55; cursor:default; }
-  .link-btn{
-    background:none;border:none;color:var(--ink-muted);font-size:12.5px;
-    text-decoration:underline; cursor:pointer; font-family:var(--font-ui); padding:0;
-  }
+  .link-btn{ background:none;border:none;color:var(--ink-muted);font-size:12.5px; text-decoration:underline; cursor:pointer; font-family:var(--font-ui); padding:0; }
   .link-btn:hover{ color:var(--ink); }
+  .qty-btn{ width:26px; height:26px; border-radius:4px; border:1px solid var(--border); background:var(--surface); color:var(--ink); font-size:15px; font-weight:600; cursor:pointer; line-height:1; }
+  .qty-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .tracking-link{ font-size:11.5px; color:var(--accent); text-decoration:none; font-weight:600; }
+  .tracking-link:hover{ text-decoration:underline; }
 
-  /* Main / list */
   .main{ max-width:1280px; margin:0 auto; padding:24px 40px 80px; }
-  .info-banner{
-    background:var(--accent-warm-bg); border:1px solid #E0C9A6; color:#5C4322;
-    border-radius:4px; padding:10px 14px; font-size:13px; margin-bottom:18px;
-  }
-  .list-header{
-    display:flex; gap:16px; padding:0 16px 8px; font-size:11.5px; color:var(--ink-muted);
-    border-bottom:1px solid var(--border);
-  }
-  .list-header .col{ }
-  .pedido-row{
-    display:flex; gap:16px; align-items:center;
-    padding:14px 16px; border-bottom:1px solid var(--border);
-    border-left:4px solid var(--st-proceso); background:var(--surface);
-  }
+  .info-banner{ background:var(--accent-warm-bg); border:1px solid #E0C9A6; color:#5C4322; border-radius:4px; padding:10px 14px; font-size:13px; margin-bottom:18px; }
+  .list-header{ display:flex; gap:16px; padding:0 16px 8px; font-size:11.5px; color:var(--ink-muted); border-bottom:1px solid var(--border); }
+  .row-item{ display:flex; gap:16px; align-items:center; padding:14px 16px; border-bottom:1px solid var(--border); border-left:4px solid var(--accent); background:var(--surface); }
   .col{ min-width:0; }
-  .col-proveedor{ flex:2.2; }
-  .col-destino{ flex:1; color:var(--ink-muted); }
+  .col-nombre, .col-proveedor{ flex:2.2; }
+  .col-ubicacion, .col-destino{ flex:1; color:var(--ink-muted); }
+  .col-categoria{ flex:1.2; }
+  .col-cantidad{ flex:1.4; }
   .col-monto{ flex:1.3; }
   .col-estado{ flex:1.8; }
   .col-fecha{ flex:1; }
   .col-acciones{ flex:1.2; text-align:right; }
 
-  .proveedor-name{ font-weight:600; margin-bottom:3px; }
+  .item-nombre, .proveedor-name{ font-weight:600; margin-bottom:3px; }
+  .item-notas{ font-size:12px; color:var(--ink-muted); }
   .tracking-line{ display:flex; align-items:center; gap:6px; color:var(--ink-muted); font-size:12.5px; }
-  .courier-badge{
-    font-size:11px; font-weight:600; padding:1px 6px; border-radius:3px;
-    background:var(--surface-alt); border:1px solid var(--border); color:var(--ink-muted);
-  }
+  .courier-badge{ font-size:11px; font-weight:600; padding:1px 6px; border-radius:3px; background:var(--surface-alt); border:1px solid var(--border); color:var(--ink-muted); }
   .tracking-num{ font-family:var(--font-mono); font-size:12px; }
-  .tracking-link{ font-size:11.5px; color:var(--accent); text-decoration:none; font-weight:600; }
-  .tracking-link:hover{ text-decoration:underline; }
-
-  .badge{ display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; }
-  .badge-agente{ background:var(--accent-warm-bg); color:var(--accent-warm); margin-left:8px; }
-  .badge-revision{ background:var(--st-transito-bg); color:var(--st-transito); margin-left:8px; }
-  .badge-atrasado{ background:var(--st-atrasado-bg); color:var(--st-atrasado); }
+  .badge{ display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; background:var(--surface-alt); border:1px solid var(--border); color:var(--ink-muted); }
+  .badge-agente{ background:var(--accent-warm-bg); color:var(--accent-warm); margin-left:8px; border:none; }
+  .badge-revision{ background:var(--st-transito-bg); color:var(--st-transito); margin-left:8px; border:none; }
+  .badge-atrasado{ background:var(--st-atrasado-bg); color:var(--st-atrasado); border:none; }
   .dias-label{ font-size:11.5px; color:var(--ink-muted); }
+  .estado-select{ font-family:var(--font-ui); font-size:12.5px; font-weight:600; border-radius:20px; padding:4px 22px 4px 10px; border:1px solid var(--border);
+    background-color:var(--surface); color:var(--sel-color, var(--ink)); cursor:pointer; margin-bottom:4px; display:block; }
 
-  .estado-select{
-    font-family:var(--font-ui); font-size:12.5px; font-weight:600;
-    border-radius:20px; padding:4px 22px 4px 10px; border:1px solid var(--border);
-    background-color:var(--surface); color:var(--sel-color, var(--ink)); cursor:pointer;
-    margin-bottom:4px; display:block;
-  }
-  .fecha-label{ font-size:10.5px; color:var(--ink-muted); text-transform:lowercase; }
-  .fecha-value{ font-size:13px; }
-
-  .empty-state{
-    padding:48px 16px; text-align:center; color:var(--ink-muted); font-family:var(--font-display); font-size:16px;
-  }
+  .empty-state{ padding:48px 16px; text-align:center; color:var(--ink-muted); font-family:var(--font-display); font-size:16px; }
   .footer-actions{ margin-top:22px; display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
 
-  .toast{
-    position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:60;
-    background:var(--ink); color:#fff; padding:11px 22px; border-radius:6px;
-    font-size:13.5px; font-weight:500; box-shadow:0 8px 22px rgba(0,0,0,0.25);
-  }
-
-  /* Modal */
-  .modal-backdrop{
-    position:fixed; inset:0; background:rgba(20,20,18,0.45); z-index:50;
-    display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; overflow-y:auto;
-  }
-  .modal{
-    background:var(--surface); border-radius:6px; max-width:600px; width:100%;
-    padding:28px 30px 26px; box-shadow:0 12px 32px rgba(0,0,0,0.18);
-  }
+  .modal-backdrop{ position:fixed; inset:0; background:rgba(20,20,18,0.45); z-index:50; display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; overflow-y:auto; }
+  .modal{ background:var(--surface); border-radius:6px; max-width:560px; width:100%; padding:28px 30px 26px; box-shadow:0 12px 32px rgba(0,0,0,0.18); }
   .modal-title{ font-family:var(--font-display); font-size:20px; margin:0 0 4px; }
-  .modal-close{
-    float:right; background:none; border:none; font-size:20px; color:var(--ink-muted); cursor:pointer; line-height:1;
-  }
+  .modal-close{ float:right; background:none; border:none; font-size:20px; color:var(--ink-muted); cursor:pointer; line-height:1; }
   .modal-tabs{ display:flex; gap:4px; margin:18px 0 18px; border-bottom:1px solid var(--border); }
-  .tab-btn{
-    background:none; border:none; padding:9px 4px; margin-right:18px; font-size:13.5px;
-    color:var(--ink-muted); cursor:pointer; border-bottom:2px solid transparent; font-family:var(--font-ui);
-  }
+  .tab-btn{ background:none; border:none; padding:9px 4px; margin-right:18px; font-size:13.5px; color:var(--ink-muted); cursor:pointer; border-bottom:2px solid transparent; font-family:var(--font-ui); }
   .tab-btn.active{ color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
-  .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px; }
   .form-field{ display:flex; flex-direction:column; gap:5px; }
   .form-field.full{ grid-column:1 / -1; }
   .form-field label{ font-size:12px; color:var(--ink-muted); }
   .form-field input, .form-field select, .form-field textarea{
-    font-family:var(--font-ui); font-size:14px; padding:9px 10px; border:1px solid var(--border);
-    border-radius:4px; background:var(--surface); color:var(--ink); outline:none;
+    font-family:var(--font-ui); font-size:14px; padding:9px 10px; border:1px solid var(--border); border-radius:4px; background:var(--surface); color:var(--ink); outline:none;
   }
   .form-field input:focus, .form-field select:focus, .form-field textarea:focus{ border-color:var(--accent); }
-  .form-field textarea{ resize:vertical; min-height:120px; font-family:var(--font-ui); }
+  .form-field textarea{ resize:vertical; min-height:70px; font-family:var(--font-ui); }
   .form-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:22px; }
   .extract-status{ font-size:12.5px; color:var(--ink-muted); margin-top:8px; min-height:16px; }
   .field-note{ font-size:12px; color:var(--accent-warm); background:var(--accent-warm-bg); padding:8px 10px; border-radius:4px; margin-bottom:14px; }
 
-  /* Assistant panel */
-  .assistant-toggle{
-    position:fixed; bottom:24px; right:24px; z-index:40;
-    background:var(--accent); color:#fff; border:none; border-radius:24px;
-    padding:12px 20px; font-family:var(--font-ui); font-size:13.5px; font-weight:600; cursor:pointer;
-    box-shadow:0 6px 18px rgba(27,75,67,0.35);
-  }
+  .assistant-toggle{ position:fixed; bottom:24px; right:24px; z-index:40; background:var(--accent); color:#fff; border:none; border-radius:24px;
+    padding:12px 20px; font-family:var(--font-ui); font-size:13.5px; font-weight:600; cursor:pointer; box-shadow:0 6px 18px rgba(27,75,67,0.35); }
   .assistant-toggle:hover{ background:var(--accent-hover); }
-  .assistant-panel{
-    position:fixed; top:0; right:0; height:100vh; width:390px; max-width:92vw;
-    background:var(--surface); border-left:1px solid var(--border); z-index:45;
-    display:flex; flex-direction:column; box-shadow:-8px 0 24px rgba(0,0,0,0.10);
-  }
+  .assistant-panel{ position:fixed; top:0; right:0; height:100vh; width:390px; max-width:92vw; background:var(--surface); border-left:1px solid var(--border);
+    z-index:45; display:flex; flex-direction:column; box-shadow:-8px 0 24px rgba(0,0,0,0.10); }
   .assistant-header{ padding:20px 20px 14px; border-bottom:1px solid var(--border); }
   .assistant-header h3{ font-family:var(--font-display); font-size:18px; margin:0 0 2px; }
   .assistant-header p{ font-size:12px; color:var(--ink-muted); margin:0; }
   .assistant-close{ float:right; background:none; border:none; font-size:19px; color:var(--ink-muted); cursor:pointer; }
   .quick-prompts{ display:flex; flex-wrap:wrap; gap:6px; padding:12px 20px; border-bottom:1px solid var(--border); }
-  .quick-prompt-btn{
-    font-size:11.5px; padding:5px 10px; border-radius:20px; border:1px solid var(--border);
-    background:var(--surface-alt); color:var(--ink); cursor:pointer; font-family:var(--font-ui);
-  }
+  .quick-prompt-btn{ font-size:11.5px; padding:5px 10px; border-radius:20px; border:1px solid var(--border); background:var(--surface-alt); color:var(--ink); cursor:pointer; font-family:var(--font-ui); }
   .quick-prompt-btn:hover{ border-color:var(--accent); color:var(--accent); }
   .chat-log{ flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:12px; }
   .chat-empty{ color:var(--ink-muted); font-size:13px; padding-top:12px; }
@@ -228,17 +138,17 @@
   .chat-msg.assistant{ align-self:flex-start; background:var(--surface-alt); color:var(--ink); }
   .chat-typing{ align-self:flex-start; color:var(--ink-muted); font-size:12.5px; padding:0 4px; }
   .assistant-input-row{ display:flex; gap:8px; padding:14px 20px 20px; border-top:1px solid var(--border); }
-  .assistant-input-row input{
-    flex:1; font-family:var(--font-ui); font-size:13.5px; padding:9px 10px;
-    border:1px solid var(--border); border-radius:4px; outline:none;
-  }
+  .assistant-input-row input{ flex:1; font-family:var(--font-ui); font-size:13.5px; padding:9px 10px; border:1px solid var(--border); border-radius:4px; outline:none; }
   .assistant-input-row input:focus{ border-color:var(--accent); }
+
+  .toast{ position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:60; background:var(--ink); color:#fff; padding:11px 22px;
+    border-radius:6px; font-size:13.5px; font-weight:500; box-shadow:0 8px 22px rgba(0,0,0,0.25); }
 
   @media (max-width:760px){
     .topbar, .controls, .main{ padding-left:18px; padding-right:18px; }
-    .pedido-row{ flex-wrap:wrap; }
-    .col-proveedor{ flex:1 1 100%; }
-    .col-destino, .col-monto, .col-estado, .col-fecha, .col-acciones{ flex:1 1 45%; }
+    .row-item{ flex-wrap:wrap; }
+    .col-nombre, .col-proveedor{ flex:1 1 100%; }
+    .col-ubicacion, .col-destino, .col-categoria, .col-cantidad, .col-monto, .col-estado, .col-fecha, .col-acciones{ flex:1 1 45%; }
     .list-header{ display:none; }
     .form-grid{ grid-template-columns:1fr; }
     .assistant-panel{ width:100%; max-width:100%; }
@@ -249,44 +159,57 @@
 <div id="app"><div class="center-loading">Cargando sistema…</div></div>
 
 <script>
-/* ---------- Configuración y datos ---------- */
+/* ============================================================
+   CONFIGURACIÓN COMPARTIDA
+   ============================================================ */
 const SUPABASE_URL = 'https://wncejgicemnaneptrrsq.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_DrQ2zuhGaxF09jQUrssLWQ_lLKtVbnL';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const CLAUDE_PROXY_URL = SUPABASE_URL + '/functions/v1/claude-proxy';
+
 const ESTADOS = ['En proceso','En tránsito','En aduana','En destino','Recibido'];
 const COURIERS = ['DHL','UPS','MercadoLibre','Otro'];
 const DESTINOS = ['Puerto Montt','Valdivia'];
+const UBICACIONES = ['Puerto Montt','Valdivia'];
+const CATEGORIAS_SUGERIDAS = ['Herramientas','Tecnología','Materiales de maestranza','Seguridad','Oficina'];
 const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-const DEFAULT_TC = 930; // Tipo de cambio de referencia (CLP por US$) — editable en el formulario, no se actualiza solo
+const DEFAULT_TC = 930;
 
 const STATUS_META = {
-  'En proceso':  {color:'var(--st-proceso)',  bg:'var(--st-proceso-bg)'},
-  'En tránsito': {color:'var(--st-transito)', bg:'var(--st-transito-bg)'},
-  'En aduana':   {color:'var(--st-aduana)',   bg:'var(--st-aduana-bg)'},
-  'En destino':  {color:'var(--st-destino)',  bg:'var(--st-destino-bg)'},
-  'Recibido':    {color:'var(--st-recibido)', bg:'var(--st-recibido-bg)'}
+  'En proceso':  {color:'var(--st-proceso)'},
+  'En tránsito': {color:'var(--st-transito)'},
+  'En aduana':   {color:'var(--st-aduana)'},
+  'En destino':  {color:'var(--st-destino)'},
+  'Recibido':    {color:'var(--st-recibido)'}
 };
 
 let state = {
+  vista: 'pedidos', // 'pedidos' | 'inventario'
+  session: null, loginError: null, loginLoading: false,
+  toast: null, loadError: null,
+  showAssistant: false, chatHistory: [], assistantLoading: false,
+  realtimeConectado: { pedidos:false, insumos:false },
+
+  // ---- Pedidos ----
   pedidos: [],
-  filters: { search:'', destino:'Todos', estado:'Todos' },
-  showModal: false,
-  showAssistant: false,
-  chatHistory: [],
-  assistantLoading: false,
-  agenteSummaryModal: null, // {pedidoId, text, loading}
-  confirmAction: null, // null | 'reset' | 'clear'
-  deleteConfirmId: null,
-  loadError: null,
-  toast: null,
-  realtimeConectado: false,
+  pedidosFilters: { search:'', destino:'Todos', estado:'Todos' },
+  showPedidoModal: false,
+  deletePedidoConfirmId: null,
+  agenteSummaryModal: null,
   actualizarEstadoModal: null,
-  session: null,
-  loginError: null,
-  loginLoading: false
+  confirmAction: null,
+
+  // ---- Inventario ----
+  insumos: [],
+  insumosFilters: { search:'', ubicacion:'Todos', categoria:'Todas' },
+  showInsumoModal: false,
+  editInsumoId: null,
+  deleteInsumoConfirmId: null
 };
 
-/* ---------- Utilidades ---------- */
+/* ============================================================
+   UTILIDADES COMPARTIDAS
+   ============================================================ */
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function addDaysISO(n){ const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
 function daysSince(iso){
@@ -299,84 +222,78 @@ function fmtDate(iso){
   const d = new Date(iso+'T00:00:00');
   return d.getDate()+' '+MESES[d.getMonth()];
 }
-function fmtUSD(n){
-  if(n===null || n===undefined || n==='') return '—';
-  return Number(n).toLocaleString('es-CL');
-}
-function fmtCLP(n){
-  if(n===null || n===undefined || n==='') return '—';
-  return Math.round(n).toLocaleString('es-CL');
-}
+function fmtUSD(n){ if(n===null||n===undefined||n==='') return '—'; return Number(n).toLocaleString('es-CL'); }
+function fmtCLP(n){ if(n===null||n===undefined||n==='') return '—'; return Math.round(n).toLocaleString('es-CL'); }
 function escapeHTML(str){
   if(str===null || str===undefined) return '';
   return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-function uid(){ return 'p'+Date.now()+Math.random().toString(16).slice(2,7); }
-
-/* ---------- Datos de ejemplo ---------- */
-function seedPedidos(){
-  const mk = (monto_usd) => ({ monto_usd, monto_clp: Math.round(monto_usd*DEFAULT_TC), moneda_ingreso:'USD', tipo_cambio:DEFAULT_TC });
-  return [
-    { id:uid(), proveedor:'Guangzhou Tools Co.', ...mk(4200), numero_seguimiento:'1Z999AA10123456784', courier:'UPS', destino:'Puerto Montt', estado:'En tránsito', fecha_registro:addDaysISO(-10), fecha_estimada:addDaysISO(3), fecha_ultima_actualizacion:addDaysISO(-6), agente_aduanero:true },
-    { id:uid(), proveedor:'Ferretería del Sur SpA', ...mk(850), numero_seguimiento:'DHL7788990011', courier:'DHL', destino:'Valdivia', estado:'En proceso', fecha_registro:addDaysISO(-2), fecha_estimada:addDaysISO(7), fecha_ultima_actualizacion:addDaysISO(-2), agente_aduanero:false },
-    { id:uid(), proveedor:'Industrial Supply US Inc.', ...mk(5600), numero_seguimiento:'DHL1122334455', courier:'DHL', destino:'Puerto Montt', estado:'En aduana', fecha_registro:addDaysISO(-15), fecha_estimada:addDaysISO(1), fecha_ultima_actualizacion:addDaysISO(-4), agente_aduanero:true },
-    { id:uid(), proveedor:'Repuestos Maestranza Ltda.', ...mk(320), numero_seguimiento:'ML445566778', courier:'MercadoLibre', destino:'Valdivia', estado:'En destino', fecha_registro:addDaysISO(-6), fecha_estimada:addDaysISO(0), fecha_ultima_actualizacion:addDaysISO(-1), agente_aduanero:false },
-    { id:uid(), proveedor:'Global Parts Trading', ...mk(1500), numero_seguimiento:'UPS998877665', courier:'UPS', destino:'Puerto Montt', estado:'Recibido', fecha_registro:addDaysISO(-20), fecha_estimada:addDaysISO(-3), fecha_ultima_actualizacion:addDaysISO(-3), agente_aduanero:false }
-  ];
-}
-
-/* ---------- Conexión con Supabase ---------- */
+function uidPedido(){ return 'p'+Date.now()+Math.random().toString(16).slice(2,7); }
+function uidInsumo(){ return 'i'+Date.now()+Math.random().toString(16).slice(2,7); }
 function withTimeout(promise, ms){
-  return Promise.race([
-    promise,
-    new Promise((_, reject)=> setTimeout(()=> reject(new Error('La operación tardó demasiado')), ms))
-  ]);
+  return Promise.race([ promise, new Promise((_, reject)=> setTimeout(()=> reject(new Error('La operación tardó demasiado')), ms)) ]);
 }
-async function apiGet(){
-  const { data, error } = await withTimeout(
-    supabaseClient.from('pedidos').select('*').order('fecha_registro', { ascending:false }),
-    10000
-  );
+function parseJSONLoose(text){
+  try{ return JSON.parse(text.replace(/```json/gi,'').replace(/```/g,'').trim()); }
+  catch(e){ return {}; }
+}
+
+/* ============================================================
+   API — PEDIDOS
+   ============================================================ */
+async function apiGetPedidos(){
+  const { data, error } = await withTimeout(supabaseClient.from('pedidos').select('*').order('fecha_registro', { ascending:false }), 10000);
   if(error) throw new Error('Error al leer los pedidos: ' + error.message);
   return data;
 }
-async function apiCreate(pedido){
+async function apiCreatePedido(pedido){
   const { error } = await withTimeout(supabaseClient.from('pedidos').insert(pedido), 10000);
   if(error) throw new Error('Error al crear el pedido: ' + error.message);
 }
-async function apiUpdate(id, updates){
+async function apiUpdatePedido(id, updates){
   const { error } = await withTimeout(supabaseClient.from('pedidos').update(updates).eq('id', id), 10000);
   if(error) throw new Error('Error al actualizar el pedido: ' + error.message);
 }
-async function apiDelete(id){
+async function apiDeletePedido(id){
   const { error } = await withTimeout(supabaseClient.from('pedidos').delete().eq('id', id), 10000);
   if(error) throw new Error('Error al eliminar el pedido: ' + error.message);
 }
 
-/* ---------- IA (Claude API) ---------- */
-const CLAUDE_PROXY_URL = SUPABASE_URL + '/functions/v1/claude-proxy';
+/* ============================================================
+   API — INVENTARIO
+   ============================================================ */
+async function apiGetInsumos(){
+  const { data, error } = await withTimeout(supabaseClient.from('inventario').select('*').order('nombre', { ascending:true }), 10000);
+  if(error) throw new Error('Error al leer el inventario: ' + error.message);
+  return data;
+}
+async function apiCreateInsumo(item){
+  const { error } = await withTimeout(supabaseClient.from('inventario').insert(item), 10000);
+  if(error) throw new Error('Error al crear el insumo: ' + error.message);
+}
+async function apiUpdateInsumo(id, updates){
+  const { error } = await withTimeout(supabaseClient.from('inventario').update(updates).eq('id', id), 10000);
+  if(error) throw new Error('Error al actualizar el insumo: ' + error.message);
+}
+async function apiDeleteInsumo(id){
+  const { error } = await withTimeout(supabaseClient.from('inventario').delete().eq('id', id), 10000);
+  if(error) throw new Error('Error al eliminar el insumo: ' + error.message);
+}
 
+/* ============================================================
+   IA (Claude API vía claude-proxy) — COMPARTIDO
+   ============================================================ */
 async function callClaude(systemPrompt, userMessage){
   const { data: { session } } = await supabaseClient.auth.getSession();
   if(!session) throw new Error('Sesión no válida. Vuelve a iniciar sesión.');
   const response = await fetch(CLAUDE_PROXY_URL, {
     method:'POST',
-    headers:{
-      'Content-Type':'application/json',
-      'apikey': SUPABASE_KEY,
-      'Authorization': 'Bearer ' + session.access_token
-    },
+    headers:{ 'Content-Type':'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + session.access_token },
     body: JSON.stringify({ system: systemPrompt, message: userMessage })
   });
   const data = await response.json();
   if(!data || !data.content){ throw new Error((data && data.error && data.error.message) || 'Error de API'); }
   return data.content.map(b=>b.text||'').join('\n');
-}
-function parseJSONLoose(text){
-  try{
-    const clean = text.replace(/```json/gi,'').replace(/```/g,'').trim();
-    return JSON.parse(clean);
-  }catch(e){ return {}; }
 }
 
 const EXTRACT_SYSTEM_PROMPT = `Eres un extractor de datos para el sistema de seguimiento de pedidos de Innovex.
@@ -392,7 +309,7 @@ Usa exactamente estas claves:
 - destino ("Puerto Montt", "Valdivia" o null si no se menciona)
 Si un dato no aparece explícitamente en el texto, usa null. No inventes información.`;
 
-function assistantSystemPrompt(contextData){
+function assistantSystemPromptPedidos(contextData){
   return `Eres el asistente de IA del sistema de seguimiento de pedidos del área de Adquisiciones de Innovex.
 Respondes en español, de forma breve, clara y directa, basándote únicamente en los datos de pedidos entregados a continuación.
 Cada pedido tiene su monto en dólares (monto_usd) y su equivalente en pesos chilenos (monto_clp).
@@ -402,6 +319,16 @@ Si la pregunta no se puede responder con estos datos, dilo con honestidad.
 Hoy es ${todayISO()}.
 
 Datos de pedidos (JSON):
+${JSON.stringify(contextData)}`;
+}
+function assistantSystemPromptInsumos(contextData){
+  return `Eres el asistente de IA del sistema de inventario del área de Adquisiciones de Innovex.
+Respondes en español, de forma breve, clara y directa, basándote únicamente en los datos de inventario entregados a continuación.
+Cada insumo tiene su ubicación (Puerto Montt o Valdivia) y su cantidad actual.
+Si la pregunta no se puede responder con estos datos, dilo con honestidad.
+Hoy es ${todayISO()}.
+
+Datos de inventario (JSON):
 ${JSON.stringify(contextData)}`;
 }
 
@@ -417,324 +344,67 @@ Responde ÚNICAMENTE con un objeto JSON, sin texto adicional, sin backticks. Usa
 
 Si el texto pegado no parece ser de una página de seguimiento o no tiene información de estado clara, responde con estado_sugerido: null.`;
 
-/* ---------- Acciones ---------- */
-function openModal(){ state.showModal = true; render(); validateForm(); }
-function closeModal(){ state.showModal = false; render(); }
-
-function isFormValid(){
-  const proveedor = document.getElementById('f-proveedor').value.trim();
-  const monto = parseFloat(document.getElementById('f-monto').value);
-  const tracking = document.getElementById('f-tracking').value.trim();
-  const courier = document.getElementById('f-courier').value;
-  const destino = document.getElementById('f-destino').value;
-  const fecha = document.getElementById('f-fecha').value;
-  const moneda = document.getElementById('f-moneda').value;
-  let tcOk = true;
-  if(moneda === 'CLP'){
-    const tc = parseFloat(document.getElementById('f-tc').value);
-    tcOk = !isNaN(tc) && tc > 0;
-  }
-  return proveedor !== '' && !isNaN(monto) && monto > 0 && tracking !== '' &&
-         courier !== '' && destino !== '' && fecha !== '' && tcOk;
+/* ============================================================
+   LOGIN — COMPARTIDO
+   ============================================================ */
+function loginScreenHTML(){
+  return `
+  <div class="center-loading" style="flex-direction:column;">
+    <div class="login-box">
+      <h1 class="page-title" style="margin-bottom:4px;">Innovex</h1>
+      <p class="page-sub" style="margin-bottom:24px;">Adquisiciones — Pedidos e Inventario</p>
+      ${state.loginError ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-bottom:14px;">${escapeHTML(state.loginError)}</div>` : ''}
+      <div class="form-field full" style="margin-bottom:12px;">
+        <label>Correo</label>
+        <input type="email" id="login-email" placeholder="tu@innovex.cl" onkeydown="if(event.key==='Enter') handleLogin()">
+      </div>
+      <div class="form-field full" style="margin-bottom:20px;">
+        <label>Contraseña</label>
+        <input type="password" id="login-password" onkeydown="if(event.key==='Enter') handleLogin()">
+      </div>
+      <button class="btn btn-primary" style="width:100%;" id="btn-login" onclick="handleLogin()" ${state.loginLoading?'disabled':''}>${state.loginLoading?'Ingresando…':'Iniciar sesión'}</button>
+    </div>
+  </div>`;
 }
-function validateForm(){
-  updateMontoPreview();
-  const btn = document.getElementById('btn-guardar');
-  const hint = document.getElementById('form-hint');
-  if(!btn) return;
-  const ok = isFormValid();
-  btn.disabled = !ok;
-  if(hint) hint.style.display = ok ? 'none' : 'block';
-}
-
-function askDeleteConfirm(id){ state.deleteConfirmId = id; renderPedidosList(); }
-function cancelDeleteConfirm(){ state.deleteConfirmId = null; renderPedidosList(); }
-async function confirmDelete(id){
-  state.deleteConfirmId = null;
-  try{
-    await apiDelete(id);
-    state.pedidos = state.pedidos.filter(p=>p.id!==id);
-    state.toast = 'Pedido eliminado.';
-  }catch(e){
-    state.toast = 'No se pudo eliminar el pedido en la base de datos. Intenta de nuevo.';
-  }
+async function handleLogin(){
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if(!email || !password){ state.loginError = 'Ingresa tu correo y contraseña.'; render(); return; }
+  state.loginLoading = true; state.loginError = null;
   render();
-  setTimeout(()=>{ state.toast = null; render(); }, 2600);
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  state.loginLoading = false;
+  if(error){ state.loginError = 'No se pudo iniciar sesión: ' + error.message; render(); return; }
+  state.session = data.session;
+  await cargarTodo();
 }
-
-async function handleExtract(){
-  const btn = document.getElementById('btn-extract');
-  const status = document.getElementById('extract-status');
-  const text = document.getElementById('f-pegado').value.trim();
-  if(!text){ status.textContent = 'Pega primero el texto del correo o mensaje.'; return; }
-  btn.disabled = true; status.textContent = 'Extrayendo datos con IA…';
-  try{
-    const raw = await callClaude(EXTRACT_SYSTEM_PROMPT, text);
-    const data = parseJSONLoose(raw);
-    if(data.proveedor) document.getElementById('f-proveedor').value = data.proveedor;
-    if(data.moneda === 'CLP' || data.moneda === 'USD'){ document.getElementById('f-moneda').value = data.moneda; handleMonedaChange(); }
-    if(data.monto) document.getElementById('f-monto').value = data.monto;
-    if(data.numero_seguimiento) document.getElementById('f-tracking').value = data.numero_seguimiento;
-    if(data.courier && COURIERS.includes(data.courier)) document.getElementById('f-courier').value = data.courier;
-    if(data.destino && DESTINOS.includes(data.destino)) document.getElementById('f-destino').value = data.destino;
-    if(data.fecha_estimada) document.getElementById('f-fecha').value = data.fecha_estimada;
-    validateForm();
-    showTab('manual');
-    document.getElementById('extract-note').style.display = 'block';
-    status.textContent = '';
-  }catch(e){
-    status.textContent = 'No se pudo extraer la información. Puedes completar los datos manualmente.';
-  }
-  btn.disabled = false;
-}
-
-function handleMonedaChange(){
-  const moneda = document.getElementById('f-moneda').value;
-  document.getElementById('tc-row').style.display = moneda==='CLP' ? 'block' : 'none';
-  validateForm();
-}
-function updateMontoPreview(){
-  const moneda = document.getElementById('f-moneda').value;
-  const monto = parseFloat(document.getElementById('f-monto').value);
-  const tc = parseFloat(document.getElementById('f-tc').value) || DEFAULT_TC;
-  const preview = document.getElementById('monto-preview');
-  if(!preview) return;
-  if(isNaN(monto)){ preview.textContent = ''; return; }
-  if(moneda==='USD'){ preview.textContent = '≈ CLP $' + fmtCLP(monto*tc); }
-  else{ preview.textContent = '≈ US$ ' + fmtUSD(+(monto/tc).toFixed(2)); }
-}
-
-function showTab(tab){
-  document.getElementById('tab-manual').style.display = tab==='manual' ? 'grid' : 'none';
-  document.getElementById('tab-pegar').style.display = tab==='pegar' ? 'block' : 'none';
-  document.getElementById('tabbtn-manual').classList.toggle('active', tab==='manual');
-  document.getElementById('tabbtn-pegar').classList.toggle('active', tab==='pegar');
-}
-
-async function handleGuardar(){
-  const errorEl = document.getElementById('form-error');
-  errorEl.style.display = 'none';
-  if(!isFormValid()){
-    errorEl.textContent = 'No se puede guardar: completa todos los campos.';
-    errorEl.style.display = 'block';
-    validateForm();
-    return;
-  }
-  const proveedor = document.getElementById('f-proveedor').value.trim();
-  const submitBtn = document.getElementById('btn-guardar');
-  submitBtn.disabled = true; submitBtn.textContent = 'Guardando…';
-  try{
-    const moneda = document.getElementById('f-moneda').value;
-    const montoInput = parseFloat(document.getElementById('f-monto').value);
-    const tc = parseFloat(document.getElementById('f-tc').value) || DEFAULT_TC;
-    let monto_usd = null, monto_clp = null;
-    if(!isNaN(montoInput)){
-      if(moneda === 'CLP'){ monto_clp = montoInput; monto_usd = +(montoInput/tc).toFixed(2); }
-      else{ monto_usd = montoInput; monto_clp = Math.round(montoInput*tc); }
-    }
-    const pedido = {
-      id: uid(),
-      proveedor,
-      monto_usd, monto_clp, moneda_ingreso: moneda, tipo_cambio: tc,
-      numero_seguimiento: document.getElementById('f-tracking').value.trim() || null,
-      courier: document.getElementById('f-courier').value,
-      destino: document.getElementById('f-destino').value,
-      fecha_estimada: document.getElementById('f-fecha').value || null,
-      estado: 'En proceso',
-      fecha_registro: todayISO(),
-      fecha_ultima_actualizacion: todayISO(),
-      agente_aduanero: !!(monto_usd && monto_usd > 3000)
-    };
-    await apiCreate(pedido);
-    state.pedidos.unshift(pedido);
-    state.showModal = false;
-    state.toast = 'Pedido guardado — ' + proveedor;
-    render();
-    setTimeout(()=>{ state.toast = null; render(); }, 2600);
-  }catch(err){
-    submitBtn.disabled = false; submitBtn.textContent = 'Guardar pedido';
-    errorEl.textContent = 'Ocurrió un error al guardar: ' + (err && err.message ? err.message : 'error desconocido') + '. Intenta nuevamente.';
-    errorEl.style.display = 'block';
-  }
-}
-
-async function updateEstado(id, value){
-  const p = state.pedidos.find(x=>x.id===id);
-  if(!p) return;
-  const prevEstado = p.estado, prevFecha = p.fecha_ultima_actualizacion;
-  p.estado = value;
-  p.fecha_ultima_actualizacion = todayISO();
-  render();
-  try{
-    await apiUpdate(id, { estado: value, fecha_ultima_actualizacion: p.fecha_ultima_actualizacion });
-  }catch(e){
-    p.estado = prevEstado; p.fecha_ultima_actualizacion = prevFecha;
-    state.toast = 'No se pudo guardar el cambio de estado en la base de datos. Intenta de nuevo.';
-    render();
-    setTimeout(()=>{ state.toast=null; render(); }, 3200);
-  }
-}
-
-async function markAsReviewed(id){
-  const p = state.pedidos.find(x=>x.id===id);
-  if(!p) return;
-  p.pendiente_revision = false;
-  render();
-  try{
-    await apiUpdate(id, { pendiente_revision: false });
-  }catch(e){
-    p.pendiente_revision = true;
-    state.toast = 'No se pudo guardar el cambio. Intenta de nuevo.';
-    render();
-    setTimeout(()=>{ state.toast=null; render(); }, 3200);
-  }
-}
-
-async function handleAgenteSummary(id){
-  const p = state.pedidos.find(x=>x.id===id);
-  if(!p) return;
-  state.agenteSummaryModal = { pedidoId:id, text:null, loading:true };
-  render();
-  try{
-    const text = await callClaude(AGENTE_SYSTEM_PROMPT, JSON.stringify(p));
-    state.agenteSummaryModal = { pedidoId:id, text, loading:false };
-  }catch(e){
-    state.agenteSummaryModal = { pedidoId:id, text:'No se pudo generar el resumen. Intenta nuevamente.', loading:false };
-  }
-  render();
-}
-function closeAgenteModal(){ state.agenteSummaryModal = null; render(); }
-
-/* ---------- Actualizar estado desde texto pegado ---------- */
-function openActualizarEstadoModal(id){
-  state.actualizarEstadoModal = { pedidoId:id, texto:'', loading:false, resultado:null, error:null };
-  render();
-}
-function closeActualizarEstadoModal(){ state.actualizarEstadoModal = null; render(); }
-
-async function handleAnalizarEstado(){
-  const texto = document.getElementById('estado-pegado').value.trim();
-  if(!texto){
-    state.actualizarEstadoModal.error = 'Pega primero el texto que ves en la página de seguimiento.';
-    render();
-    return;
-  }
-  state.actualizarEstadoModal.texto = texto;
-  state.actualizarEstadoModal.loading = true;
-  state.actualizarEstadoModal.error = null;
-  state.actualizarEstadoModal.resultado = null;
-  render();
-  try{
-    const raw = await callClaude(ESTADO_DESDE_TEXTO_PROMPT, texto);
-    const data = parseJSONLoose(raw);
-    if(!data.estado_sugerido || !ESTADOS.includes(data.estado_sugerido)){
-      state.actualizarEstadoModal.error = data.razon || 'No se pudo determinar un estado a partir de ese texto.';
-    }else{
-      state.actualizarEstadoModal.resultado = data;
-    }
-  }catch(e){
-    state.actualizarEstadoModal.error = 'No se pudo analizar el texto. Intenta nuevamente.';
-  }
-  state.actualizarEstadoModal.loading = false;
+async function handleLogout(){
+  await supabaseClient.auth.signOut();
+  state.session = null; state.pedidos = []; state.insumos = [];
+  if(realtimeChannelPedidos){ supabaseClient.removeChannel(realtimeChannelPedidos); realtimeChannelPedidos = null; }
+  if(realtimeChannelInsumos){ supabaseClient.removeChannel(realtimeChannelInsumos); realtimeChannelInsumos = null; }
   render();
 }
 
-async function aplicarEstadoSugerido(){
-  const modal = state.actualizarEstadoModal;
-  if(!modal || !modal.resultado) return;
-  const id = modal.pedidoId;
-  const nuevoEstado = modal.resultado.estado_sugerido;
-  closeActualizarEstadoModal();
-  await updateEstado(id, nuevoEstado);
+/* ============================================================
+   PEDIDOS — lógica de negocio
+   ============================================================ */
+function trackingUrl(p){
+  if(!p.numero_seguimiento) return null;
+  const num = encodeURIComponent(p.numero_seguimiento);
+  if(p.courier === 'DHL') return `https://www.dhl.com/cl-es/home/rastreo.html?tracking-id=${num}`;
+  if(p.courier === 'UPS') return `https://www.ups.com/track?loc=es_CL&tracknum=${num}`;
+  return null;
 }
-
-async function copyAgenteText(){
-  const t = state.agenteSummaryModal && state.agenteSummaryModal.text;
-  if(!t) return;
-  let ok = false;
-  try{ await navigator.clipboard.writeText(t); ok = true; }
-  catch(e){
-    try{
-      const ta = document.createElement('textarea');
-      ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
-      document.body.appendChild(ta); ta.focus(); ta.select();
-      ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-    }catch(e2){ ok = false; }
-  }
-  const el = document.getElementById('copy-feedback');
-  if(el) el.textContent = ok ? 'Copiado ✓' : 'No se pudo copiar automáticamente — selecciona el texto y cópialo manualmente.';
-}
-
-function toggleAssistant(){ state.showAssistant = !state.showAssistant; render(); }
-
-async function handleAskAssistant(preset){
-  const input = document.getElementById('assistant-input');
-  const question = preset || (input ? input.value.trim() : '');
-  if(!question) return;
-  state.chatHistory.push({ role:'user', text:question });
-  state.assistantLoading = true;
-  render();
-  try{
-    const contextData = state.pedidos.map(p=>({
-      proveedor:p.proveedor, monto_usd:p.monto_usd, monto_clp:p.monto_clp, moneda_ingreso:p.moneda_ingreso,
-      courier:p.courier, numero_seguimiento:p.numero_seguimiento,
-      destino:p.destino, estado:p.estado, fecha_registro:p.fecha_registro, fecha_estimada:p.fecha_estimada,
-      dias_sin_actualizacion: daysSince(p.fecha_ultima_actualizacion), agente_aduanero:p.agente_aduanero,
-      pendiente_revision: !!p.pendiente_revision
-    }));
-    const answer = await callClaude(assistantSystemPrompt(contextData), question);
-    state.chatHistory.push({ role:'assistant', text:answer });
-  }catch(e){
-    state.chatHistory.push({ role:'assistant', text:'No pude conectarme con la IA. Intenta nuevamente.' });
-  }
-  state.assistantLoading = false;
-  render();
-  setTimeout(()=>{ const el=document.getElementById('chat-log'); if(el) el.scrollTop = el.scrollHeight; },0);
-}
-
-function askConfirm(action){ state.confirmAction = action; render(); }
-function cancelConfirm(){ state.confirmAction = null; render(); }
-async function handleResetDemo(){
-  state.confirmAction = null;
-  const seeds = seedPedidos();
-  try{
-    for(const p of seeds){ await apiCreate(p); }
-    state.pedidos = await apiGet();
-    state.toast = 'Datos de ejemplo agregados a la base de datos.';
-  }catch(e){
-    state.toast = 'Hubo un problema agregando los datos de ejemplo: ' + (e && e.message ? e.message : 'error desconocido');
-    try{ state.pedidos = await apiGet(); }catch(e2){}
-  }
-  render();
-  setTimeout(()=>{ state.toast = null; render(); }, 2800);
-}
-async function handleClearAll(){
-  state.confirmAction = null;
-  const idsAEliminar = state.pedidos.map(p=>p.id);
-  try{
-    for(const id of idsAEliminar){ await apiDelete(id); }
-    state.pedidos = [];
-    state.toast = 'Todos los pedidos fueron eliminados de la base de datos.';
-  }catch(e){
-    state.toast = 'Hubo un problema eliminando algunos pedidos: ' + (e && e.message ? e.message : 'error desconocido');
-    try{ state.pedidos = await apiGet(); }catch(e2){}
-  }
-  render();
-  setTimeout(()=>{ state.toast = null; render(); }, 2800);
-}
-
-/* ---------- Render ---------- */
-function computeStats(){
+function computePedidoStats(){
   const activos = state.pedidos.filter(p=>p.estado!=='Recibido').length;
   const atrasados = state.pedidos.filter(p=>p.estado!=='Recibido' && daysSince(p.fecha_ultima_actualizacion)>=5).length;
   const conAgente = state.pedidos.filter(p=>p.agente_aduanero).length;
   const pendientesRevision = state.pedidos.filter(p=>p.pendiente_revision).length;
   return { activos, atrasados, conAgente, pendientesRevision };
 }
-
 function getFilteredPedidos(){
-  const { search, destino, estado } = state.filters;
+  const { search, destino, estado } = state.pedidosFilters;
   return state.pedidos.filter(p=>{
     if(destino!=='Todos' && p.destino!==destino) return false;
     if(estado!=='Todos' && p.estado!==estado) return false;
@@ -746,21 +416,12 @@ function getFilteredPedidos(){
     return true;
   });
 }
-
-function trackingUrl(p){
-  if(!p.numero_seguimiento) return null;
-  const num = encodeURIComponent(p.numero_seguimiento);
-  if(p.courier === 'DHL') return `https://www.dhl.com/cl-es/home/rastreo.html?tracking-id=${num}`;
-  if(p.courier === 'UPS') return `https://www.ups.com/track?loc=es_CL&tracknum=${num}`;
-  return null; // MercadoLibre y "Otro" no tienen un enlace público confiable por número
-}
-
 function pedidoRowHTML(p){
   const meta = STATUS_META[p.estado] || STATUS_META['En proceso'];
   const dias = daysSince(p.fecha_ultima_actualizacion);
   const atrasado = p.estado!=='Recibido' && dias>=5;
   return `
-  <div class="pedido-row" style="border-left-color:${meta.color}">
+  <div class="row-item" style="border-left-color:${meta.color}">
     <div class="col col-proveedor">
       <div class="proveedor-name">${escapeHTML(p.proveedor)} ${p.pendiente_revision ? '<span class="badge badge-revision">✦ Creado por IA — pendiente de revisión</span>' : ''}</div>
       <div class="tracking-line">
@@ -785,34 +446,31 @@ function pedidoRowHTML(p){
         : `<span class="dias-label">Actualizado ${dias===0?'hoy':'hace '+dias+' días'}</span>`}
     </div>
     <div class="col col-fecha">
-      <div class="fecha-label">llega</div>
-      <div class="fecha-value">${fmtDate(p.fecha_estimada)}</div>
+      <div class="dias-label">llega</div>
+      <div>${fmtDate(p.fecha_estimada)}</div>
     </div>
     <div class="col col-acciones" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-      ${state.deleteConfirmId === p.id ? `
+      ${state.deletePedidoConfirmId === p.id ? `
         <span class="dias-label">¿Eliminar este pedido?</span>
         <div style="display:flex;gap:8px;">
-          <button class="link-btn" onclick="confirmDelete('${p.id}')">Sí, eliminar</button>
-          <button class="link-btn" onclick="cancelDeleteConfirm()">Cancelar</button>
+          <button class="link-btn" onclick="confirmDeletePedido('${p.id}')">Sí, eliminar</button>
+          <button class="link-btn" onclick="cancelDeletePedidoConfirm()">Cancelar</button>
         </div>
       ` : `
         ${p.pendiente_revision ? `<button class="btn-ghost btn-sm" onclick="markAsReviewed('${p.id}')">Marcar como revisado</button>` : ''}
         ${p.numero_seguimiento ? `<button class="btn-ghost btn-sm" onclick="openActualizarEstadoModal('${p.id}')">Actualizar estado</button>` : ''}
         ${p.agente_aduanero ? `<button class="btn-ghost btn-sm" onclick="handleAgenteSummary('${p.id}')">Resumen para agente</button>` : ''}
-        <button class="btn-ghost btn-sm" onclick="askDeleteConfirm('${p.id}')">Eliminar</button>
+        <button class="btn-ghost btn-sm" onclick="askDeletePedidoConfirm('${p.id}')">Eliminar</button>
       `}
     </div>
   </div>`;
 }
-
 function pedidosListInnerHTML(){
   const list = getFilteredPedidos();
   if(state.pedidos.length===0){
-    return `<div class="empty-state">Aún no hay pedidos registrados.<br><span style="font-family:var(--font-ui);font-size:13px;">Usa «Nuevo pedido» para agregar el primero.</span></div>`;
+    return `<div class="empty-state">Aún no hay pedidos registrados.<br><span style="font-family:var(--font-ui);font-size:13px;">Usa «+ Nuevo pedido» para agregar el primero.</span></div>`;
   }
-  if(list.length===0){
-    return `<div class="empty-state">Ningún pedido coincide con el filtro actual.</div>`;
-  }
+  if(list.length===0) return `<div class="empty-state">Ningún pedido coincide con el filtro actual.</div>`;
   return `
     <div class="list-header">
       <div class="col col-proveedor">Proveedor / seguimiento</div>
@@ -825,23 +483,491 @@ function pedidosListInnerHTML(){
     ${list.map(pedidoRowHTML).join('')}
   `;
 }
-function renderPedidosList(){
-  const c = document.getElementById('pedidos-list-container');
-  if(c) c.innerHTML = pedidosListInnerHTML();
+function renderPedidosList(){ const c = document.getElementById('list-container'); if(c) c.innerHTML = pedidosListInnerHTML(); }
+
+function openPedidoModal(){ state.showPedidoModal = true; render(); validatePedidoForm(); }
+function closePedidoModal(){ state.showPedidoModal = false; render(); }
+function isPedidoFormValid(){
+  const proveedor = document.getElementById('f-proveedor').value.trim();
+  const monto = parseFloat(document.getElementById('f-monto').value);
+  const tracking = document.getElementById('f-tracking').value.trim();
+  const courier = document.getElementById('f-courier').value;
+  const destino = document.getElementById('f-destino').value;
+  const fecha = document.getElementById('f-fecha').value;
+  const moneda = document.getElementById('f-moneda').value;
+  let tcOk = true;
+  if(moneda === 'CLP'){ const tc = parseFloat(document.getElementById('f-tc').value); tcOk = !isNaN(tc) && tc > 0; }
+  return proveedor !== '' && !isNaN(monto) && monto > 0 && tracking !== '' && courier !== '' && destino !== '' && fecha !== '' && tcOk;
+}
+function updateMontoPreview(){
+  const moneda = document.getElementById('f-moneda').value;
+  const monto = parseFloat(document.getElementById('f-monto').value);
+  const tc = parseFloat(document.getElementById('f-tc').value) || DEFAULT_TC;
+  const preview = document.getElementById('monto-preview');
+  if(!preview) return;
+  if(isNaN(monto)){ preview.textContent = ''; return; }
+  if(moneda==='USD'){ preview.textContent = '≈ CLP $' + fmtCLP(monto*tc); }
+  else{ preview.textContent = '≈ US$ ' + fmtUSD(+(monto/tc).toFixed(2)); }
+}
+function handleMonedaChange(){
+  const moneda = document.getElementById('f-moneda').value;
+  document.getElementById('tc-row').style.display = moneda==='CLP' ? 'block' : 'none';
+  validatePedidoForm();
+}
+function validatePedidoForm(){
+  updateMontoPreview();
+  const btn = document.getElementById('btn-guardar');
+  const hint = document.getElementById('form-hint');
+  if(!btn) return;
+  const ok = isPedidoFormValid();
+  btn.disabled = !ok;
+  if(hint) hint.style.display = ok ? 'none' : 'block';
+}
+function showTab(tab){
+  document.getElementById('tab-manual').style.display = tab==='manual' ? 'grid' : 'none';
+  document.getElementById('tab-pegar').style.display = tab==='pegar' ? 'block' : 'none';
+  document.getElementById('tabbtn-manual').classList.toggle('active', tab==='manual');
+  document.getElementById('tabbtn-pegar').classList.toggle('active', tab==='pegar');
+}
+async function handleExtract(){
+  const btn = document.getElementById('btn-extract');
+  const status = document.getElementById('extract-status');
+  const text = document.getElementById('f-pegado').value.trim();
+  if(!text){ status.textContent = 'Pega primero el texto del correo o mensaje.'; return; }
+  btn.disabled = true; status.textContent = 'Extrayendo datos con IA…';
+  try{
+    const raw = await callClaude(EXTRACT_SYSTEM_PROMPT, text);
+    const data = parseJSONLoose(raw);
+    if(data.proveedor) document.getElementById('f-proveedor').value = data.proveedor;
+    if(data.moneda === 'CLP' || data.moneda === 'USD'){ document.getElementById('f-moneda').value = data.moneda; handleMonedaChange(); }
+    if(data.monto) document.getElementById('f-monto').value = data.monto;
+    if(data.numero_seguimiento) document.getElementById('f-tracking').value = data.numero_seguimiento;
+    if(data.courier && COURIERS.includes(data.courier)) document.getElementById('f-courier').value = data.courier;
+    if(data.destino && DESTINOS.includes(data.destino)) document.getElementById('f-destino').value = data.destino;
+    if(data.fecha_estimada) document.getElementById('f-fecha').value = data.fecha_estimada;
+    validatePedidoForm();
+    showTab('manual');
+    document.getElementById('extract-note').style.display = 'block';
+    status.textContent = '';
+  }catch(e){
+    status.textContent = 'No se pudo extraer la información. Puedes completar los datos manualmente.';
+  }
+  btn.disabled = false;
+}
+async function handleGuardar(){
+  const errorEl = document.getElementById('form-error');
+  errorEl.style.display = 'none';
+  if(!isPedidoFormValid()){
+    errorEl.textContent = 'No se puede guardar: completa todos los campos.';
+    errorEl.style.display = 'block';
+    validatePedidoForm();
+    return;
+  }
+  const proveedor = document.getElementById('f-proveedor').value.trim();
+  const submitBtn = document.getElementById('btn-guardar');
+  submitBtn.disabled = true; submitBtn.textContent = 'Guardando…';
+  try{
+    const moneda = document.getElementById('f-moneda').value;
+    const montoInput = parseFloat(document.getElementById('f-monto').value);
+    const tc = parseFloat(document.getElementById('f-tc').value) || DEFAULT_TC;
+    let monto_usd = null, monto_clp = null;
+    if(!isNaN(montoInput)){
+      if(moneda === 'CLP'){ monto_clp = montoInput; monto_usd = +(montoInput/tc).toFixed(2); }
+      else{ monto_usd = montoInput; monto_clp = Math.round(montoInput*tc); }
+    }
+    const pedido = {
+      id: uidPedido(), proveedor,
+      monto_usd, monto_clp, moneda_ingreso: moneda, tipo_cambio: tc,
+      numero_seguimiento: document.getElementById('f-tracking').value.trim() || null,
+      courier: document.getElementById('f-courier').value,
+      destino: document.getElementById('f-destino').value,
+      fecha_estimada: document.getElementById('f-fecha').value || null,
+      estado: 'En proceso', fecha_registro: todayISO(), fecha_ultima_actualizacion: todayISO(),
+      agente_aduanero: !!(monto_usd && monto_usd > 3000), pendiente_revision: false
+    };
+    await apiCreatePedido(pedido);
+    state.pedidos.unshift(pedido);
+    state.showPedidoModal = false;
+    state.toast = 'Pedido guardado — ' + proveedor;
+    render();
+    setTimeout(()=>{ state.toast = null; render(); }, 2600);
+  }catch(err){
+    submitBtn.disabled = false; submitBtn.textContent = 'Guardar pedido';
+    errorEl.textContent = 'Ocurrió un error al guardar: ' + (err && err.message ? err.message : 'error desconocido') + '. Intenta nuevamente.';
+    errorEl.style.display = 'block';
+  }
+}
+async function updateEstado(id, value){
+  const p = state.pedidos.find(x=>x.id===id);
+  if(!p) return;
+  const prevEstado = p.estado, prevFecha = p.fecha_ultima_actualizacion;
+  p.estado = value; p.fecha_ultima_actualizacion = todayISO();
+  render();
+  try{ await apiUpdatePedido(id, { estado: value, fecha_ultima_actualizacion: p.fecha_ultima_actualizacion }); }
+  catch(e){
+    p.estado = prevEstado; p.fecha_ultima_actualizacion = prevFecha;
+    state.toast = 'No se pudo guardar el cambio de estado. Intenta de nuevo.';
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 3200);
+  }
+}
+async function markAsReviewed(id){
+  const p = state.pedidos.find(x=>x.id===id);
+  if(!p) return;
+  p.pendiente_revision = false;
+  render();
+  try{ await apiUpdatePedido(id, { pendiente_revision: false }); }
+  catch(e){
+    p.pendiente_revision = true;
+    state.toast = 'No se pudo guardar el cambio. Intenta de nuevo.';
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 3200);
+  }
+}
+function askDeletePedidoConfirm(id){ state.deletePedidoConfirmId = id; renderPedidosList(); }
+function cancelDeletePedidoConfirm(){ state.deletePedidoConfirmId = null; renderPedidosList(); }
+async function confirmDeletePedido(id){
+  state.deletePedidoConfirmId = null;
+  try{ await apiDeletePedido(id); state.pedidos = state.pedidos.filter(p=>p.id!==id); state.toast = 'Pedido eliminado.'; }
+  catch(e){ state.toast = 'No se pudo eliminar el pedido. Intenta de nuevo.'; }
+  render();
+  setTimeout(()=>{ state.toast = null; render(); }, 2600);
+}
+async function handleAgenteSummary(id){
+  const p = state.pedidos.find(x=>x.id===id);
+  if(!p) return;
+  state.agenteSummaryModal = { pedidoId:id, text:null, loading:true };
+  render();
+  try{ const text = await callClaude(AGENTE_SYSTEM_PROMPT, JSON.stringify(p)); state.agenteSummaryModal = { pedidoId:id, text, loading:false }; }
+  catch(e){ state.agenteSummaryModal = { pedidoId:id, text:'No se pudo generar el resumen. Intenta nuevamente.', loading:false }; }
+  render();
+}
+function closeAgenteModal(){ state.agenteSummaryModal = null; render(); }
+async function copyAgenteText(){
+  const t = state.agenteSummaryModal && state.agenteSummaryModal.text;
+  if(!t) return;
+  let ok = false;
+  try{ await navigator.clipboard.writeText(t); ok = true; }
+  catch(e){
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      ok = document.execCommand('copy'); document.body.removeChild(ta);
+    }catch(e2){ ok = false; }
+  }
+  const el = document.getElementById('copy-feedback');
+  if(el) el.textContent = ok ? 'Copiado ✓' : 'No se pudo copiar automáticamente — selecciona el texto y cópialo manualmente.';
+}
+function openActualizarEstadoModal(id){ state.actualizarEstadoModal = { pedidoId:id, texto:'', loading:false, resultado:null, error:null }; render(); }
+function closeActualizarEstadoModal(){ state.actualizarEstadoModal = null; render(); }
+async function handleAnalizarEstado(){
+  const texto = document.getElementById('estado-pegado').value.trim();
+  if(!texto){ state.actualizarEstadoModal.error = 'Pega primero el texto que ves en la página de seguimiento.'; render(); return; }
+  state.actualizarEstadoModal.texto = texto; state.actualizarEstadoModal.loading = true;
+  state.actualizarEstadoModal.error = null; state.actualizarEstadoModal.resultado = null;
+  render();
+  try{
+    const raw = await callClaude(ESTADO_DESDE_TEXTO_PROMPT, texto);
+    const data = parseJSONLoose(raw);
+    if(!data.estado_sugerido || !ESTADOS.includes(data.estado_sugerido)){ state.actualizarEstadoModal.error = data.razon || 'No se pudo determinar un estado a partir de ese texto.'; }
+    else{ state.actualizarEstadoModal.resultado = data; }
+  }catch(e){ state.actualizarEstadoModal.error = 'No se pudo analizar el texto. Intenta nuevamente.'; }
+  state.actualizarEstadoModal.loading = false;
+  render();
+}
+async function aplicarEstadoSugerido(){
+  const modal = state.actualizarEstadoModal;
+  if(!modal || !modal.resultado) return;
+  const id = modal.pedidoId, nuevoEstado = modal.resultado.estado_sugerido;
+  closeActualizarEstadoModal();
+  await updateEstado(id, nuevoEstado);
+}
+function askConfirm(action){ state.confirmAction = action; render(); }
+function cancelConfirm(){ state.confirmAction = null; render(); }
+function seedPedidos(){
+  const mk = (monto_usd) => ({ monto_usd, monto_clp: Math.round(monto_usd*DEFAULT_TC), moneda_ingreso:'USD', tipo_cambio:DEFAULT_TC });
+  return [
+    { id:uidPedido(), proveedor:'Guangzhou Tools Co.', ...mk(4200), numero_seguimiento:'1Z999AA10123456784', courier:'UPS', destino:'Puerto Montt', estado:'En tránsito', fecha_registro:addDaysISO(-10), fecha_estimada:addDaysISO(3), fecha_ultima_actualizacion:addDaysISO(-6), agente_aduanero:true, pendiente_revision:false },
+    { id:uidPedido(), proveedor:'Ferretería del Sur SpA', ...mk(850), numero_seguimiento:'DHL7788990011', courier:'DHL', destino:'Valdivia', estado:'En proceso', fecha_registro:addDaysISO(-2), fecha_estimada:addDaysISO(7), fecha_ultima_actualizacion:addDaysISO(-2), agente_aduanero:false, pendiente_revision:false }
+  ];
+}
+async function handleResetDemo(){
+  state.confirmAction = null;
+  const seeds = seedPedidos();
+  try{ for(const p of seeds){ await apiCreatePedido(p); } state.pedidos = await apiGetPedidos(); state.toast = 'Datos de ejemplo agregados.'; }
+  catch(e){ state.toast = 'Hubo un problema agregando los datos de ejemplo: ' + (e && e.message ? e.message : 'error desconocido'); try{ state.pedidos = await apiGetPedidos(); }catch(e2){} }
+  render();
+  setTimeout(()=>{ state.toast = null; render(); }, 2800);
+}
+async function handleClearAll(){
+  state.confirmAction = null;
+  const idsAEliminar = state.pedidos.map(p=>p.id);
+  try{ for(const id of idsAEliminar){ await apiDeletePedido(id); } state.pedidos = []; state.toast = 'Todos los pedidos fueron eliminados.'; }
+  catch(e){ state.toast = 'Hubo un problema eliminando algunos pedidos: ' + (e && e.message ? e.message : 'error desconocido'); try{ state.pedidos = await apiGetPedidos(); }catch(e2){} }
+  render();
+  setTimeout(()=>{ state.toast = null; render(); }, 2800);
 }
 
-function modalHTML(){
+/* ============================================================
+   INVENTARIO — lógica de negocio
+   ============================================================ */
+function computeInsumoStats(){
+  const totalInsumos = state.insumos.length;
+  const unidadesTotales = state.insumos.reduce((sum,i)=> sum + (parseFloat(i.cantidad)||0), 0);
+  const sinActualizar = state.insumos.filter(i=> daysSince(i.fecha_ultima_actualizacion) >= 90).length;
+  return { totalInsumos, unidadesTotales, sinActualizar };
+}
+function getFilteredInsumos(){
+  const { search, ubicacion, categoria } = state.insumosFilters;
+  return state.insumos.filter(i=>{
+    if(ubicacion!=='Todos' && i.ubicacion!==ubicacion) return false;
+    if(categoria!=='Todas' && (i.categoria||'')!==categoria) return false;
+    if(search){ const s = search.toLowerCase(); if(!(i.nombre||'').toLowerCase().includes(s)) return false; }
+    return true;
+  });
+}
+function categoriasExistentes(){
+  const set = new Set();
+  state.insumos.forEach(i=>{ if(i.categoria) set.add(i.categoria); });
+  return Array.from(set).sort();
+}
+function insumoRowHTML(i){
+  const dias = daysSince(i.fecha_ultima_actualizacion);
+  const vieja = dias >= 90;
   return `
-  <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+  <div class="row-item">
+    <div class="col col-nombre">
+      <div class="item-nombre">${escapeHTML(i.nombre)}</div>
+      ${i.notas ? `<div class="item-notas">${escapeHTML(i.notas)}</div>` : ''}
+    </div>
+    <div class="col col-categoria">${i.categoria ? `<span class="badge">${escapeHTML(i.categoria)}</span>` : '<span class="dias-label">—</span>'}</div>
+    <div class="col col-ubicacion">${escapeHTML(i.ubicacion)}</div>
+    <div class="col col-cantidad">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="qty-btn" onclick="ajustarCantidad('${i.id}', -1)">−</button>
+        <strong>${i.cantidad}</strong>${i.unidad ? ` <span class="dias-label">${escapeHTML(i.unidad)}</span>` : ''}
+        <button class="qty-btn" onclick="ajustarCantidad('${i.id}', 1)">+</button>
+      </div>
+      ${vieja ? `<span class="badge badge-atrasado" style="margin-top:4px;">⚠ Sin actualizar hace ${dias} días</span>` : `<span class="dias-label">Actualizado ${dias===0?'hoy':'hace '+dias+' días'}</span>`}
+    </div>
+    <div class="col col-fecha">
+      <div class="dias-label">últ. cambio</div>
+      <div>${fmtDate(i.fecha_ultima_actualizacion)}</div>
+    </div>
+    <div class="col col-acciones" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+      ${state.deleteInsumoConfirmId === i.id ? `
+        <span class="dias-label">¿Eliminar?</span>
+        <div style="display:flex;gap:8px;">
+          <button class="link-btn" onclick="confirmDeleteInsumo('${i.id}')">Sí, eliminar</button>
+          <button class="link-btn" onclick="cancelDeleteInsumoConfirm()">Cancelar</button>
+        </div>
+      ` : `
+        <button class="btn-ghost btn-sm" onclick="openInsumoModal('${i.id}')">Editar</button>
+        <button class="btn-ghost btn-sm" onclick="askDeleteInsumoConfirm('${i.id}')">Eliminar</button>
+      `}
+    </div>
+  </div>`;
+}
+function insumosListInnerHTML(){
+  const list = getFilteredInsumos();
+  if(state.insumos.length===0){
+    return `<div class="empty-state">Aún no hay insumos registrados.<br><span style="font-family:var(--font-ui);font-size:13px;">Usa «+ Nuevo insumo» para agregar el primero.</span></div>`;
+  }
+  if(list.length===0) return `<div class="empty-state">Ningún insumo coincide con el filtro actual.</div>`;
+  return `
+    <div class="list-header">
+      <div class="col col-nombre">Insumo</div>
+      <div class="col col-categoria">Categoría</div>
+      <div class="col col-ubicacion">Ubicación</div>
+      <div class="col col-cantidad">Cantidad</div>
+      <div class="col col-fecha">Últ. cambio</div>
+      <div class="col col-acciones"></div>
+    </div>
+    ${list.map(insumoRowHTML).join('')}
+  `;
+}
+function renderInsumosList(){ const c = document.getElementById('list-container'); if(c) c.innerHTML = insumosListInnerHTML(); }
+
+function openInsumoModal(editId){
+  state.editInsumoId = editId || null;
+  state.showInsumoModal = true;
+  render();
+  validateInsumoForm();
+  if(editId){
+    const item = state.insumos.find(i=>i.id===editId);
+    if(item){
+      document.getElementById('f-nombre').value = item.nombre || '';
+      document.getElementById('f-categoria').value = item.categoria || '';
+      document.getElementById('f-ubicacion').value = item.ubicacion || '';
+      document.getElementById('f-cantidad').value = item.cantidad != null ? item.cantidad : '';
+      document.getElementById('f-unidad').value = item.unidad || '';
+      document.getElementById('f-notas').value = item.notas || '';
+      validateInsumoForm();
+    }
+  }
+}
+function closeInsumoModal(){ state.showInsumoModal = false; state.editInsumoId = null; render(); }
+function isInsumoFormValid(){
+  const nombre = document.getElementById('f-nombre').value.trim();
+  const ubicacion = document.getElementById('f-ubicacion').value;
+  const cantidad = document.getElementById('f-cantidad').value;
+  return nombre !== '' && ubicacion !== '' && cantidad !== '' && !isNaN(parseFloat(cantidad)) && parseFloat(cantidad) >= 0;
+}
+function validateInsumoForm(){
+  const btn = document.getElementById('btn-guardar-item');
+  const hint = document.getElementById('form-hint');
+  if(!btn) return;
+  const ok = isInsumoFormValid();
+  btn.disabled = !ok;
+  if(hint) hint.style.display = ok ? 'none' : 'block';
+}
+async function handleGuardarItem(){
+  const errorEl = document.getElementById('form-error');
+  errorEl.style.display = 'none';
+  if(!isInsumoFormValid()){ errorEl.textContent = 'No se puede guardar: completa nombre, ubicación y cantidad.'; errorEl.style.display = 'block'; return; }
+  const btn = document.getElementById('btn-guardar-item');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    const datos = {
+      nombre: document.getElementById('f-nombre').value.trim(),
+      categoria: document.getElementById('f-categoria').value.trim() || null,
+      ubicacion: document.getElementById('f-ubicacion').value,
+      cantidad: parseFloat(document.getElementById('f-cantidad').value),
+      unidad: document.getElementById('f-unidad').value.trim() || null,
+      notas: document.getElementById('f-notas').value.trim() || null,
+      fecha_ultima_actualizacion: todayISO()
+    };
+    if(state.editInsumoId){
+      await apiUpdateInsumo(state.editInsumoId, datos);
+      const item = state.insumos.find(i=>i.id===state.editInsumoId);
+      if(item) Object.assign(item, datos);
+      state.toast = 'Insumo actualizado — ' + datos.nombre;
+    }else{
+      const nuevo = Object.assign({ id: uidInsumo() }, datos);
+      await apiCreateInsumo(nuevo);
+      state.insumos.unshift(nuevo);
+      state.toast = 'Insumo agregado — ' + datos.nombre;
+    }
+    state.showInsumoModal = false; state.editInsumoId = null;
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 2600);
+  }catch(err){
+    btn.disabled = false; btn.textContent = 'Guardar';
+    errorEl.textContent = 'Ocurrió un error al guardar: ' + (err && err.message ? err.message : 'error desconocido');
+    errorEl.style.display = 'block';
+  }
+}
+async function ajustarCantidad(id, delta){
+  const item = state.insumos.find(i=>i.id===id);
+  if(!item) return;
+  const nuevaCantidad = Math.max(0, (parseFloat(item.cantidad)||0) + delta);
+  const prevCantidad = item.cantidad, prevFecha = item.fecha_ultima_actualizacion;
+  item.cantidad = nuevaCantidad; item.fecha_ultima_actualizacion = todayISO();
+  renderInsumosList();
+  try{ await apiUpdateInsumo(id, { cantidad: nuevaCantidad, fecha_ultima_actualizacion: item.fecha_ultima_actualizacion }); }
+  catch(e){
+    item.cantidad = prevCantidad; item.fecha_ultima_actualizacion = prevFecha;
+    state.toast = 'No se pudo guardar el ajuste. Intenta de nuevo.';
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 3200);
+  }
+}
+function askDeleteInsumoConfirm(id){ state.deleteInsumoConfirmId = id; renderInsumosList(); }
+function cancelDeleteInsumoConfirm(){ state.deleteInsumoConfirmId = null; renderInsumosList(); }
+async function confirmDeleteInsumo(id){
+  state.deleteInsumoConfirmId = null;
+  try{ await apiDeleteInsumo(id); state.insumos = state.insumos.filter(i=>i.id!==id); state.toast = 'Insumo eliminado.'; }
+  catch(e){ state.toast = 'No se pudo eliminar el insumo. Intenta de nuevo.'; }
+  render();
+  setTimeout(()=>{ state.toast = null; render(); }, 2600);
+}
+
+/* ============================================================
+   ASISTENTE DE IA — COMPARTIDO (contenido depende de state.vista)
+   ============================================================ */
+function toggleAssistant(){ state.showAssistant = !state.showAssistant; render(); }
+async function handleAskAssistant(preset){
+  const input = document.getElementById('assistant-input');
+  const question = preset || (input ? input.value.trim() : '');
+  if(!question) return;
+  state.chatHistory.push({ role:'user', text:question });
+  state.assistantLoading = true;
+  render();
+  try{
+    let systemPrompt;
+    if(state.vista === 'pedidos'){
+      const contextData = state.pedidos.map(p=>({
+        proveedor:p.proveedor, monto_usd:p.monto_usd, monto_clp:p.monto_clp, moneda_ingreso:p.moneda_ingreso,
+        courier:p.courier, numero_seguimiento:p.numero_seguimiento, destino:p.destino, estado:p.estado,
+        fecha_registro:p.fecha_registro, fecha_estimada:p.fecha_estimada,
+        dias_sin_actualizacion: daysSince(p.fecha_ultima_actualizacion), agente_aduanero:p.agente_aduanero,
+        pendiente_revision: !!p.pendiente_revision
+      }));
+      systemPrompt = assistantSystemPromptPedidos(contextData);
+    }else{
+      const contextData = state.insumos.map(i=>({
+        nombre:i.nombre, categoria:i.categoria, ubicacion:i.ubicacion, cantidad:i.cantidad, unidad:i.unidad,
+        notas:i.notas, dias_sin_actualizar: daysSince(i.fecha_ultima_actualizacion)
+      }));
+      systemPrompt = assistantSystemPromptInsumos(contextData);
+    }
+    const answer = await callClaude(systemPrompt, question);
+    state.chatHistory.push({ role:'assistant', text:answer });
+  }catch(e){
+    state.chatHistory.push({ role:'assistant', text:'No pude conectarme con la IA. Intenta nuevamente.' });
+  }
+  state.assistantLoading = false;
+  render();
+  setTimeout(()=>{ const el=document.getElementById('chat-log'); if(el) el.scrollTop = el.scrollHeight; },0);
+}
+function assistantPanelHTML(){
+  const placeholder = state.vista === 'pedidos'
+    ? 'Pregúntame por ejemplo: «¿qué pedidos llegan esta semana a Valdivia?» o «¿cuáles están atrasados?».'
+    : 'Pregúntame por ejemplo: «¿qué hay en Valdivia?» o «¿qué insumos no se actualizan hace tiempo?».';
+  const chatContent = state.chatHistory.length===0 ? `<div class="chat-empty">${placeholder}</div>` : state.chatHistory.map(m=>`<div class="chat-msg ${m.role}">${escapeHTML(m.text)}</div>`).join('');
+  const quickPrompts = state.vista === 'pedidos' ? `
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('Dame un resumen del estado de todos los pedidos activos.')">Resumen diario</button>
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('¿Qué pedidos están atrasados y hace cuántos días?')">¿Qué está atrasado?</button>
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('¿Qué pedidos requieren agente aduanero?')">Con agente aduanero</button>
+    ` : `
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('Dame un resumen de lo que hay en cada ubicación.')">Resumen por ubicación</button>
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('¿Qué insumos no se actualizan hace más de 90 días?')">Sin movimiento</button>
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('¿Qué insumos tienen menos de 3 unidades?')">Stock bajo</button>
+    `;
+  return `
+  <div class="assistant-panel">
+    <div class="assistant-header">
+      <button class="assistant-close" onclick="toggleAssistant()">×</button>
+      <h3>Asistente de ${state.vista==='pedidos'?'Adquisiciones':'Inventario'}</h3>
+      <p>Responde según los datos de esta vista.</p>
+    </div>
+    <div class="quick-prompts">${quickPrompts}</div>
+    <div class="chat-log" id="chat-log">
+      ${chatContent}
+      ${state.assistantLoading ? '<div class="chat-typing">Pensando…</div>' : ''}
+    </div>
+    <div class="assistant-input-row">
+      <input type="text" id="assistant-input" placeholder="Escribe tu pregunta…" onkeydown="if(event.key==='Enter'){handleAskAssistant();}">
+      <button class="btn btn-primary btn-sm" ${state.assistantLoading?'disabled':''} onclick="handleAskAssistant()">Preguntar</button>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   MODALES
+   ============================================================ */
+function pedidoModalHTML(){
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) closePedidoModal()">
     <div class="modal">
-      <button class="modal-close" onclick="closeModal()">×</button>
+      <button class="modal-close" onclick="closePedidoModal()">×</button>
       <h2 class="modal-title">Nuevo pedido</h2>
       <p style="color:var(--ink-muted);font-size:13px;margin:0;">Registra el pedido manualmente o pega el correo de confirmación para que la IA complete los datos.</p>
       <div class="modal-tabs">
         <button class="tab-btn active" id="tabbtn-manual" onclick="showTab('manual')">Datos manuales</button>
         <button class="tab-btn" id="tabbtn-pegar" onclick="showTab('pegar')">Pegar correo / mensaje</button>
       </div>
-
       <div id="tab-pegar" style="display:none;">
         <div class="form-field full">
           <label>Texto del correo o WhatsApp de confirmación de envío</label>
@@ -850,13 +976,12 @@ function modalHTML(){
         <button class="btn btn-primary" id="btn-extract" onclick="handleExtract()" type="button">Extraer datos con IA</button>
         <div class="extract-status" id="extract-status"></div>
       </div>
-
       <div id="tab-manual" class="form-grid">
         <div class="field-note" id="extract-note" style="display:none;grid-column:1 / -1;">Datos completados automáticamente por IA — revisa antes de guardar.</div>
         <div class="field-note" id="form-error" style="display:none;grid-column:1 / -1;background:var(--st-atrasado-bg);color:var(--st-atrasado);">No se puede guardar: completa todos los campos.</div>
         <div class="form-field full">
           <label>Proveedor *</label>
-          <input type="text" id="f-proveedor" placeholder="Ej: Guangzhou Tools Co." oninput="validateForm()">
+          <input type="text" id="f-proveedor" placeholder="Ej: Guangzhou Tools Co." oninput="validatePedidoForm()">
         </div>
         <div class="form-field full">
           <label>Monto del pedido *</label>
@@ -865,46 +990,45 @@ function modalHTML(){
               <option value="USD">USD (US$)</option>
               <option value="CLP">CLP ($)</option>
             </select>
-            <input type="number" id="f-monto" placeholder="0" step="0.01" style="flex:1;" oninput="validateForm()">
+            <input type="number" id="f-monto" placeholder="0" step="0.01" style="flex:1;" oninput="validatePedidoForm()">
           </div>
           <div id="tc-row" style="display:none;">
             <label style="font-size:11.5px;">Tipo de cambio de referencia (CLP por US$) — ajústalo si es necesario</label>
-            <input type="number" id="f-tc" value="${DEFAULT_TC}" step="0.01" oninput="validateForm()">
+            <input type="number" id="f-tc" value="${DEFAULT_TC}" step="0.01" oninput="validatePedidoForm()">
           </div>
           <div class="dias-label" id="monto-preview"></div>
         </div>
         <div class="form-field">
           <label>N° de seguimiento *</label>
-          <input type="text" id="f-tracking" placeholder="Ej: 1Z999AA1012345678" oninput="validateForm()">
+          <input type="text" id="f-tracking" placeholder="Ej: 1Z999AA1012345678" oninput="validatePedidoForm()">
         </div>
         <div class="form-field">
           <label>Empresa transportista *</label>
-          <select id="f-courier" onchange="validateForm()">
+          <select id="f-courier" onchange="validatePedidoForm()">
             <option value="" disabled selected>Selecciona…</option>
             ${COURIERS.map(c=>`<option value="${c}">${c}</option>`).join('')}
           </select>
         </div>
         <div class="form-field">
           <label>Destino *</label>
-          <select id="f-destino" onchange="validateForm()">
+          <select id="f-destino" onchange="validatePedidoForm()">
             <option value="" disabled selected>Selecciona…</option>
             ${DESTINOS.map(d=>`<option value="${d}">${d}</option>`).join('')}
           </select>
         </div>
         <div class="form-field">
           <label>Fecha estimada de llegada *</label>
-          <input type="date" id="f-fecha" onchange="validateForm()">
+          <input type="date" id="f-fecha" onchange="validatePedidoForm()">
         </div>
         <div class="dias-label" id="form-hint" style="grid-column:1 / -1;">Completa todos los campos marcados con * para poder guardar.</div>
         <div class="form-actions" style="grid-column:1 / -1;">
-          <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+          <button type="button" class="btn btn-ghost" onclick="closePedidoModal()">Cancelar</button>
           <button type="button" id="btn-guardar" class="btn btn-primary" onclick="handleGuardar()" disabled>Guardar pedido</button>
         </div>
       </div>
     </div>
   </div>`;
 }
-
 function agenteModalHTML(){
   const m = state.agenteSummaryModal;
   if(!m) return '';
@@ -926,7 +1050,6 @@ function agenteModalHTML(){
     </div>
   </div>`;
 }
-
 function actualizarEstadoModalHTML(){
   const m = state.actualizarEstadoModal;
   if(!m) return '';
@@ -962,244 +1085,246 @@ function actualizarEstadoModalHTML(){
     </div>
   </div>`;
 }
-
-function assistantPanelHTML(){
-  const chatContent = state.chatHistory.length===0
-    ? `<div class="chat-empty">Pregúntame por ejemplo: «¿qué pedidos llegan esta semana a Valdivia?» o «¿cuáles están atrasados?».</div>`
-    : state.chatHistory.map(m=>`<div class="chat-msg ${m.role}">${escapeHTML(m.text)}</div>`).join('');
+function insumoModalHTML(){
+  const editando = !!state.editInsumoId;
   return `
-  <div class="assistant-panel">
-    <div class="assistant-header">
-      <button class="assistant-close" onclick="toggleAssistant()">×</button>
-      <h3>Asistente de Adquisiciones</h3>
-      <p>Responde según los pedidos registrados en el sistema.</p>
-    </div>
-    <div class="quick-prompts">
-      <button class="quick-prompt-btn" onclick="handleAskAssistant('Dame un resumen del estado de todos los pedidos activos.')">Resumen diario</button>
-      <button class="quick-prompt-btn" onclick="handleAskAssistant('¿Qué pedidos están atrasados y hace cuántos días?')">¿Qué está atrasado?</button>
-      <button class="quick-prompt-btn" onclick="handleAskAssistant('¿Qué pedidos requieren agente aduanero?')">Con agente aduanero</button>
-    </div>
-    <div class="chat-log" id="chat-log">
-      ${chatContent}
-      ${state.assistantLoading ? '<div class="chat-typing">Pensando…</div>' : ''}
-    </div>
-    <div class="assistant-input-row">
-      <input type="text" id="assistant-input" placeholder="Escribe tu pregunta…" onkeydown="if(event.key==='Enter'){handleAskAssistant();}">
-      <button class="btn btn-primary btn-sm" ${state.assistantLoading?'disabled':''} onclick="handleAskAssistant()">Preguntar</button>
+  <div class="modal-backdrop" onclick="if(event.target===this) closeInsumoModal()">
+    <div class="modal">
+      <button class="modal-close" onclick="closeInsumoModal()">×</button>
+      <h2 class="modal-title">${editando ? 'Editar insumo' : 'Nuevo insumo'}</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0;">Registra herramientas, equipos u otros insumos de bodega, por ubicación.</p>
+      <div class="form-grid">
+        <div class="field-note" id="form-error" style="display:none;grid-column:1 / -1;background:var(--st-atrasado-bg);color:var(--st-atrasado);">No se puede guardar: completa nombre, ubicación y cantidad.</div>
+        <div class="form-field full">
+          <label>Nombre *</label>
+          <input type="text" id="f-nombre" placeholder="Ej: Mochila porta-herramientas" oninput="validateInsumoForm()">
+        </div>
+        <div class="form-field">
+          <label>Categoría</label>
+          <input type="text" id="f-categoria" list="categorias-list" placeholder="Ej: Herramientas">
+          <datalist id="categorias-list">${CATEGORIAS_SUGERIDAS.map(c=>`<option value="${c}">`).join('')}</datalist>
+        </div>
+        <div class="form-field">
+          <label>Ubicación *</label>
+          <select id="f-ubicacion" onchange="validateInsumoForm()">
+            <option value="" disabled selected>Selecciona…</option>
+            ${UBICACIONES.map(u=>`<option value="${u}">${u}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Cantidad *</label>
+          <input type="number" id="f-cantidad" min="0" step="1" placeholder="0" oninput="validateInsumoForm()">
+        </div>
+        <div class="form-field">
+          <label>Unidad</label>
+          <input type="text" id="f-unidad" placeholder="Ej: unidades, cajas">
+        </div>
+        <div class="form-field full">
+          <label>Notas</label>
+          <textarea id="f-notas" placeholder="Detalles opcionales…"></textarea>
+        </div>
+        <div class="dias-label" id="form-hint" style="grid-column:1 / -1;">Completa los campos marcados con * para poder guardar.</div>
+        <div class="form-actions" style="grid-column:1 / -1;">
+          <button type="button" class="btn btn-ghost" onclick="closeInsumoModal()">Cancelar</button>
+          <button type="button" id="btn-guardar-item" class="btn btn-primary" onclick="handleGuardarItem()" disabled>Guardar</button>
+        </div>
+      </div>
     </div>
   </div>`;
 }
 
-function loginScreenHTML(){
-  return `
-  <div class="center-loading" style="flex-direction:column;">
-    <div class="login-box">
-      <h1 class="page-title" style="margin-bottom:4px;">Seguimiento de Pedidos</h1>
-      <p class="page-sub" style="margin-bottom:24px;">Innovex — Adquisiciones</p>
-      ${state.loginError ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-bottom:14px;">${escapeHTML(state.loginError)}</div>` : ''}
-      <div class="form-field full" style="margin-bottom:12px;">
-        <label>Correo</label>
-        <input type="email" id="login-email" placeholder="tu@innovex.cl" onkeydown="if(event.key==='Enter') handleLogin()">
-      </div>
-      <div class="form-field full" style="margin-bottom:20px;">
-        <label>Contraseña</label>
-        <input type="password" id="login-password" onkeydown="if(event.key==='Enter') handleLogin()">
-      </div>
-      <button class="btn btn-primary" style="width:100%;" id="btn-login" onclick="handleLogin()" ${state.loginLoading?'disabled':''}>${state.loginLoading?'Ingresando…':'Iniciar sesión'}</button>
-    </div>
-  </div>`;
-}
-
-async function handleLogin(){
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-  if(!email || !password){
-    state.loginError = 'Ingresa tu correo y contraseña.';
-    render();
-    return;
-  }
-  state.loginLoading = true;
-  state.loginError = null;
-  render();
-  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  state.loginLoading = false;
-  if(error){
-    state.loginError = 'No se pudo iniciar sesión: ' + error.message;
-    render();
-    return;
-  }
-  state.session = data.session;
-  await reloadPedidos();
-}
-
-async function handleLogout(){
-  await supabaseClient.auth.signOut();
-  state.session = null;
-  state.pedidos = [];
-  if(realtimeChannel){ supabaseClient.removeChannel(realtimeChannel); realtimeChannel = null; }
-  render();
-}
+/* ============================================================
+   RENDER PRINCIPAL
+   ============================================================ */
+function switchVista(v){ state.vista = v; render(); }
 
 function render(){
-  if(!state.session){
-    document.getElementById('app').innerHTML = loginScreenHTML();
-    return;
-  }
+  if(!state.session){ document.getElementById('app').innerHTML = loginScreenHTML(); return; }
   if(state.loadError){
     document.getElementById('app').innerHTML = `
       <div class="center-loading" style="flex-direction:column;gap:16px;text-align:center;padding:0 24px;">
         <div>${escapeHTML(state.loadError)}</div>
-        <button class="btn btn-primary" onclick="reloadPedidos()">Reintentar</button>
+        <button class="btn btn-primary" onclick="cargarTodo()">Reintentar</button>
       </div>`;
     return;
   }
-  const stats = computeStats();
-  const html = `
-    <div class="topbar">
-      <div class="topbar-inner">
-        <div>
-          <h1 class="page-title">Seguimiento de Pedidos</h1>
-          <p class="page-sub">Innovex — Adquisiciones · Conectado a Supabase — datos reales y compartidos <span class="live-dot ${state.realtimeConectado?'on':'off'}"></span> ${state.realtimeConectado?'En vivo':'conectando…'}</p>
-        </div>
-        <div class="stats-row">
-          <div class="stat-chip"><div class="stat-value">${stats.activos}</div><div class="stat-label">pedidos activos</div></div>
-          <div class="stat-chip warn"><div class="stat-value">${stats.atrasados}</div><div class="stat-label">sin novedades &gt;5 días</div></div>
-          <div class="stat-chip amber"><div class="stat-value">${stats.conAgente}</div><div class="stat-label">con agente aduanero</div></div>
-          <div class="stat-chip" style="border-left-color:var(--st-transito)"><div class="stat-value">${stats.pendientesRevision}</div><div class="stat-label">pendientes de revisión</div></div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-          <span class="dias-label">${escapeHTML(state.session.user.email)}</span>
-          <button class="btn-ghost btn-sm" onclick="handleLogout()">Cerrar sesión</button>
-        </div>
-      </div>
-    </div>
+  const esPedidos = state.vista === 'pedidos';
+  const pStats = computePedidoStats();
+  const iStats = computeInsumoStats();
+  const live = esPedidos ? state.realtimeConectado.pedidos : state.realtimeConectado.insumos;
 
-    <div class="controls">
-      <div class="controls-inner">
-        <input type="text" placeholder="Buscar por proveedor o N° de seguimiento…" value="${escapeHTML(state.filters.search)}"
-               oninput="state.filters.search=this.value; renderPedidosList();">
-        <select onchange="state.filters.destino=this.value; renderPedidosList();">
-          <option ${state.filters.destino==='Todos'?'selected':''}>Todos</option>
-          ${DESTINOS.map(d=>`<option ${state.filters.destino===d?'selected':''}>${d}</option>`).join('')}
+  const statsHTML = esPedidos ? `
+    <div class="stat-chip"><div class="stat-value">${pStats.activos}</div><div class="stat-label">pedidos activos</div></div>
+    <div class="stat-chip warn"><div class="stat-value">${pStats.atrasados}</div><div class="stat-label">sin novedades &gt;5 días</div></div>
+    <div class="stat-chip amber" style="border-left-color:var(--accent-warm)"><div class="stat-value">${pStats.conAgente}</div><div class="stat-label">con agente aduanero</div></div>
+    <div class="stat-chip" style="border-left-color:var(--st-transito)"><div class="stat-value">${pStats.pendientesRevision}</div><div class="stat-label">pendientes de revisión</div></div>
+  ` : `
+    <div class="stat-chip"><div class="stat-value">${iStats.totalInsumos}</div><div class="stat-label">insumos distintos</div></div>
+    <div class="stat-chip"><div class="stat-value">${iStats.unidadesTotales}</div><div class="stat-label">unidades totales</div></div>
+    <div class="stat-chip warn"><div class="stat-value">${iStats.sinActualizar}</div><div class="stat-label">sin actualizar &gt;90 días</div></div>
+  `;
+
+  const controlsHTML = esPedidos ? `
+        <input type="text" placeholder="Buscar por proveedor o N° de seguimiento…" value="${escapeHTML(state.pedidosFilters.search)}"
+               oninput="state.pedidosFilters.search=this.value; renderPedidosList();">
+        <select onchange="state.pedidosFilters.destino=this.value; renderPedidosList();">
+          <option ${state.pedidosFilters.destino==='Todos'?'selected':''}>Todos</option>
+          ${DESTINOS.map(d=>`<option ${state.pedidosFilters.destino===d?'selected':''}>${d}</option>`).join('')}
         </select>
-        <select onchange="state.filters.estado=this.value; renderPedidosList();">
-          <option ${state.filters.estado==='Todos'?'selected':''}>Todos</option>
-          ${ESTADOS.map(e=>`<option ${state.filters.estado===e?'selected':''}>${e}</option>`).join('')}
+        <select onchange="state.pedidosFilters.estado=this.value; renderPedidosList();">
+          <option ${state.pedidosFilters.estado==='Todos'?'selected':''}>Todos</option>
+          ${ESTADOS.map(e=>`<option ${state.pedidosFilters.estado===e?'selected':''}>${e}</option>`).join('')}
         </select>
         <div class="spacer"></div>
-        <button class="btn btn-primary" onclick="openModal()">+ Nuevo pedido</button>
-      </div>
-    </div>
+        <button class="btn btn-primary" onclick="openPedidoModal()">+ Nuevo pedido</button>
+  ` : `
+        <input type="text" placeholder="Buscar por nombre…" value="${escapeHTML(state.insumosFilters.search)}"
+               oninput="state.insumosFilters.search=this.value; renderInsumosList();">
+        <select onchange="state.insumosFilters.ubicacion=this.value; renderInsumosList();">
+          <option ${state.insumosFilters.ubicacion==='Todos'?'selected':''}>Todos</option>
+          ${UBICACIONES.map(u=>`<option ${state.insumosFilters.ubicacion===u?'selected':''}>${u}</option>`).join('')}
+        </select>
+        <select onchange="state.insumosFilters.categoria=this.value; renderInsumosList();">
+          <option ${state.insumosFilters.categoria==='Todas'?'selected':''}>Todas</option>
+          ${categoriasExistentes().map(c=>`<option ${state.insumosFilters.categoria===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" onclick="openInsumoModal()">+ Nuevo insumo</button>
+  `;
 
-    <div class="main">
-      <div class="info-banner">El estado se actualiza desde el menú de cada pedido, o usando "Actualizar estado": abre la página de seguimiento con un clic, pega lo que veas, y la IA sugiere el estado correspondiente.</div>
-      <div id="pedidos-list-container">${pedidosListInnerHTML()}</div>
-      <div class="footer-actions">
+  const footerHTML = esPedidos ? `
         ${state.confirmAction === 'reset' ? `
-          <span class="dias-label">Esto agrega 5 pedidos de ejemplo a la base de datos real. ¿Continuar?</span>
+          <span class="dias-label">Esto agrega pedidos de ejemplo a la base de datos real. ¿Continuar?</span>
           <button class="link-btn" onclick="handleResetDemo()">Sí, agregar</button>
           <button class="link-btn" onclick="cancelConfirm()">Cancelar</button>
         ` : state.confirmAction === 'clear' ? `
-          <span class="dias-label">Esto elimina TODOS los pedidos de la base de datos real — no se puede deshacer. ¿Continuar?</span>
+          <span class="dias-label">Esto elimina TODOS los pedidos — no se puede deshacer. ¿Continuar?</span>
           <button class="link-btn" onclick="handleClearAll()">Sí, borrar todo</button>
           <button class="link-btn" onclick="cancelConfirm()">Cancelar</button>
         ` : `
           <button class="link-btn" onclick="askConfirm('reset')">Agregar datos de ejemplo</button>
           <button class="link-btn" onclick="askConfirm('clear')">Borrar todos los pedidos</button>
         `}
+  ` : `<span class="dias-label">Usa los botones − / + en cada fila para ajustar el stock rápido, sin abrir el formulario.</span>`;
+
+  const bannerHTML = esPedidos ? `<div class="info-banner">El estado se actualiza desde el menú de cada pedido, o usando "Actualizar estado": abre la página de seguimiento con un clic, pega lo que veas, y la IA sugiere el estado correspondiente.</div>` : '';
+
+  const html = `
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div>
+          <h1 class="page-title">${esPedidos ? 'Seguimiento de Pedidos' : 'Inventario'}</h1>
+          <p class="page-sub">Innovex — Adquisiciones · <span class="live-dot ${live?'on':'off'}"></span> ${live?'En vivo':'conectando…'}</p>
+        </div>
+        <div class="stats-row">${statsHTML}</div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <span class="dias-label">${escapeHTML(state.session.user.email)}</span>
+          <button class="btn-ghost btn-sm" onclick="handleLogout()">Cerrar sesión</button>
+        </div>
       </div>
+      <div class="tabs-row">
+        <button class="tab-item ${esPedidos?'active':''}" onclick="switchVista('pedidos')">Pedidos</button>
+        <button class="tab-item ${!esPedidos?'active':''}" onclick="switchVista('inventario')">Inventario</button>
+      </div>
+    </div>
+
+    <div class="controls"><div class="controls-inner">${controlsHTML}</div></div>
+
+    <div class="main">
+      ${bannerHTML}
+      <div id="list-container">${esPedidos ? pedidosListInnerHTML() : insumosListInnerHTML()}</div>
+      <div class="footer-actions">${footerHTML}</div>
     </div>
 
     ${!state.showAssistant ? '<button class="assistant-toggle" onclick="toggleAssistant()">✦ Asistente IA</button>' : ''}
     ${state.showAssistant ? assistantPanelHTML() : ''}
-    ${state.showModal ? modalHTML() : ''}
+    ${state.showPedidoModal ? pedidoModalHTML() : ''}
     ${state.agenteSummaryModal ? agenteModalHTML() : ''}
     ${state.actualizarEstadoModal ? actualizarEstadoModalHTML() : ''}
+    ${state.showInsumoModal ? insumoModalHTML() : ''}
     ${state.toast ? `<div class="toast">${escapeHTML(state.toast)}</div>` : ''}
   `;
   document.getElementById('app').innerHTML = html;
 }
 
-/* ---------- Tiempo real ---------- */
-let realtimeChannel = null;
-function iniciarRealtime(){
-  if(realtimeChannel) return; // ya conectado, evita duplicar la suscripción
-  realtimeChannel = supabaseClient
-    .channel('pedidos-realtime')
-    .on('postgres_changes', { event:'*', schema:'public', table:'pedidos' }, handleRealtimeChange)
-    .subscribe((status)=>{
-      state.realtimeConectado = (status === 'SUBSCRIBED');
-      if(!state.showModal) render();
-    });
+/* ============================================================
+   TIEMPO REAL
+   ============================================================ */
+let realtimeChannelPedidos = null;
+let realtimeChannelInsumos = null;
+function iniciarRealtimePedidos(){
+  if(realtimeChannelPedidos) return;
+  realtimeChannelPedidos = supabaseClient.channel('pedidos-realtime')
+    .on('postgres_changes', { event:'*', schema:'public', table:'pedidos' }, handleRealtimeChangePedidos)
+    .subscribe((status)=>{ state.realtimeConectado.pedidos = (status === 'SUBSCRIBED'); if(!state.showPedidoModal && !state.showInsumoModal) render(); });
 }
-function handleRealtimeChange(payload){
+function handleRealtimeChangePedidos(payload){
   let mensaje = null;
   if(payload.eventType === 'INSERT'){
-    if(!state.pedidos.find(p=>p.id===payload.new.id)){
-      state.pedidos.unshift(payload.new);
-      mensaje = 'Nuevo pedido recibido: ' + payload.new.proveedor;
-    }
+    if(!state.pedidos.find(p=>p.id===payload.new.id)){ state.pedidos.unshift(payload.new); mensaje = 'Nuevo pedido recibido: ' + payload.new.proveedor; }
   } else if(payload.eventType === 'UPDATE'){
-    const p = state.pedidos.find(x=>x.id===payload.new.id);
-    if(p) Object.assign(p, payload.new);
-  } else if(payload.eventType === 'DELETE'){
-    state.pedidos = state.pedidos.filter(p=>p.id!==payload.old.id);
+    const p = state.pedidos.find(x=>x.id===payload.new.id); if(p) Object.assign(p, payload.new);
+  } else if(payload.eventType === 'DELETE'){ state.pedidos = state.pedidos.filter(p=>p.id!==payload.old.id); }
+  if(!state.showPedidoModal && !state.showInsumoModal){
+    if(mensaje) state.toast = mensaje;
+    render();
+    if(mensaje) setTimeout(()=>{ state.toast = null; render(); }, 2600);
   }
-  // Si hay un formulario abierto (ej. "Nuevo pedido"), no interrumpimos con un
-  // re-render completo para no perder lo que la persona esté escribiendo.
-  // Los datos igual quedan actualizados por dentro, y se ven al cerrar el modal.
-  if(!state.showModal){
+}
+function iniciarRealtimeInsumos(){
+  if(realtimeChannelInsumos) return;
+  realtimeChannelInsumos = supabaseClient.channel('inventario-realtime')
+    .on('postgres_changes', { event:'*', schema:'public', table:'inventario' }, handleRealtimeChangeInsumos)
+    .subscribe((status)=>{ state.realtimeConectado.insumos = (status === 'SUBSCRIBED'); if(!state.showPedidoModal && !state.showInsumoModal) render(); });
+}
+function handleRealtimeChangeInsumos(payload){
+  let mensaje = null;
+  if(payload.eventType === 'INSERT'){
+    if(!state.insumos.find(i=>i.id===payload.new.id)){ state.insumos.unshift(payload.new); mensaje = 'Insumo agregado: ' + payload.new.nombre; }
+  } else if(payload.eventType === 'UPDATE'){
+    const i = state.insumos.find(x=>x.id===payload.new.id); if(i) Object.assign(i, payload.new);
+  } else if(payload.eventType === 'DELETE'){ state.insumos = state.insumos.filter(i=>i.id!==payload.old.id); }
+  if(!state.showPedidoModal && !state.showInsumoModal){
     if(mensaje) state.toast = mensaje;
     render();
     if(mensaje) setTimeout(()=>{ state.toast = null; render(); }, 2600);
   }
 }
 
-/* ---------- Inicio ---------- */
-async function reloadPedidos(){
+/* ============================================================
+   INICIO
+   ============================================================ */
+async function cargarTodo(){
   document.getElementById('app').innerHTML = '<div class="center-loading">Conectando con la base de datos…</div>';
   try{
-    state.pedidos = await apiGet();
+    state.pedidos = await apiGetPedidos();
+    state.insumos = await apiGetInsumos();
     state.loadError = null;
-    iniciarRealtime();
+    iniciarRealtimePedidos();
+    iniciarRealtimeInsumos();
   }catch(e){
-    state.loadError = 'No se pudo conectar con la base de datos (Supabase) (' + (e && e.message ? e.message : 'error desconocido') + '). Revisa la conexión e inténtalo de nuevo.';
+    state.loadError = 'No se pudo conectar con la base de datos (' + (e && e.message ? e.message : 'error desconocido') + '). Revisa la conexión e inténtalo de nuevo.';
   }
   render();
 }
-
 async function init(){
   const { data: { session } } = await supabaseClient.auth.getSession();
   state.session = session;
-  if(session){
-    await reloadPedidos();
-  }else{
-    render();
-  }
+  if(session){ await cargarTodo(); } else { render(); }
 }
 init();
-
-// Reacciona si la sesión cambia (ej. el usuario cierra sesión en otra
-// pestaña, o el token se renueva solo).
 supabaseClient.auth.onAuthStateChange((event, session)=>{
   if(event === 'SIGNED_OUT'){
-    state.session = null;
-    state.pedidos = [];
-    if(realtimeChannel){ supabaseClient.removeChannel(realtimeChannel); realtimeChannel = null; }
+    state.session = null; state.pedidos = []; state.insumos = [];
+    if(realtimeChannelPedidos){ supabaseClient.removeChannel(realtimeChannelPedidos); realtimeChannelPedidos = null; }
+    if(realtimeChannelInsumos){ supabaseClient.removeChannel(realtimeChannelInsumos); realtimeChannelInsumos = null; }
     render();
   }
 });
-
-// Red de seguridad: aunque el canal de "tiempo real" se corte en silencio
-// (ej. la pestaña estuvo mucho rato en segundo plano), esto vuelve a
-// sincronizar con la base de datos cada 90 segundos, sin interrumpir si
-// hay un formulario abierto.
 setInterval(async ()=>{
-  if(!state.session || state.showModal || state.loadError) return;
-  try{
-    state.pedidos = await apiGet();
-    render();
-  }catch(e){ /* silencioso: Realtime sigue siendo la vía principal, esto es solo respaldo */ }
+  if(!state.session || state.showPedidoModal || state.showInsumoModal || state.loadError) return;
+  try{ state.pedidos = await apiGetPedidos(); state.insumos = await apiGetInsumos(); render(); }
+  catch(e){ /* respaldo silencioso */ }
 }, 90000);
 </script>
 </body>
