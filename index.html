@@ -136,6 +136,8 @@
     background:var(--surface-alt); border:1px solid var(--border); color:var(--ink-muted);
   }
   .tracking-num{ font-family:var(--font-mono); font-size:12px; }
+  .tracking-link{ font-size:11.5px; color:var(--accent); text-decoration:none; font-weight:600; }
+  .tracking-link:hover{ text-decoration:underline; }
 
   .badge{ display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; }
   .badge-agente{ background:var(--accent-warm-bg); color:var(--accent-warm); margin-left:8px; }
@@ -278,6 +280,7 @@ let state = {
   loadError: null,
   toast: null,
   realtimeConectado: false,
+  actualizarEstadoModal: null,
   session: null,
   loginError: null,
   loginLoading: false
@@ -405,6 +408,14 @@ ${JSON.stringify(contextData)}`;
 const AGENTE_SYSTEM_PROMPT = `Genera un resumen breve y formal en español de este pedido de compra internacional, listo para enviar por correo a un agente de aduana externo que gestionará el trámite.
 Incluye: proveedor, monto, número de seguimiento, empresa transportista, destino y fecha estimada de llegada.
 Formato de texto plano, listo para copiar y pegar, sin markdown, sin encabezados de correo (sin "Asunto:" ni "Estimado/a").`;
+
+const ESTADO_DESDE_TEXTO_PROMPT = `Eres un asistente que interpreta el texto de una página de seguimiento de envíos (DHL, UPS, MercadoLibre, u otra) que un usuario pegó tal como lo vio en pantalla, y sugiere a cuál de estos estados corresponde en el sistema de Innovex: "En proceso", "En tránsito", "En aduana", "En destino", "Recibido".
+
+Responde ÚNICAMENTE con un objeto JSON, sin texto adicional, sin backticks. Usa exactamente estas claves:
+- estado_sugerido (uno de los cinco valores exactos de arriba, o null si el texto no permite determinarlo con confianza)
+- razon (una frase breve en español explicando por qué, o qué faltó si no se pudo determinar)
+
+Si el texto pegado no parece ser de una página de seguimiento o no tiene información de estado clara, responde con estado_sugerido: null.`;
 
 /* ---------- Acciones ---------- */
 function openModal(){ state.showModal = true; render(); validateForm(); }
@@ -593,6 +604,50 @@ async function handleAgenteSummary(id){
   render();
 }
 function closeAgenteModal(){ state.agenteSummaryModal = null; render(); }
+
+/* ---------- Actualizar estado desde texto pegado ---------- */
+function openActualizarEstadoModal(id){
+  state.actualizarEstadoModal = { pedidoId:id, texto:'', loading:false, resultado:null, error:null };
+  render();
+}
+function closeActualizarEstadoModal(){ state.actualizarEstadoModal = null; render(); }
+
+async function handleAnalizarEstado(){
+  const texto = document.getElementById('estado-pegado').value.trim();
+  if(!texto){
+    state.actualizarEstadoModal.error = 'Pega primero el texto que ves en la página de seguimiento.';
+    render();
+    return;
+  }
+  state.actualizarEstadoModal.texto = texto;
+  state.actualizarEstadoModal.loading = true;
+  state.actualizarEstadoModal.error = null;
+  state.actualizarEstadoModal.resultado = null;
+  render();
+  try{
+    const raw = await callClaude(ESTADO_DESDE_TEXTO_PROMPT, texto);
+    const data = parseJSONLoose(raw);
+    if(!data.estado_sugerido || !ESTADOS.includes(data.estado_sugerido)){
+      state.actualizarEstadoModal.error = data.razon || 'No se pudo determinar un estado a partir de ese texto.';
+    }else{
+      state.actualizarEstadoModal.resultado = data;
+    }
+  }catch(e){
+    state.actualizarEstadoModal.error = 'No se pudo analizar el texto. Intenta nuevamente.';
+  }
+  state.actualizarEstadoModal.loading = false;
+  render();
+}
+
+async function aplicarEstadoSugerido(){
+  const modal = state.actualizarEstadoModal;
+  if(!modal || !modal.resultado) return;
+  const id = modal.pedidoId;
+  const nuevoEstado = modal.resultado.estado_sugerido;
+  closeActualizarEstadoModal();
+  await updateEstado(id, nuevoEstado);
+}
+
 async function copyAgenteText(){
   const t = state.agenteSummaryModal && state.agenteSummaryModal.text;
   if(!t) return;
@@ -692,6 +747,14 @@ function getFilteredPedidos(){
   });
 }
 
+function trackingUrl(p){
+  if(!p.numero_seguimiento) return null;
+  const num = encodeURIComponent(p.numero_seguimiento);
+  if(p.courier === 'DHL') return `https://www.dhl.com/cl-es/home/rastreo.html?tracking-id=${num}`;
+  if(p.courier === 'UPS') return `https://www.ups.com/track?loc=es_CL&tracknum=${num}`;
+  return null; // MercadoLibre y "Otro" no tienen un enlace público confiable por número
+}
+
 function pedidoRowHTML(p){
   const meta = STATUS_META[p.estado] || STATUS_META['En proceso'];
   const dias = daysSince(p.fecha_ultima_actualizacion);
@@ -703,6 +766,7 @@ function pedidoRowHTML(p){
       <div class="tracking-line">
         <span class="courier-badge">${escapeHTML(p.courier||'—')}</span>
         <span class="tracking-num">${escapeHTML(p.numero_seguimiento||'sin N° de seguimiento')}</span>
+        ${trackingUrl(p) ? `<a href="${trackingUrl(p)}" target="_blank" rel="noopener" class="tracking-link">Ver en ${escapeHTML(p.courier)} ↗</a>` : ''}
       </div>
     </div>
     <div class="col col-destino">${escapeHTML(p.destino||'—')}</div>
@@ -733,6 +797,7 @@ function pedidoRowHTML(p){
         </div>
       ` : `
         ${p.pendiente_revision ? `<button class="btn-ghost btn-sm" onclick="markAsReviewed('${p.id}')">Marcar como revisado</button>` : ''}
+        ${p.numero_seguimiento ? `<button class="btn-ghost btn-sm" onclick="openActualizarEstadoModal('${p.id}')">Actualizar estado</button>` : ''}
         ${p.agente_aduanero ? `<button class="btn-ghost btn-sm" onclick="handleAgenteSummary('${p.id}')">Resumen para agente</button>` : ''}
         <button class="btn-ghost btn-sm" onclick="askDeleteConfirm('${p.id}')">Eliminar</button>
       `}
@@ -858,6 +923,42 @@ function agenteModalHTML(){
              <button class="btn btn-primary" onclick="copyAgenteText()">Copiar texto</button>
            </div>`
       }
+    </div>
+  </div>`;
+}
+
+function actualizarEstadoModalHTML(){
+  const m = state.actualizarEstadoModal;
+  if(!m) return '';
+  const p = state.pedidos.find(x=>x.id===m.pedidoId);
+  const url = p ? trackingUrl(p) : null;
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeActualizarEstadoModal()">
+    <div class="modal" style="max-width:520px;">
+      <button class="modal-close" onclick="closeActualizarEstadoModal()">×</button>
+      <h2 class="modal-title">Actualizar estado</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0 0 14px;">
+        ${url ? `Abre la página de seguimiento, copia el texto que muestra el estado, y pégalo aquí. <a href="${url}" target="_blank" rel="noopener" class="tracking-link">Ver en ${escapeHTML(p.courier)} ↗</a>` : `Copia el texto que ves en la página de seguimiento de este pedido y pégalo aquí.`}
+      </p>
+      ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(m.error)}</div>` : ''}
+      <div class="form-field full">
+        <textarea id="estado-pegado" placeholder="Pega aquí el texto de la página de seguimiento…" ${m.loading?'disabled':''}>${escapeHTML(m.texto||'')}</textarea>
+      </div>
+      ${m.resultado ? `
+        <div class="field-note" style="background:var(--st-recibido-bg);color:var(--st-recibido);margin-top:10px;">
+          La IA sugiere: <strong>${escapeHTML(m.resultado.estado_sugerido)}</strong><br>
+          <span style="font-weight:400;">${escapeHTML(m.resultado.razon||'')}</span>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-ghost" onclick="closeActualizarEstadoModal()">Cancelar</button>
+          <button class="btn btn-primary" onclick="aplicarEstadoSugerido()">Aplicar este estado</button>
+        </div>
+      ` : `
+        <div class="form-actions">
+          <button class="btn btn-ghost" onclick="closeActualizarEstadoModal()">Cancelar</button>
+          <button class="btn btn-primary" onclick="handleAnalizarEstado()" ${m.loading?'disabled':''}>${m.loading?'Analizando…':'Analizar'}</button>
+        </div>
+      `}
     </div>
   </div>`;
 }
@@ -991,7 +1092,7 @@ function render(){
     </div>
 
     <div class="main">
-      <div class="info-banner">En este prototipo el estado se actualiza manualmente desde el menú de cada pedido. La versión final conectaría directamente con las páginas de seguimiento de DHL, UPS, MercadoLibre, etc. para actualizarlo sin intervención manual.</div>
+      <div class="info-banner">El estado se actualiza desde el menú de cada pedido, o usando "Actualizar estado": abre la página de seguimiento con un clic, pega lo que veas, y la IA sugiere el estado correspondiente.</div>
       <div id="pedidos-list-container">${pedidosListInnerHTML()}</div>
       <div class="footer-actions">
         ${state.confirmAction === 'reset' ? `
@@ -1013,6 +1114,7 @@ function render(){
     ${state.showAssistant ? assistantPanelHTML() : ''}
     ${state.showModal ? modalHTML() : ''}
     ${state.agenteSummaryModal ? agenteModalHTML() : ''}
+    ${state.actualizarEstadoModal ? actualizarEstadoModalHTML() : ''}
     ${state.toast ? `<div class="toast">${escapeHTML(state.toast)}</div>` : ''}
   `;
   document.getElementById('app').innerHTML = html;
