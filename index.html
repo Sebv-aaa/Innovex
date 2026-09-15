@@ -311,13 +311,15 @@ async function apiDeleteInsumo(id){
 /* ============================================================
    IA (Claude API vía claude-proxy) — COMPARTIDO
    ============================================================ */
-async function callClaude(systemPrompt, userMessage){
+async function callClaude(systemPrompt, userMessage, imagen){
   const { data: { session } } = await supabaseClient.auth.getSession();
   if(!session) throw new Error('Sesión no válida. Vuelve a iniciar sesión.');
+  const body = { system: systemPrompt, message: userMessage };
+  if(imagen) body.imagen = imagen; // { data, media_type }
   const response = await fetch(CLAUDE_PROXY_URL, {
     method:'POST',
     headers:{ 'Content-Type':'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + session.access_token },
-    body: JSON.stringify({ system: systemPrompt, message: userMessage })
+    body: JSON.stringify(body)
   });
   const data = await response.json();
   if(!data || !data.content){ throw new Error((data && data.error && data.error.message) || 'Error de API'); }
@@ -522,7 +524,7 @@ function pedidosListInnerHTML(){
 }
 function renderPedidosList(){ const c = document.getElementById('list-container'); if(c) c.innerHTML = pedidosListInnerHTML(); }
 
-function openPedidoModal(){ state.showPedidoModal = true; render(); validatePedidoForm(); }
+function openPedidoModal(){ imagenExtraida = null; state.showPedidoModal = true; render(); validatePedidoForm(); }
 function closePedidoModal(){ state.showPedidoModal = false; render(); }
 function isPedidoFormValid(){
   const proveedor = document.getElementById('f-proveedor').value.trim();
@@ -566,14 +568,55 @@ function showTab(tab){
   document.getElementById('tabbtn-manual').classList.toggle('active', tab==='manual');
   document.getElementById('tabbtn-pegar').classList.toggle('active', tab==='pegar');
 }
+let imagenExtraida = null; // { data, media_type } o null
+
+function leerImagenComoBase64(file){
+  if(!file || file.type.indexOf('image') === -1) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const resultado = reader.result;
+    const match = resultado.match(/^data:(.*?);base64,(.*)$/);
+    if(!match) return;
+    imagenExtraida = { media_type: match[1], data: match[2] };
+    const cont = document.getElementById('imagen-preview-container');
+    if(cont){
+      cont.innerHTML = `<img src="${resultado}" style="max-width:170px;max-height:130px;border-radius:4px;border:1px solid var(--border);display:block;margin-bottom:6px;">
+        <button type="button" class="link-btn" onclick="quitarImagenExtraida()">Quitar imagen</button>`;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+function handlePasteImagen(event){
+  const items = event.clipboardData && event.clipboardData.items;
+  if(!items) return;
+  for(const item of items){
+    if(item.type.indexOf('image') !== -1){
+      leerImagenComoBase64(item.getAsFile());
+      event.preventDefault();
+      break;
+    }
+  }
+}
+function handleImagenSeleccionada(event){
+  const file = event.target.files && event.target.files[0];
+  if(file) leerImagenComoBase64(file);
+}
+function quitarImagenExtraida(){
+  imagenExtraida = null;
+  const cont = document.getElementById('imagen-preview-container');
+  if(cont) cont.innerHTML = '';
+  const input = document.getElementById('f-imagen-correo');
+  if(input) input.value = '';
+}
 async function handleExtract(){
   const btn = document.getElementById('btn-extract');
   const status = document.getElementById('extract-status');
   const text = document.getElementById('f-pegado').value.trim();
-  if(!text){ status.textContent = 'Pega primero el texto del correo o mensaje.'; return; }
+  if(!text && !imagenExtraida){ status.textContent = 'Pega el texto, o sube/pega una captura del correo.'; return; }
   btn.disabled = true; status.textContent = 'Extrayendo datos con IA…';
   try{
-    const raw = await callClaude(EXTRACT_SYSTEM_PROMPT, text);
+    const mensaje = text || 'Extrae los datos del pedido a partir de esta captura de un correo o mensaje.';
+    const raw = await callClaude(EXTRACT_SYSTEM_PROMPT, mensaje, imagenExtraida);
     const data = parseJSONLoose(raw);
     if(data.proveedor) document.getElementById('f-proveedor').value = data.proveedor;
     if(data.moneda === 'CLP' || data.moneda === 'USD'){ document.getElementById('f-moneda').value = data.moneda; handleMonedaChange(); }
@@ -1040,9 +1083,14 @@ function pedidoModalHTML(){
       <div id="tab-pegar" style="display:none;">
         <div class="form-field full">
           <label>Texto del correo o WhatsApp de confirmación de envío</label>
-          <textarea id="f-pegado" placeholder="Pega aquí el texto completo del mensaje…"></textarea>
+          <textarea id="f-pegado" placeholder="Pega aquí el texto completo del mensaje…" onpaste="handlePasteImagen(event)"></textarea>
         </div>
-        <button class="btn btn-primary" id="btn-extract" onclick="handleExtract()" type="button">Extraer datos con IA</button>
+        <div class="form-field full" style="margin-top:4px;">
+          <label>O una captura de pantalla del correo — pega la imagen con Ctrl+V en el cuadro de arriba, o sube un archivo</label>
+          <input type="file" id="f-imagen-correo" accept="image/*" onchange="handleImagenSeleccionada(event)">
+          <div id="imagen-preview-container" style="margin-top:6px;"></div>
+        </div>
+        <button class="btn btn-primary" id="btn-extract" onclick="handleExtract()" type="button" style="margin-top:10px;">Extraer datos con IA</button>
         <div class="extract-status" id="extract-status"></div>
       </div>
       <div id="tab-manual" class="form-grid">
