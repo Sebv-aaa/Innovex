@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Innovex — Adquisiciones</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg:#F5F4EF; --surface:#FFFFFF; --surface-alt:#EFEEE6; --border:#DEDCD1;
@@ -204,7 +205,12 @@ let state = {
   insumosFilters: { search:'', ubicacion:'Todos', categoria:'Todas' },
   showInsumoModal: false,
   editInsumoId: null,
-  deleteInsumoConfirmId: null
+  deleteInsumoConfirmId: null,
+
+  // ---- Compartido: historial, transferencias, roles ----
+  historialModal: null,
+  transferirModal: null,
+  rol: 'editor'
 };
 
 /* ============================================================
@@ -237,6 +243,27 @@ function parseJSONLoose(text){
   try{ return JSON.parse(text.replace(/```json/gi,'').replace(/```/g,'').trim()); }
   catch(e){ return {}; }
 }
+function nuevoIdHistorial(){ return 'h'+Date.now()+Math.random().toString(16).slice(2,7); }
+async function registrarHistorial(entidad, entidad_id, descripcion){
+  try{
+    await supabaseClient.from('historial').insert({ id: nuevoIdHistorial(), entidad, entidad_id, descripcion, fecha: new Date().toISOString() });
+  }catch(e){ console.warn('No se pudo registrar en el historial', e); }
+}
+async function abrirHistorialModal(entidad, entidad_id, nombre){
+  state.historialModal = { entidad, entidad_id, nombre, items: [], loading: true, error: null };
+  render();
+  try{
+    const { data, error } = await withTimeout(
+      supabaseClient.from('historial').select('*').eq('entidad', entidad).eq('entidad_id', entidad_id).order('fecha', { ascending:false }),
+      10000
+    );
+    if(error) throw error;
+    state.historialModal.items = data;
+  }catch(e){ state.historialModal.error = 'No se pudo cargar el historial.'; }
+  state.historialModal.loading = false;
+  render();
+}
+function cerrarHistorialModal(){ state.historialModal = null; render(); }
 
 /* ============================================================
    API — PEDIDOS
@@ -396,12 +423,16 @@ function trackingUrl(p){
   if(p.courier === 'UPS') return `https://www.ups.com/track?loc=es_CL&tracknum=${num}`;
   return null;
 }
+function estaVencido(p){
+  return p.estado !== 'Recibido' && !!p.fecha_estimada && p.fecha_estimada < todayISO();
+}
 function computePedidoStats(){
   const activos = state.pedidos.filter(p=>p.estado!=='Recibido').length;
   const atrasados = state.pedidos.filter(p=>p.estado!=='Recibido' && daysSince(p.fecha_ultima_actualizacion)>=5).length;
   const conAgente = state.pedidos.filter(p=>p.agente_aduanero).length;
   const pendientesRevision = state.pedidos.filter(p=>p.pendiente_revision).length;
-  return { activos, atrasados, conAgente, pendientesRevision };
+  const vencidos = state.pedidos.filter(estaVencido).length;
+  return { activos, atrasados, conAgente, pendientesRevision, vencidos };
 }
 function getFilteredPedidos(){
   const { search, destino, estado } = state.pedidosFilters;
@@ -438,7 +469,7 @@ function pedidoRowHTML(p){
       ${p.agente_aduanero ? '<span class="badge badge-agente">Agente aduanero</span>' : ''}
     </div>
     <div class="col col-estado">
-      <select class="estado-select" style="--sel-color:${meta.color}" onchange="updateEstado('${p.id}', this.value)">
+      <select class="estado-select" style="--sel-color:${meta.color}" onchange="updateEstado('${p.id}', this.value)" ${puedeEditar()?'':'disabled'}>
         ${ESTADOS.map(e=>`<option value="${e}" ${e===p.estado?'selected':''}>${e}</option>`).join('')}
       </select>
       ${atrasado
@@ -448,6 +479,7 @@ function pedidoRowHTML(p){
     <div class="col col-fecha">
       <div class="dias-label">llega</div>
       <div>${fmtDate(p.fecha_estimada)}</div>
+      ${estaVencido(p) ? `<span class="badge badge-atrasado" style="margin-top:4px;">⚠ Vencido</span>` : ''}
     </div>
     <div class="col col-acciones" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
       ${state.deletePedidoConfirmId === p.id ? `
@@ -457,10 +489,11 @@ function pedidoRowHTML(p){
           <button class="link-btn" onclick="cancelDeletePedidoConfirm()">Cancelar</button>
         </div>
       ` : `
-        ${p.pendiente_revision ? `<button class="btn-ghost btn-sm" onclick="markAsReviewed('${p.id}')">Marcar como revisado</button>` : ''}
-        ${p.numero_seguimiento ? `<button class="btn-ghost btn-sm" onclick="openActualizarEstadoModal('${p.id}')">Actualizar estado</button>` : ''}
+        ${p.pendiente_revision && puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="markAsReviewed('${p.id}')">Marcar como revisado</button>` : ''}
+        ${p.numero_seguimiento && puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="openActualizarEstadoModal('${p.id}')">Actualizar estado</button>` : ''}
         ${p.agente_aduanero ? `<button class="btn-ghost btn-sm" onclick="handleAgenteSummary('${p.id}')">Resumen para agente</button>` : ''}
-        <button class="btn-ghost btn-sm" onclick="askDeletePedidoConfirm('${p.id}')">Eliminar</button>
+        <button class="btn-ghost btn-sm" onclick="abrirHistorialModal('pedido','${p.id}','${escapeHTML(p.proveedor).replace(/'/g,"\\'")}')">Ver historial</button>
+        ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="askDeletePedidoConfirm('${p.id}')">Eliminar</button>` : ''}
       `}
     </div>
   </div>`;
@@ -587,6 +620,7 @@ async function handleGuardar(){
     };
     await apiCreatePedido(pedido);
     state.pedidos.unshift(pedido);
+    registrarHistorial('pedido', pedido.id, 'Pedido creado (' + proveedor + ')');
     state.showPedidoModal = false;
     state.toast = 'Pedido guardado — ' + proveedor;
     render();
@@ -601,9 +635,13 @@ async function updateEstado(id, value){
   const p = state.pedidos.find(x=>x.id===id);
   if(!p) return;
   const prevEstado = p.estado, prevFecha = p.fecha_ultima_actualizacion;
+  if(prevEstado === value) return;
   p.estado = value; p.fecha_ultima_actualizacion = todayISO();
   render();
-  try{ await apiUpdatePedido(id, { estado: value, fecha_ultima_actualizacion: p.fecha_ultima_actualizacion }); }
+  try{
+    await apiUpdatePedido(id, { estado: value, fecha_ultima_actualizacion: p.fecha_ultima_actualizacion });
+    registrarHistorial('pedido', id, 'Estado cambiado de "' + prevEstado + '" a "' + value + '"');
+  }
   catch(e){
     p.estado = prevEstado; p.fecha_ultima_actualizacion = prevFecha;
     state.toast = 'No se pudo guardar el cambio de estado. Intenta de nuevo.';
@@ -628,7 +666,13 @@ function askDeletePedidoConfirm(id){ state.deletePedidoConfirmId = id; renderPed
 function cancelDeletePedidoConfirm(){ state.deletePedidoConfirmId = null; renderPedidosList(); }
 async function confirmDeletePedido(id){
   state.deletePedidoConfirmId = null;
-  try{ await apiDeletePedido(id); state.pedidos = state.pedidos.filter(p=>p.id!==id); state.toast = 'Pedido eliminado.'; }
+  const p = state.pedidos.find(x=>x.id===id);
+  try{
+    await apiDeletePedido(id);
+    state.pedidos = state.pedidos.filter(x=>x.id!==id);
+    state.toast = 'Pedido eliminado.';
+    if(p) registrarHistorial('pedido', id, 'Pedido eliminado (' + p.proveedor + ')');
+  }
   catch(e){ state.toast = 'No se pudo eliminar el pedido. Intenta de nuevo.'; }
   render();
   setTimeout(()=>{ state.toast = null; render(); }, 2600);
@@ -712,11 +756,15 @@ async function handleClearAll(){
 /* ============================================================
    INVENTARIO — lógica de negocio
    ============================================================ */
+function stockBajo(i){
+  return i.stock_minimo != null && parseFloat(i.cantidad) < parseFloat(i.stock_minimo);
+}
 function computeInsumoStats(){
   const totalInsumos = state.insumos.length;
   const unidadesTotales = state.insumos.reduce((sum,i)=> sum + (parseFloat(i.cantidad)||0), 0);
   const sinActualizar = state.insumos.filter(i=> daysSince(i.fecha_ultima_actualizacion) >= 90).length;
-  return { totalInsumos, unidadesTotales, sinActualizar };
+  const bajoStock = state.insumos.filter(stockBajo).length;
+  return { totalInsumos, unidadesTotales, sinActualizar, bajoStock };
 }
 function getFilteredInsumos(){
   const { search, ubicacion, categoria } = state.insumosFilters;
@@ -735,8 +783,9 @@ function categoriasExistentes(){
 function insumoRowHTML(i){
   const dias = daysSince(i.fecha_ultima_actualizacion);
   const vieja = dias >= 90;
+  const bajo = stockBajo(i);
   return `
-  <div class="row-item">
+  <div class="row-item" ${bajo ? 'style="border-left-color:var(--st-atrasado)"' : ''}>
     <div class="col col-nombre">
       <div class="item-nombre">${escapeHTML(i.nombre)}</div>
       ${i.notas ? `<div class="item-notas">${escapeHTML(i.notas)}</div>` : ''}
@@ -745,10 +794,11 @@ function insumoRowHTML(i){
     <div class="col col-ubicacion">${escapeHTML(i.ubicacion)}</div>
     <div class="col col-cantidad">
       <div style="display:flex;align-items:center;gap:8px;">
-        <button class="qty-btn" onclick="ajustarCantidad('${i.id}', -1)">−</button>
+        <button class="qty-btn" onclick="ajustarCantidad('${i.id}', -1)" ${puedeEditar()?'':'disabled'}>−</button>
         <strong>${i.cantidad}</strong>${i.unidad ? ` <span class="dias-label">${escapeHTML(i.unidad)}</span>` : ''}
-        <button class="qty-btn" onclick="ajustarCantidad('${i.id}', 1)">+</button>
+        <button class="qty-btn" onclick="ajustarCantidad('${i.id}', 1)" ${puedeEditar()?'':'disabled'}>+</button>
       </div>
+      ${bajo ? `<span class="badge badge-atrasado" style="margin-top:4px;">⚠ Stock bajo (mín. ${i.stock_minimo})</span>` : ''}
       ${vieja ? `<span class="badge badge-atrasado" style="margin-top:4px;">⚠ Sin actualizar hace ${dias} días</span>` : `<span class="dias-label">Actualizado ${dias===0?'hoy':'hace '+dias+' días'}</span>`}
     </div>
     <div class="col col-fecha">
@@ -763,8 +813,10 @@ function insumoRowHTML(i){
           <button class="link-btn" onclick="cancelDeleteInsumoConfirm()">Cancelar</button>
         </div>
       ` : `
-        <button class="btn-ghost btn-sm" onclick="openInsumoModal('${i.id}')">Editar</button>
-        <button class="btn-ghost btn-sm" onclick="askDeleteInsumoConfirm('${i.id}')">Eliminar</button>
+        ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="openInsumoModal('${i.id}')">Editar</button>` : ''}
+        ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="abrirTransferirModal('${i.id}')">Transferir</button>` : ''}
+        <button class="btn-ghost btn-sm" onclick="abrirHistorialModal('insumo','${i.id}','${escapeHTML(i.nombre).replace(/'/g,"\\'")}')">Ver historial</button>
+        ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="askDeleteInsumoConfirm('${i.id}')">Eliminar</button>` : ''}
       `}
     </div>
   </div>`;
@@ -803,6 +855,7 @@ function openInsumoModal(editId){
       document.getElementById('f-cantidad').value = item.cantidad != null ? item.cantidad : '';
       document.getElementById('f-unidad').value = item.unidad || '';
       document.getElementById('f-notas').value = item.notas || '';
+      document.getElementById('f-stock-minimo').value = item.stock_minimo != null ? item.stock_minimo : '';
       validateInsumoForm();
     }
   }
@@ -836,6 +889,7 @@ async function handleGuardarItem(){
       cantidad: parseFloat(document.getElementById('f-cantidad').value),
       unidad: document.getElementById('f-unidad').value.trim() || null,
       notas: document.getElementById('f-notas').value.trim() || null,
+      stock_minimo: document.getElementById('f-stock-minimo').value !== '' ? parseFloat(document.getElementById('f-stock-minimo').value) : null,
       fecha_ultima_actualizacion: todayISO()
     };
     if(state.editInsumoId){
@@ -843,11 +897,13 @@ async function handleGuardarItem(){
       const item = state.insumos.find(i=>i.id===state.editInsumoId);
       if(item) Object.assign(item, datos);
       state.toast = 'Insumo actualizado — ' + datos.nombre;
+      registrarHistorial('insumo', state.editInsumoId, 'Insumo editado (' + datos.nombre + ')');
     }else{
       const nuevo = Object.assign({ id: uidInsumo() }, datos);
       await apiCreateInsumo(nuevo);
       state.insumos.unshift(nuevo);
       state.toast = 'Insumo agregado — ' + datos.nombre;
+      registrarHistorial('insumo', nuevo.id, 'Insumo creado (' + datos.nombre + ', cantidad inicial ' + datos.cantidad + ')');
     }
     state.showInsumoModal = false; state.editInsumoId = null;
     render();
@@ -865,7 +921,10 @@ async function ajustarCantidad(id, delta){
   const prevCantidad = item.cantidad, prevFecha = item.fecha_ultima_actualizacion;
   item.cantidad = nuevaCantidad; item.fecha_ultima_actualizacion = todayISO();
   renderInsumosList();
-  try{ await apiUpdateInsumo(id, { cantidad: nuevaCantidad, fecha_ultima_actualizacion: item.fecha_ultima_actualizacion }); }
+  try{
+    await apiUpdateInsumo(id, { cantidad: nuevaCantidad, fecha_ultima_actualizacion: item.fecha_ultima_actualizacion });
+    registrarHistorial('insumo', id, 'Cantidad ajustada de ' + prevCantidad + ' a ' + nuevaCantidad);
+  }
   catch(e){
     item.cantidad = prevCantidad; item.fecha_ultima_actualizacion = prevFecha;
     state.toast = 'No se pudo guardar el ajuste. Intenta de nuevo.';
@@ -877,7 +936,13 @@ function askDeleteInsumoConfirm(id){ state.deleteInsumoConfirmId = id; renderIns
 function cancelDeleteInsumoConfirm(){ state.deleteInsumoConfirmId = null; renderInsumosList(); }
 async function confirmDeleteInsumo(id){
   state.deleteInsumoConfirmId = null;
-  try{ await apiDeleteInsumo(id); state.insumos = state.insumos.filter(i=>i.id!==id); state.toast = 'Insumo eliminado.'; }
+  const item = state.insumos.find(i=>i.id===id);
+  try{
+    await apiDeleteInsumo(id);
+    state.insumos = state.insumos.filter(i=>i.id!==id);
+    state.toast = 'Insumo eliminado.';
+    if(item) registrarHistorial('insumo', id, 'Insumo eliminado (' + item.nombre + ')');
+  }
   catch(e){ state.toast = 'No se pudo eliminar el insumo. Intenta de nuevo.'; }
   render();
   setTimeout(()=>{ state.toast = null; render(); }, 2600);
@@ -1085,6 +1150,107 @@ function actualizarEstadoModalHTML(){
     </div>
   </div>`;
 }
+function historialModalHTML(){
+  const m = state.historialModal;
+  if(!m) return '';
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) cerrarHistorialModal()">
+    <div class="modal" style="max-width:480px;">
+      <button class="modal-close" onclick="cerrarHistorialModal()">×</button>
+      <h2 class="modal-title">Historial — ${escapeHTML(m.nombre)}</h2>
+      ${m.loading ? `<div style="padding:20px 0;color:var(--ink-muted);">Cargando…</div>` :
+        m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(m.error)}</div>` :
+        m.items.length===0 ? `<div class="empty-state" style="padding:24px 0;">Sin cambios registrados todavía.</div>` :
+        `<div style="max-height:360px;overflow-y:auto;">${m.items.map(h=>`
+          <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+            <div style="font-size:13px;">${escapeHTML(h.descripcion)}</div>
+            <div class="dias-label">${escapeHTML(new Date(h.fecha).toLocaleString('es-CL'))}</div>
+          </div>`).join('')}</div>`
+      }
+      <div class="form-actions"><button class="btn btn-ghost" onclick="cerrarHistorialModal()">Cerrar</button></div>
+    </div>
+  </div>`;
+}
+
+/* ---------- Transferencia entre sedes (inventario) ---------- */
+function abrirTransferirModal(id){
+  const item = state.insumos.find(i=>i.id===id);
+  if(!item) return;
+  const destino = UBICACIONES.find(u=>u!==item.ubicacion);
+  state.transferirModal = { insumoId:id, destino, cantidad:'', error:null, loading:false };
+  render();
+}
+function cerrarTransferirModal(){ state.transferirModal = null; render(); }
+async function confirmarTransferencia(){
+  const m = state.transferirModal;
+  const item = state.insumos.find(i=>i.id===m.insumoId);
+  if(!item) return;
+  const cantidad = parseFloat(document.getElementById('f-cantidad-transferir').value);
+  if(isNaN(cantidad) || cantidad <= 0){ m.error = 'Ingresa una cantidad válida, mayor que 0.'; render(); return; }
+  if(cantidad > item.cantidad){ m.error = 'No puedes transferir más de lo que hay disponible (' + item.cantidad + ').'; render(); return; }
+  m.loading = true; m.error = null;
+  render();
+  try{
+    const nuevaCantidadOrigen = item.cantidad - cantidad;
+    await apiUpdateInsumo(item.id, { cantidad: nuevaCantidadOrigen, fecha_ultima_actualizacion: todayISO() });
+    item.cantidad = nuevaCantidadOrigen;
+    item.fecha_ultima_actualizacion = todayISO();
+    registrarHistorial('insumo', item.id, 'Transferencia: salieron ' + cantidad + ' hacia ' + m.destino);
+
+    const existente = state.insumos.find(i=>i.id!==item.id && i.ubicacion===m.destino && (i.nombre||'').trim().toLowerCase() === (item.nombre||'').trim().toLowerCase());
+    if(existente){
+      const nuevaCantidadDestino = (parseFloat(existente.cantidad)||0) + cantidad;
+      await apiUpdateInsumo(existente.id, { cantidad: nuevaCantidadDestino, fecha_ultima_actualizacion: todayISO() });
+      existente.cantidad = nuevaCantidadDestino;
+      existente.fecha_ultima_actualizacion = todayISO();
+      registrarHistorial('insumo', existente.id, 'Transferencia: llegaron ' + cantidad + ' desde ' + item.ubicacion);
+    }else{
+      const nuevo = {
+        id: uidInsumo(), nombre: item.nombre, categoria: item.categoria, ubicacion: m.destino,
+        cantidad: cantidad, unidad: item.unidad, notas: null, stock_minimo: item.stock_minimo,
+        fecha_ultima_actualizacion: todayISO()
+      };
+      await apiCreateInsumo(nuevo);
+      state.insumos.unshift(nuevo);
+      registrarHistorial('insumo', nuevo.id, 'Creado por transferencia: llegaron ' + cantidad + ' desde ' + item.ubicacion);
+    }
+
+    state.transferirModal = null;
+    state.toast = 'Transferencia realizada — ' + cantidad + ' ' + (item.unidad||'unidades') + ' a ' + m.destino;
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 2800);
+  }catch(e){
+    m.loading = false;
+    m.error = 'No se pudo completar la transferencia: ' + (e && e.message ? e.message : 'error desconocido');
+    render();
+  }
+}
+function transferirModalHTML(){
+  const m = state.transferirModal;
+  if(!m) return '';
+  const item = state.insumos.find(i=>i.id===m.insumoId);
+  if(!item) return '';
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) cerrarTransferirModal()">
+    <div class="modal" style="max-width:440px;">
+      <button class="modal-close" onclick="cerrarTransferirModal()">×</button>
+      <h2 class="modal-title">Transferir insumo</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0 0 14px;">
+        ${escapeHTML(item.nombre)} — hay ${item.cantidad} en ${escapeHTML(item.ubicacion)}. Se transferirá a <strong>${escapeHTML(m.destino)}</strong>.
+      </p>
+      ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(m.error)}</div>` : ''}
+      <div class="form-field full">
+        <label>Cantidad a transferir</label>
+        <input type="number" id="f-cantidad-transferir" min="1" max="${item.cantidad}" step="1" placeholder="0" ${m.loading?'disabled':''}>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="cerrarTransferirModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmarTransferencia()" ${m.loading?'disabled':''}>${m.loading?'Transfiriendo…':'Transferir'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function insumoModalHTML(){
   const editando = !!state.editInsumoId;
   return `
@@ -1119,6 +1285,10 @@ function insumoModalHTML(){
           <label>Unidad</label>
           <input type="text" id="f-unidad" placeholder="Ej: unidades, cajas">
         </div>
+        <div class="form-field">
+          <label>Stock mínimo (opcional)</label>
+          <input type="number" id="f-stock-minimo" min="0" step="1" placeholder="Avisar si baja de…">
+        </div>
         <div class="form-field full">
           <label>Notas</label>
           <textarea id="f-notas" placeholder="Detalles opcionales…"></textarea>
@@ -1137,6 +1307,37 @@ function insumoModalHTML(){
    RENDER PRINCIPAL
    ============================================================ */
 function switchVista(v){ state.vista = v; render(); }
+
+function exportarExcel(){
+  const esPedidos = state.vista === 'pedidos';
+  let datos, nombreHoja, nombreArchivo;
+  if(esPedidos){
+    datos = getFilteredPedidos().map(p=>({
+      Proveedor: p.proveedor, 'N° de seguimiento': p.numero_seguimiento||'', Courier: p.courier||'',
+      Destino: p.destino||'', 'Monto USD': p.monto_usd, 'Monto CLP': p.monto_clp, Estado: p.estado,
+      'Agente aduanero': p.agente_aduanero ? 'Sí' : 'No', 'Fecha registro': p.fecha_registro||'',
+      'Fecha estimada': p.fecha_estimada||'', 'Última actualización': p.fecha_ultima_actualizacion||''
+    }));
+    nombreHoja = 'Pedidos'; nombreArchivo = 'pedidos_' + todayISO() + '.xlsx';
+  }else{
+    datos = getFilteredInsumos().map(i=>({
+      Nombre: i.nombre, Categoría: i.categoria||'', Ubicación: i.ubicacion, Cantidad: i.cantidad,
+      Unidad: i.unidad||'', 'Stock mínimo': i.stock_minimo!=null ? i.stock_minimo : '',
+      Notas: i.notas||'', 'Última actualización': i.fecha_ultima_actualizacion||''
+    }));
+    nombreHoja = 'Inventario'; nombreArchivo = 'inventario_' + todayISO() + '.xlsx';
+  }
+  if(datos.length === 0){
+    state.toast = 'No hay datos para exportar con el filtro actual.';
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 2600);
+    return;
+  }
+  const ws = XLSX.utils.json_to_sheet(datos);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
+  XLSX.writeFile(wb, nombreArchivo);
+}
 
 function render(){
   if(!state.session){ document.getElementById('app').innerHTML = loginScreenHTML(); return; }
@@ -1158,10 +1359,12 @@ function render(){
     <div class="stat-chip warn"><div class="stat-value">${pStats.atrasados}</div><div class="stat-label">sin novedades &gt;5 días</div></div>
     <div class="stat-chip amber" style="border-left-color:var(--accent-warm)"><div class="stat-value">${pStats.conAgente}</div><div class="stat-label">con agente aduanero</div></div>
     <div class="stat-chip" style="border-left-color:var(--st-transito)"><div class="stat-value">${pStats.pendientesRevision}</div><div class="stat-label">pendientes de revisión</div></div>
+    <div class="stat-chip warn"><div class="stat-value">${pStats.vencidos}</div><div class="stat-label">vencidos (pasó la fecha)</div></div>
   ` : `
     <div class="stat-chip"><div class="stat-value">${iStats.totalInsumos}</div><div class="stat-label">insumos distintos</div></div>
     <div class="stat-chip"><div class="stat-value">${iStats.unidadesTotales}</div><div class="stat-label">unidades totales</div></div>
     <div class="stat-chip warn"><div class="stat-value">${iStats.sinActualizar}</div><div class="stat-label">sin actualizar &gt;90 días</div></div>
+    <div class="stat-chip warn"><div class="stat-value">${iStats.bajoStock}</div><div class="stat-label">con stock bajo</div></div>
   `;
 
   const controlsHTML = esPedidos ? `
@@ -1176,7 +1379,8 @@ function render(){
           ${ESTADOS.map(e=>`<option ${state.pedidosFilters.estado===e?'selected':''}>${e}</option>`).join('')}
         </select>
         <div class="spacer"></div>
-        <button class="btn btn-primary" onclick="openPedidoModal()">+ Nuevo pedido</button>
+        <button class="btn-ghost" onclick="exportarExcel()">Exportar</button>
+        ${puedeEditar() ? `<button class="btn btn-primary" onclick="openPedidoModal()">+ Nuevo pedido</button>` : ''}
   ` : `
         <input type="text" placeholder="Buscar por nombre…" value="${escapeHTML(state.insumosFilters.search)}"
                oninput="state.insumosFilters.search=this.value; renderInsumosList();">
@@ -1189,7 +1393,8 @@ function render(){
           ${categoriasExistentes().map(c=>`<option ${state.insumosFilters.categoria===c?'selected':''}>${c}</option>`).join('')}
         </select>
         <div class="spacer"></div>
-        <button class="btn btn-primary" onclick="openInsumoModal()">+ Nuevo insumo</button>
+        <button class="btn-ghost" onclick="exportarExcel()">Exportar</button>
+        ${puedeEditar() ? `<button class="btn btn-primary" onclick="openInsumoModal()">+ Nuevo insumo</button>` : ''}
   `;
 
   const footerHTML = esPedidos ? `
@@ -1242,6 +1447,8 @@ function render(){
     ${state.agenteSummaryModal ? agenteModalHTML() : ''}
     ${state.actualizarEstadoModal ? actualizarEstadoModalHTML() : ''}
     ${state.showInsumoModal ? insumoModalHTML() : ''}
+    ${state.historialModal ? historialModalHTML() : ''}
+    ${state.transferirModal ? transferirModalHTML() : ''}
     ${state.toast ? `<div class="toast">${escapeHTML(state.toast)}</div>` : ''}
   `;
   document.getElementById('app').innerHTML = html;
@@ -1294,9 +1501,18 @@ function handleRealtimeChangeInsumos(payload){
 /* ============================================================
    INICIO
    ============================================================ */
+function puedeEditar(){ return state.rol !== 'lector'; }
+async function cargarRol(){
+  try{
+    const { data, error } = await supabaseClient.from('perfiles').select('rol').eq('id', state.session.user.id).single();
+    if(error || !data) { state.rol = 'editor'; return; }
+    state.rol = data.rol || 'editor';
+  }catch(e){ state.rol = 'editor'; }
+}
 async function cargarTodo(){
   document.getElementById('app').innerHTML = '<div class="center-loading">Conectando con la base de datos…</div>';
   try{
+    await cargarRol();
     state.pedidos = await apiGetPedidos();
     state.insumos = await apiGetInsumos();
     state.loadError = null;
