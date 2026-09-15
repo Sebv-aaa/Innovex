@@ -210,6 +210,7 @@ let state = {
   // ---- Compartido: historial, transferencias, roles ----
   historialModal: null,
   transferirModal: null,
+  adjuntarModal: null,
   rol: 'editor'
 };
 
@@ -259,7 +260,7 @@ async function abrirHistorialModal(entidad, entidad_id, nombre){
     );
     if(error) throw error;
     state.historialModal.items = data;
-  }catch(e){ state.historialModal.error = 'No se pudo cargar el historial.'; }
+  }catch(e){ state.historialModal.error = 'No se pudo cargar el historial: ' + (e && e.message ? e.message : 'error desconocido'); }
   state.historialModal.loading = false;
   render();
 }
@@ -492,6 +493,9 @@ function pedidoRowHTML(p){
         ${p.pendiente_revision && puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="markAsReviewed('${p.id}')">Marcar como revisado</button>` : ''}
         ${p.numero_seguimiento && puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="openActualizarEstadoModal('${p.id}')">Actualizar estado</button>` : ''}
         ${p.agente_aduanero ? `<button class="btn-ghost btn-sm" onclick="handleAgenteSummary('${p.id}')">Resumen para agente</button>` : ''}
+        ${p.documento_path
+          ? `<button class="btn-ghost btn-sm" onclick="verDocumento('${p.id}')">Ver documento</button>${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="eliminarDocumento('${p.id}')">Quitar documento</button>` : ''}`
+          : (puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="abrirAdjuntarModal('${p.id}')">Adjuntar documento</button>` : '')}
         <button class="btn-ghost btn-sm" onclick="abrirHistorialModal('pedido','${p.id}','${escapeHTML(p.proveedor).replace(/'/g,"\\'")}')">Ver historial</button>
         ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="askDeletePedidoConfirm('${p.id}')">Eliminar</button>` : ''}
       `}
@@ -1251,6 +1255,90 @@ function transferirModalHTML(){
   </div>`;
 }
 
+/* ---------- Adjuntar documento (pedidos) ---------- */
+function abrirAdjuntarModal(pedidoId){
+  state.adjuntarModal = { pedidoId, loading:false, error:null };
+  render();
+}
+function cerrarAdjuntarModal(){ state.adjuntarModal = null; render(); }
+async function handleSubirDocumento(){
+  const m = state.adjuntarModal;
+  const p = state.pedidos.find(x=>x.id===m.pedidoId);
+  if(!p) return;
+  const input = document.getElementById('f-documento');
+  const archivo = input.files && input.files[0];
+  if(!archivo){ m.error = 'Elige primero un archivo.'; render(); return; }
+  m.loading = true; m.error = null;
+  render();
+  try{
+    const ruta = p.id + '/' + Date.now() + '_' + archivo.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const { error: uploadError } = await supabaseClient.storage.from('documentos').upload(ruta, archivo, { upsert: true });
+    if(uploadError) throw uploadError;
+    await apiUpdatePedido(p.id, { documento_path: ruta });
+    p.documento_path = ruta;
+    registrarHistorial('pedido', p.id, 'Documento adjuntado (' + archivo.name + ')');
+    state.adjuntarModal = null;
+    state.toast = 'Documento adjuntado.';
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 2600);
+  }catch(e){
+    m.loading = false;
+    m.error = 'No se pudo subir el archivo: ' + (e && e.message ? e.message : 'error desconocido');
+    render();
+  }
+}
+async function verDocumento(pedidoId){
+  const p = state.pedidos.find(x=>x.id===pedidoId);
+  if(!p || !p.documento_path) return;
+  try{
+    const { data, error } = await supabaseClient.storage.from('documentos').createSignedUrl(p.documento_path, 60);
+    if(error) throw error;
+    window.open(data.signedUrl, '_blank', 'noopener');
+  }catch(e){
+    state.toast = 'No se pudo abrir el documento: ' + (e && e.message ? e.message : 'error desconocido');
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 3200);
+  }
+}
+async function eliminarDocumento(pedidoId){
+  const p = state.pedidos.find(x=>x.id===pedidoId);
+  if(!p || !p.documento_path) return;
+  const ruta = p.documento_path;
+  try{
+    await supabaseClient.storage.from('documentos').remove([ruta]);
+    await apiUpdatePedido(pedidoId, { documento_path: null });
+    p.documento_path = null;
+    registrarHistorial('pedido', pedidoId, 'Documento eliminado');
+    state.toast = 'Documento eliminado.';
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 2600);
+  }catch(e){
+    state.toast = 'No se pudo eliminar el documento: ' + (e && e.message ? e.message : 'error desconocido');
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 3200);
+  }
+}
+function adjuntarModalHTML(){
+  const m = state.adjuntarModal;
+  if(!m) return '';
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) cerrarAdjuntarModal()">
+    <div class="modal" style="max-width:420px;">
+      <button class="modal-close" onclick="cerrarAdjuntarModal()">×</button>
+      <h2 class="modal-title">Adjuntar documento</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0 0 14px;">Sube la factura, orden de compra u otro documento del pedido (PDF o imagen).</p>
+      ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(m.error)}</div>` : ''}
+      <div class="form-field full">
+        <input type="file" id="f-documento" accept=".pdf,.jpg,.jpeg,.png" ${m.loading?'disabled':''}>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="cerrarAdjuntarModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="handleSubirDocumento()" ${m.loading?'disabled':''}>${m.loading?'Subiendo…':'Subir'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function insumoModalHTML(){
   const editando = !!state.editInsumoId;
   return `
@@ -1449,6 +1537,7 @@ function render(){
     ${state.showInsumoModal ? insumoModalHTML() : ''}
     ${state.historialModal ? historialModalHTML() : ''}
     ${state.transferirModal ? transferirModalHTML() : ''}
+    ${state.adjuntarModal ? adjuntarModalHTML() : ''}
     ${state.toast ? `<div class="toast">${escapeHTML(state.toast)}</div>` : ''}
   `;
   document.getElementById('app').innerHTML = html;
