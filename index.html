@@ -203,7 +203,6 @@ let state = {
   pedidos: [],
   pedidosFilters: { search:'', destino:'Todos', estado:'Todos', filtroRapido:null },
   showPedidoModal: false,
-  editPedidoId: null,
   deletePedidoConfirmId: null,
   agenteSummaryModal: null,
   actualizarEstadoModal: null,
@@ -532,8 +531,7 @@ function pedidoRowHTML(p){
         </div>
       ` : `
         ${p.pendiente_revision && puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="markAsReviewed('${p.id}')">Marcar como revisado</button>` : ''}
-        ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="openPedidoModal('${p.id}')">Editar</button>` : ''}
-        ${p.numero_seguimiento && puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="openActualizarEstadoModal('${p.id}')">Actualizar estado</button>` : ''}
+        ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="openActualizarEstadoModal('${p.id}')">Actualizar estado</button>` : ''}
         ${p.agente_aduanero ? `<button class="btn-ghost btn-sm" onclick="handleAgenteSummary('${p.id}')">Resumen para agente</button>` : ''}
         ${p.documento_path
           ? `<button class="btn-ghost btn-sm" onclick="verDocumento('${p.id}')">Ver documento</button>${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="eliminarDocumento('${p.id}')">Quitar documento</button>` : ''}`
@@ -564,33 +562,8 @@ function pedidosListInnerHTML(){
 }
 function renderPedidosList(){ const c = document.getElementById('list-container'); if(c) c.innerHTML = pedidosListInnerHTML(); }
 
-function openPedidoModal(editId){
-  imagenExtraida = null;
-  state.editPedidoId = editId || null;
-  state.showPedidoModal = true;
-  render();
-  validatePedidoForm();
-  if(editId){
-    const p = state.pedidos.find(x=>x.id===editId);
-    if(p){
-      const m = pedidoMonto(p);
-      document.getElementById('f-proveedor').value = p.proveedor || '';
-      document.getElementById('f-moneda').value = m.moneda || 'CLP';
-      document.getElementById('f-monto').value = m.monto != null ? m.monto : '';
-      document.getElementById('f-tracking').value = p.numero_seguimiento || '';
-      document.getElementById('f-courier').value = p.courier || '';
-      document.getElementById('f-destino').value = p.destino || '';
-      document.getElementById('f-fecha').value = p.fecha_estimada || '';
-      document.getElementById('f-fecha-orden').value = p.fecha_orden || '';
-      document.getElementById('f-area').value = p.area || '';
-      document.getElementById('f-solicitante').value = p.solicitante || '';
-      document.getElementById('f-internacional').checked = !!p.internacional;
-      document.getElementById('f-agente-aduanero').checked = !!p.agente_aduanero;
-      validatePedidoForm();
-    }
-  }
-}
-function closePedidoModal(){ state.showPedidoModal = false; state.editPedidoId = null; render(); }
+function openPedidoModal(){ imagenExtraida = null; state.showPedidoModal = true; render(); validatePedidoForm(); }
+function closePedidoModal(){ state.showPedidoModal = false; render(); }
 function isPedidoFormValid(){
   const proveedor = document.getElementById('f-proveedor').value.trim();
   const monto = parseFloat(document.getElementById('f-monto').value);
@@ -696,8 +669,8 @@ async function handleGuardar(){
     const moneda = document.getElementById('f-moneda').value;
     const monto = parseFloat(document.getElementById('f-monto').value);
     const internacional = document.getElementById('f-internacional').checked;
-    const datosComunes = {
-      proveedor, monto, moneda,
+    const pedido = {
+      id: uidPedido(), proveedor, monto, moneda,
       numero_seguimiento: document.getElementById('f-tracking').value.trim() || null,
       courier: document.getElementById('f-courier').value,
       destino: document.getElementById('f-destino').value,
@@ -706,26 +679,14 @@ async function handleGuardar(){
       area: document.getElementById('f-area').value.trim() || null,
       solicitante: document.getElementById('f-solicitante').value.trim() || null,
       internacional,
-      agente_aduanero: document.getElementById('f-agente-aduanero').checked
+      estado: 'En proceso', fecha_registro: todayISO(), fecha_ultima_actualizacion: todayISO(),
+      agente_aduanero: document.getElementById('f-agente-aduanero').checked, pendiente_revision: false
     };
-    if(state.editPedidoId){
-      const datos = Object.assign({}, datosComunes, { fecha_ultima_actualizacion: todayISO() });
-      await apiUpdatePedido(state.editPedidoId, datos);
-      const p = state.pedidos.find(x=>x.id===state.editPedidoId);
-      if(p) Object.assign(p, datos);
-      registrarHistorial('pedido', state.editPedidoId, 'Pedido editado (' + proveedor + ')');
-      state.toast = 'Pedido actualizado — ' + proveedor;
-    }else{
-      const pedido = Object.assign({ id: uidPedido() }, datosComunes, {
-        estado: 'En proceso', fecha_registro: todayISO(), fecha_ultima_actualizacion: todayISO(), pendiente_revision: false
-      });
-      await apiCreatePedido(pedido);
-      state.pedidos.unshift(pedido);
-      registrarHistorial('pedido', pedido.id, 'Pedido creado (' + proveedor + ')');
-      state.toast = 'Pedido guardado — ' + proveedor;
-    }
+    await apiCreatePedido(pedido);
+    state.pedidos.unshift(pedido);
+    registrarHistorial('pedido', pedido.id, 'Pedido creado (' + proveedor + ')');
     state.showPedidoModal = false;
-    state.editPedidoId = null;
+    state.toast = 'Pedido guardado — ' + proveedor;
     render();
     setTimeout(()=>{ state.toast = null; render(); }, 2600);
   }catch(err){
@@ -808,12 +769,71 @@ async function copyAgenteText(){
 }
 let imagenEstado = null; // { data, media_type } o null
 function openActualizarEstadoModal(id){ imagenEstado = null; state.actualizarEstadoModal = { pedidoId:id, modo:'ia', texto:'', loading:false, resultado:null, error:null }; render(); }
-function cambiarModoEstadoModal(modo){ state.actualizarEstadoModal.modo = modo; state.actualizarEstadoModal.error = null; render(); }
-async function handleAplicarEstadoManual(){
+function cambiarModoEstadoModal(modo){
+  state.actualizarEstadoModal.modo = modo;
+  state.actualizarEstadoModal.error = null;
+  render();
+  if(modo === 'manual') precargarFormularioEstadoManual();
+}
+function precargarFormularioEstadoManual(){
+  const p = state.pedidos.find(x=>x.id===state.actualizarEstadoModal.pedidoId);
+  if(!p) return;
+  const m = pedidoMonto(p);
+  document.getElementById('em-proveedor').value = p.proveedor || '';
+  document.getElementById('em-moneda').value = m.moneda || 'CLP';
+  document.getElementById('em-monto').value = m.monto != null ? m.monto : '';
+  document.getElementById('em-tracking').value = p.numero_seguimiento || '';
+  document.getElementById('em-courier').value = p.courier || '';
+  document.getElementById('em-destino').value = p.destino || '';
+  document.getElementById('em-fecha').value = p.fecha_estimada || '';
+  document.getElementById('em-fecha-orden').value = p.fecha_orden || '';
+  document.getElementById('em-area').value = p.area || '';
+  document.getElementById('em-solicitante').value = p.solicitante || '';
+  document.getElementById('em-internacional').checked = !!p.internacional;
+  document.getElementById('em-agente-aduanero').checked = !!p.agente_aduanero;
+  document.getElementById('em-estado').value = p.estado;
+}
+async function handleGuardarEdicionEstado(){
   const id = state.actualizarEstadoModal.pedidoId;
-  const valor = document.getElementById('estado-manual-select').value;
-  closeActualizarEstadoModal();
-  await updateEstado(id, valor);
+  const p = state.pedidos.find(x=>x.id===id);
+  if(!p) return;
+  const btn = document.getElementById('em-btn-guardar');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    const nuevoEstado = document.getElementById('em-estado').value;
+    const estadoAnterior = p.estado;
+    const datos = {
+      proveedor: document.getElementById('em-proveedor').value.trim(),
+      moneda: document.getElementById('em-moneda').value,
+      monto: parseFloat(document.getElementById('em-monto').value),
+      numero_seguimiento: document.getElementById('em-tracking').value.trim() || null,
+      courier: document.getElementById('em-courier').value,
+      destino: document.getElementById('em-destino').value,
+      fecha_estimada: document.getElementById('em-fecha').value || null,
+      fecha_orden: document.getElementById('em-fecha-orden').value || null,
+      area: document.getElementById('em-area').value.trim() || null,
+      solicitante: document.getElementById('em-solicitante').value.trim() || null,
+      internacional: document.getElementById('em-internacional').checked,
+      agente_aduanero: document.getElementById('em-agente-aduanero').checked,
+      estado: nuevoEstado,
+      fecha_ultima_actualizacion: todayISO()
+    };
+    await apiUpdatePedido(id, datos);
+    Object.assign(p, datos);
+    if(nuevoEstado !== estadoAnterior){
+      registrarHistorial('pedido', id, 'Estado cambiado de "' + estadoAnterior + '" a "' + nuevoEstado + '"');
+    }
+    registrarHistorial('pedido', id, 'Pedido editado (' + datos.proveedor + ')');
+    closeActualizarEstadoModal();
+    state.toast = 'Pedido actualizado.';
+    render();
+    setTimeout(()=>{ state.toast = null; render(); }, 2600);
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Guardar cambios';
+    state.toast = 'No se pudo guardar: ' + (e && e.message ? e.message : 'error desconocido');
+    render();
+    setTimeout(()=>{ state.toast = null; render(); }, 3200);
+  }
 }
 function closeActualizarEstadoModal(){ state.actualizarEstadoModal = null; render(); }
 function leerImagenEstadoComoBase64(file){
@@ -1178,16 +1198,15 @@ function assistantPanelHTML(){
    MODALES
    ============================================================ */
 function pedidoModalHTML(){
-  const editando = !!state.editPedidoId;
   return `
   <div class="modal-backdrop" onclick="if(event.target===this) closePedidoModal()">
     <div class="modal">
       <button class="modal-close" onclick="closePedidoModal()">×</button>
-      <h2 class="modal-title">${editando ? 'Editar pedido' : 'Nuevo pedido'}</h2>
-      <p style="color:var(--ink-muted);font-size:13px;margin:0;">${editando ? 'Corrige o completa cualquier dato del pedido.' : 'Registra el pedido manualmente o pega el correo de confirmación para que la IA complete los datos.'}</p>
+      <h2 class="modal-title">Nuevo pedido</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0;">Registra el pedido manualmente o pega el correo de confirmación para que la IA complete los datos.</p>
       <div class="modal-tabs">
         <button class="tab-btn active" id="tabbtn-manual" onclick="showTab('manual')">Datos manuales</button>
-        ${editando ? '' : `<button class="tab-btn" id="tabbtn-pegar" onclick="showTab('pegar')">Pegar correo / mensaje</button>`}
+        <button class="tab-btn" id="tabbtn-pegar" onclick="showTab('pegar')">Pegar correo / mensaje</button>
       </div>
       <div id="tab-pegar" style="display:none;">
         <div class="form-field full">
@@ -1266,7 +1285,7 @@ function pedidoModalHTML(){
         <div class="dias-label" id="form-hint" style="grid-column:1 / -1;">Completa todos los campos marcados con * para poder guardar.</div>
         <div class="form-actions" style="grid-column:1 / -1;">
           <button type="button" class="btn btn-ghost" onclick="closePedidoModal()">Cancelar</button>
-          <button type="button" id="btn-guardar" class="btn btn-primary" onclick="handleGuardar()" disabled>${editando ? 'Guardar cambios' : 'Guardar pedido'}</button>
+          <button type="button" id="btn-guardar" class="btn btn-primary" onclick="handleGuardar()" disabled>Guardar pedido</button>
         </div>
       </div>
     </div>
@@ -1300,7 +1319,7 @@ function actualizarEstadoModalHTML(){
   const url = p ? trackingUrl(p) : null;
   return `
   <div class="modal-backdrop" onclick="if(event.target===this) closeActualizarEstadoModal()">
-    <div class="modal" style="max-width:520px;">
+    <div class="modal" style="max-width:${m.modo==='manual'?'560px':'520px'};">
       <button class="modal-close" onclick="closeActualizarEstadoModal()">×</button>
       <h2 class="modal-title">Actualizar estado</h2>
       <div class="modal-tabs">
@@ -1309,15 +1328,73 @@ function actualizarEstadoModalHTML(){
       </div>
       ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(m.error)}</div>` : ''}
       ${m.modo === 'manual' ? `
-        <div class="form-field full">
-          <label>Nuevo estado</label>
-          <select id="estado-manual-select">
-            ${ESTADOS.map(e=>`<option value="${e}" ${p && e===p.estado?'selected':''}>${e}</option>`).join('')}
-          </select>
+        <p style="color:var(--ink-muted);font-size:13px;margin:0 0 10px;">Corrige o completa cualquier dato del pedido, incluido el estado.</p>
+        <div class="form-grid" style="margin-top:0;">
+          <div class="form-field full">
+            <label>Proveedor</label>
+            <input type="text" id="em-proveedor">
+          </div>
+          <div class="form-field">
+            <label>Monto</label>
+            <div style="display:flex; gap:8px;">
+              <select id="em-moneda" style="flex:0 0 90px;">
+                <option value="CLP">CLP ($)</option>
+                <option value="USD">USD (US$)</option>
+                <option value="EUR">EUR (€)</option>
+              </select>
+              <input type="number" id="em-monto" step="0.01" style="flex:1;">
+            </div>
+          </div>
+          <div class="form-field">
+            <label>Estado</label>
+            <select id="em-estado">
+              ${ESTADOS.map(e=>`<option value="${e}">${e}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field">
+            <label>N° de seguimiento</label>
+            <input type="text" id="em-tracking">
+          </div>
+          <div class="form-field">
+            <label>Empresa transportista</label>
+            <select id="em-courier">
+              ${COURIERS.map(c=>`<option value="${c}">${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Destino</label>
+            <select id="em-destino">
+              ${DESTINOS.map(d=>`<option value="${d}">${d}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Fecha estimada de llegada</label>
+            <input type="date" id="em-fecha">
+          </div>
+          <div class="form-field">
+            <label>Fecha de la orden / pago</label>
+            <input type="date" id="em-fecha-orden">
+          </div>
+          <div class="form-field">
+            <label>Área / centro de costo</label>
+            <input type="text" id="em-area" list="areas-list">
+          </div>
+          <div class="form-field">
+            <label>Solicitado por</label>
+            <input type="text" id="em-solicitante">
+          </div>
+          <div class="form-field full" style="flex-direction:row;align-items:center;gap:8px;">
+            <input type="checkbox" id="em-internacional" style="width:auto;">
+            <label style="margin:0;">Es una compra internacional</label>
+          </div>
+          <div class="form-field full" style="flex-direction:row;align-items:center;gap:8px;">
+            <input type="checkbox" id="em-agente-aduanero" style="width:auto;">
+            <label style="margin:0;">Requiere agente aduanero</label>
+          </div>
         </div>
         <div class="form-actions">
           <button class="btn btn-ghost" onclick="closeActualizarEstadoModal()">Cancelar</button>
-          <button class="btn btn-primary" onclick="handleAplicarEstadoManual()">Aplicar</button>
+          <button class="btn btn-primary" id="em-btn-guardar" onclick="handleGuardarEdicionEstado()">Guardar cambios</button>
         </div>
       ` : `
         <p style="color:var(--ink-muted);font-size:13px;margin:0 0 14px;">
