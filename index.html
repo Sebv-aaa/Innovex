@@ -40,9 +40,10 @@
   .stat-chip.warn{ border-left-color:var(--st-atrasado); }
   .stat-value{ font-family:var(--font-display); font-size:22px; font-weight:600; line-height:1.1; }
   .stat-label{ font-size:11.5px; color:var(--ink-muted); margin-top:2px; }
-  button.stat-chip{ background:none; font-family:inherit; text-align:left; cursor:pointer; }
-  button.stat-chip:hover{ opacity:0.75; }
-  .stat-chip-active{ background:var(--surface-alt); border-radius:4px; padding:2px 8px 2px 6px; margin-left:-6px; }
+  button.stat-chip{ background:none; font-family:inherit; text-align:left; cursor:pointer; border-radius:4px; padding:4px 10px 4px 8px; margin:-4px -2px -4px -8px; transition:background 0.12s; }
+  button.stat-chip:hover{ background:var(--surface-alt); }
+  .stat-chip-active{ background:var(--accent) !important; }
+  .stat-chip-active .stat-value, .stat-chip-active .stat-label{ color:#fff; }
 
   .tabs-row{ max-width:1280px; margin:0 auto; display:flex; gap:4px; }
   .tab-item{ background:none; border:none; padding:10px 4px; margin-right:22px; font-size:14px; font-family:var(--font-ui);
@@ -175,6 +176,7 @@ const CLAUDE_PROXY_URL = SUPABASE_URL + '/functions/v1/claude-proxy';
 
 const ESTADOS = ['En proceso','En tránsito','En aduana','En destino','Recibido'];
 const COURIERS = ['DHL','UPS','MercadoLibre','Otro'];
+const MONEDAS = ['CLP','USD','EUR'];
 const DESTINOS = ['Puerto Montt','Valdivia'];
 const UBICACIONES = ['Puerto Montt','Valdivia'];
 const CATEGORIAS_SUGERIDAS = ['Herramientas','Tecnología','Materiales de maestranza','Seguridad','Oficina'];
@@ -238,6 +240,20 @@ function fmtDate(iso){
 }
 function fmtUSD(n){ if(n===null||n===undefined||n==='') return '—'; return Number(n).toLocaleString('es-CL'); }
 function fmtCLP(n){ if(n===null||n===undefined||n==='') return '—'; return Math.round(n).toLocaleString('es-CL'); }
+function pedidoMonto(p){
+  if(p.monto != null && p.moneda) return { monto: p.monto, moneda: p.moneda };
+  // Respaldo para pedidos guardados antes de simplificar el monto (sin tipo de cambio).
+  if(p.moneda_ingreso === 'CLP') return { monto: p.monto_clp, moneda: 'CLP' };
+  if(p.monto_usd != null) return { monto: p.monto_usd, moneda: 'USD' };
+  return { monto: null, moneda: null };
+}
+function fmtMonto(moneda, monto){
+  if(monto===null || monto===undefined || monto==='') return '—';
+  const val = Number(monto).toLocaleString('es-CL');
+  if(moneda==='CLP') return '$' + val;
+  if(moneda==='EUR') return '€' + val;
+  return 'US$' + val;
+}
 function escapeHTML(str){
   if(str===null || str===undefined) return '';
   return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -339,7 +355,7 @@ Responde ÚNICAMENTE con un objeto JSON, sin texto adicional, sin explicaciones,
 Usa exactamente estas claves:
 - proveedor (string o null)
 - monto (número, sin símbolo ni separadores de miles, o null)
-- moneda (uno de "USD" o "CLP" según el símbolo o contexto del texto; si no es claro, usa "USD")
+- moneda (uno de "USD", "CLP" o "EUR" según el símbolo o contexto del texto; si no es claro, usa "CLP")
 - numero_seguimiento (string o null)
 - courier (uno de "DHL", "UPS", "MercadoLibre", "Otro", o null si no se identifica con certeza)
 - fecha_estimada (formato YYYY-MM-DD, o null si no se menciona)
@@ -489,9 +505,7 @@ function pedidoRowHTML(p){
     </div>
     <div class="col col-destino">${escapeHTML(p.destino||'—')}</div>
     <div class="col col-monto">
-      ${p.moneda_ingreso==='CLP'
-        ? `CLP $${fmtCLP(p.monto_clp)}<div class="dias-label">≈ US$ ${fmtUSD(p.monto_usd)}</div>`
-        : `US$ ${fmtUSD(p.monto_usd)}<div class="dias-label">≈ CLP $${fmtCLP(p.monto_clp)}</div>`}
+      ${fmtMonto(pedidoMonto(p).moneda, pedidoMonto(p).monto)}
       ${p.agente_aduanero ? '<span class="badge badge-agente">Agente aduanero</span>' : ''}
     </div>
     <div class="col col-estado">
@@ -557,28 +571,9 @@ function isPedidoFormValid(){
   const courier = document.getElementById('f-courier').value;
   const destino = document.getElementById('f-destino').value;
   const fecha = document.getElementById('f-fecha').value;
-  const moneda = document.getElementById('f-moneda').value;
-  let tcOk = true;
-  if(moneda === 'CLP'){ const tc = parseFloat(document.getElementById('f-tc').value); tcOk = !isNaN(tc) && tc > 0; }
-  return proveedor !== '' && !isNaN(monto) && monto > 0 && tracking !== '' && courier !== '' && destino !== '' && fecha !== '' && tcOk;
-}
-function updateMontoPreview(){
-  const moneda = document.getElementById('f-moneda').value;
-  const monto = parseFloat(document.getElementById('f-monto').value);
-  const tc = parseFloat(document.getElementById('f-tc').value) || DEFAULT_TC;
-  const preview = document.getElementById('monto-preview');
-  if(!preview) return;
-  if(isNaN(monto)){ preview.textContent = ''; return; }
-  if(moneda==='USD'){ preview.textContent = '≈ CLP $' + fmtCLP(monto*tc); }
-  else{ preview.textContent = '≈ US$ ' + fmtUSD(+(monto/tc).toFixed(2)); }
-}
-function handleMonedaChange(){
-  const moneda = document.getElementById('f-moneda').value;
-  document.getElementById('tc-row').style.display = moneda==='CLP' ? 'block' : 'none';
-  validatePedidoForm();
+  return proveedor !== '' && !isNaN(monto) && monto > 0 && tracking !== '' && courier !== '' && destino !== '' && fecha !== '';
 }
 function validatePedidoForm(){
-  updateMontoPreview();
   const btn = document.getElementById('btn-guardar');
   const hint = document.getElementById('form-hint');
   if(!btn) return;
@@ -643,7 +638,7 @@ async function handleExtract(){
     const raw = await callClaude(EXTRACT_SYSTEM_PROMPT, mensaje, imagenExtraida);
     const data = parseJSONLoose(raw);
     if(data.proveedor) document.getElementById('f-proveedor').value = data.proveedor;
-    if(data.moneda === 'CLP' || data.moneda === 'USD'){ document.getElementById('f-moneda').value = data.moneda; handleMonedaChange(); }
+    if(MONEDAS.includes(data.moneda)) document.getElementById('f-moneda').value = data.moneda;
     if(data.monto) document.getElementById('f-monto').value = data.monto;
     if(data.numero_seguimiento) document.getElementById('f-tracking').value = data.numero_seguimiento;
     if(data.courier && COURIERS.includes(data.courier)) document.getElementById('f-courier').value = data.courier;
@@ -672,17 +667,11 @@ async function handleGuardar(){
   submitBtn.disabled = true; submitBtn.textContent = 'Guardando…';
   try{
     const moneda = document.getElementById('f-moneda').value;
-    const montoInput = parseFloat(document.getElementById('f-monto').value);
-    const tc = parseFloat(document.getElementById('f-tc').value) || DEFAULT_TC;
-    let monto_usd = null, monto_clp = null;
-    if(!isNaN(montoInput)){
-      if(moneda === 'CLP'){ monto_clp = montoInput; monto_usd = +(montoInput/tc).toFixed(2); }
-      else{ monto_usd = montoInput; monto_clp = Math.round(montoInput*tc); }
-    }
+    const monto = parseFloat(document.getElementById('f-monto').value);
     const internacional = document.getElementById('f-internacional').checked;
     const pedido = {
       id: uidPedido(), proveedor,
-      monto_usd, monto_clp, moneda_ingreso: moneda, tipo_cambio: tc,
+      monto, moneda,
       numero_seguimiento: document.getElementById('f-tracking').value.trim() || null,
       courier: document.getElementById('f-courier').value,
       destino: document.getElementById('f-destino').value,
@@ -692,7 +681,7 @@ async function handleGuardar(){
       solicitante: document.getElementById('f-solicitante').value.trim() || null,
       internacional,
       estado: 'En proceso', fecha_registro: todayISO(), fecha_ultima_actualizacion: todayISO(),
-      agente_aduanero: !!(internacional && monto_usd && monto_usd > 3000), pendiente_revision: false
+      agente_aduanero: document.getElementById('f-agente-aduanero').checked, pendiente_revision: false
     };
     await apiCreatePedido(pedido);
     state.pedidos.unshift(pedido);
@@ -780,7 +769,14 @@ async function copyAgenteText(){
   if(el) el.textContent = ok ? 'Copiado ✓' : 'No se pudo copiar automáticamente — selecciona el texto y cópialo manualmente.';
 }
 let imagenEstado = null; // { data, media_type } o null
-function openActualizarEstadoModal(id){ imagenEstado = null; state.actualizarEstadoModal = { pedidoId:id, texto:'', loading:false, resultado:null, error:null }; render(); }
+function openActualizarEstadoModal(id){ imagenEstado = null; state.actualizarEstadoModal = { pedidoId:id, modo:'ia', texto:'', loading:false, resultado:null, error:null }; render(); }
+function cambiarModoEstadoModal(modo){ state.actualizarEstadoModal.modo = modo; state.actualizarEstadoModal.error = null; render(); }
+async function handleAplicarEstadoManual(){
+  const id = state.actualizarEstadoModal.pedidoId;
+  const valor = document.getElementById('estado-manual-select').value;
+  closeActualizarEstadoModal();
+  await updateEstado(id, valor);
+}
 function closeActualizarEstadoModal(){ state.actualizarEstadoModal = null; render(); }
 function leerImagenEstadoComoBase64(file){
   if(!file || file.type.indexOf('image') === -1) return;
@@ -846,10 +842,9 @@ async function aplicarEstadoSugerido(){
 function askConfirm(action){ state.confirmAction = action; render(); }
 function cancelConfirm(){ state.confirmAction = null; render(); }
 function seedPedidos(){
-  const mk = (monto_usd) => ({ monto_usd, monto_clp: Math.round(monto_usd*DEFAULT_TC), moneda_ingreso:'USD', tipo_cambio:DEFAULT_TC });
   return [
-    { id:uidPedido(), proveedor:'Guangzhou Tools Co.', ...mk(4200), numero_seguimiento:'1Z999AA10123456784', courier:'UPS', destino:'Puerto Montt', estado:'En tránsito', fecha_registro:addDaysISO(-10), fecha_estimada:addDaysISO(3), fecha_ultima_actualizacion:addDaysISO(-6), agente_aduanero:true, pendiente_revision:false },
-    { id:uidPedido(), proveedor:'Ferretería del Sur SpA', ...mk(850), numero_seguimiento:'DHL7788990011', courier:'DHL', destino:'Valdivia', estado:'En proceso', fecha_registro:addDaysISO(-2), fecha_estimada:addDaysISO(7), fecha_ultima_actualizacion:addDaysISO(-2), agente_aduanero:false, pendiente_revision:false }
+    { id:uidPedido(), proveedor:'Guangzhou Tools Co.', monto:4200, moneda:'USD', area:'Bodega', solicitante:'Equipo de Bodega', internacional:true, numero_seguimiento:'1Z999AA10123456784', courier:'UPS', destino:'Puerto Montt', estado:'En tránsito', fecha_registro:addDaysISO(-10), fecha_orden:addDaysISO(-10), fecha_estimada:addDaysISO(3), fecha_ultima_actualizacion:addDaysISO(-6), agente_aduanero:true, pendiente_revision:false },
+    { id:uidPedido(), proveedor:'Ferretería del Sur SpA', monto:790000, moneda:'CLP', area:'Mantenimiento', solicitante:null, internacional:false, numero_seguimiento:'DHL7788990011', courier:'DHL', destino:'Valdivia', estado:'En proceso', fecha_registro:addDaysISO(-2), fecha_orden:addDaysISO(-2), fecha_estimada:addDaysISO(7), fecha_ultima_actualizacion:addDaysISO(-2), agente_aduanero:false, pendiente_revision:false }
   ];
 }
 async function handleResetDemo(){
@@ -1080,13 +1075,17 @@ async function handleAskAssistant(preset){
   try{
     let systemPrompt;
     if(state.vista === 'pedidos'){
-      const contextData = state.pedidos.map(p=>({
-        proveedor:p.proveedor, monto_usd:p.monto_usd, monto_clp:p.monto_clp, moneda_ingreso:p.moneda_ingreso,
-        courier:p.courier, numero_seguimiento:p.numero_seguimiento, destino:p.destino, estado:p.estado,
-        fecha_registro:p.fecha_registro, fecha_estimada:p.fecha_estimada,
-        dias_sin_actualizacion: daysSince(p.fecha_ultima_actualizacion), agente_aduanero:p.agente_aduanero,
-        pendiente_revision: !!p.pendiente_revision
-      }));
+      const contextData = state.pedidos.map(p=>{
+        const m = pedidoMonto(p);
+        return {
+          proveedor:p.proveedor, monto:m.monto, moneda:m.moneda, area:p.area, solicitante:p.solicitante,
+          courier:p.courier, numero_seguimiento:p.numero_seguimiento, destino:p.destino, estado:p.estado,
+          internacional: !!p.internacional, fecha_orden:p.fecha_orden,
+          fecha_registro:p.fecha_registro, fecha_estimada:p.fecha_estimada,
+          dias_sin_actualizacion: daysSince(p.fecha_ultima_actualizacion), agente_aduanero:p.agente_aduanero,
+          pendiente_revision: !!p.pendiente_revision
+        };
+      });
       systemPrompt = assistantSystemPromptPedidos(contextData);
     }else{
       const contextData = state.insumos.map(i=>({
@@ -1174,17 +1173,13 @@ function pedidoModalHTML(){
         <div class="form-field full">
           <label>Monto del pedido *</label>
           <div style="display:flex; gap:8px;">
-            <select id="f-moneda" style="flex:0 0 110px;" onchange="handleMonedaChange()">
-              <option value="USD">USD (US$)</option>
+            <select id="f-moneda" style="flex:0 0 110px;">
               <option value="CLP">CLP ($)</option>
+              <option value="USD">USD (US$)</option>
+              <option value="EUR">EUR (€)</option>
             </select>
             <input type="number" id="f-monto" placeholder="0" step="0.01" style="flex:1;" oninput="validatePedidoForm()">
           </div>
-          <div id="tc-row" style="display:none;">
-            <label style="font-size:11.5px;">Tipo de cambio de referencia (CLP por US$) — ajústalo si es necesario</label>
-            <input type="number" id="f-tc" value="${DEFAULT_TC}" step="0.01" oninput="validatePedidoForm()">
-          </div>
-          <div class="dias-label" id="monto-preview"></div>
         </div>
         <div class="form-field">
           <label>N° de seguimiento *</label>
@@ -1223,7 +1218,11 @@ function pedidoModalHTML(){
         </div>
         <div class="form-field full" style="flex-direction:row;align-items:center;gap:8px;">
           <input type="checkbox" id="f-internacional" style="width:auto;">
-          <label style="margin:0;">Es una compra internacional (afecta si requiere agente aduanero)</label>
+          <label style="margin:0;">Es una compra internacional</label>
+        </div>
+        <div class="form-field full" style="flex-direction:row;align-items:center;gap:8px;">
+          <input type="checkbox" id="f-agente-aduanero" style="width:auto;">
+          <label style="margin:0;">Requiere agente aduanero</label>
         </div>
         <div class="dias-label" id="form-hint" style="grid-column:1 / -1;">Completa todos los campos marcados con * para poder guardar.</div>
         <div class="form-actions" style="grid-column:1 / -1;">
@@ -1265,32 +1264,49 @@ function actualizarEstadoModalHTML(){
     <div class="modal" style="max-width:520px;">
       <button class="modal-close" onclick="closeActualizarEstadoModal()">×</button>
       <h2 class="modal-title">Actualizar estado</h2>
-      <p style="color:var(--ink-muted);font-size:13px;margin:0 0 14px;">
-        ${url ? `Abre la página de seguimiento, copia el texto que muestra el estado, y pégalo aquí. <a href="${url}" target="_blank" rel="noopener" class="tracking-link">Ver en ${escapeHTML(p.courier)} ↗</a>` : `Copia el texto que ves en la página de seguimiento de este pedido y pégalo aquí.`}
-      </p>
+      <div class="modal-tabs">
+        <button class="tab-btn ${m.modo==='ia'?'active':''}" onclick="cambiarModoEstadoModal('ia')">Con IA</button>
+        <button class="tab-btn ${m.modo==='manual'?'active':''}" onclick="cambiarModoEstadoModal('manual')">Manual</button>
+      </div>
       ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(m.error)}</div>` : ''}
-      <div class="form-field full">
-        <textarea id="estado-pegado" placeholder="Pega aquí el texto de la página de seguimiento…" onpaste="handlePasteImagenEstado(event)" ${m.loading?'disabled':''}>${escapeHTML(m.texto||'')}</textarea>
-      </div>
-      <div class="form-field full" style="margin-top:4px;">
-        <label>O una captura de pantalla — pega la imagen con Ctrl+V arriba, o sube un archivo</label>
-        <input type="file" id="f-imagen-estado" accept="image/*" onchange="handleImagenEstadoSeleccionada(event)" ${m.loading?'disabled':''}>
-        <div id="imagen-estado-preview" style="margin-top:6px;"></div>
-      </div>
-      ${m.resultado ? `
-        <div class="field-note" style="background:var(--st-recibido-bg);color:var(--st-recibido);margin-top:10px;">
-          La IA sugiere: <strong>${escapeHTML(m.resultado.estado_sugerido)}</strong><br>
-          <span style="font-weight:400;">${escapeHTML(m.resultado.razon||'')}</span>
+      ${m.modo === 'manual' ? `
+        <div class="form-field full">
+          <label>Nuevo estado</label>
+          <select id="estado-manual-select">
+            ${ESTADOS.map(e=>`<option value="${e}" ${p && e===p.estado?'selected':''}>${e}</option>`).join('')}
+          </select>
         </div>
         <div class="form-actions">
           <button class="btn btn-ghost" onclick="closeActualizarEstadoModal()">Cancelar</button>
-          <button class="btn btn-primary" onclick="aplicarEstadoSugerido()">Aplicar este estado</button>
+          <button class="btn btn-primary" onclick="handleAplicarEstadoManual()">Aplicar</button>
         </div>
       ` : `
-        <div class="form-actions">
-          <button class="btn btn-ghost" onclick="closeActualizarEstadoModal()">Cancelar</button>
-          <button class="btn btn-primary" onclick="handleAnalizarEstado()" ${m.loading?'disabled':''}>${m.loading?'Analizando…':'Analizar'}</button>
+        <p style="color:var(--ink-muted);font-size:13px;margin:0 0 14px;">
+          ${url ? `Abre la página de seguimiento, copia el texto que muestra el estado, y pégalo aquí. <a href="${url}" target="_blank" rel="noopener" class="tracking-link">Ver en ${escapeHTML(p.courier)} ↗</a>` : `Copia el texto que ves en la página de seguimiento de este pedido y pégalo aquí.`}
+        </p>
+        <div class="form-field full">
+          <textarea id="estado-pegado" placeholder="Pega aquí el texto de la página de seguimiento…" onpaste="handlePasteImagenEstado(event)" ${m.loading?'disabled':''}>${escapeHTML(m.texto||'')}</textarea>
         </div>
+        <div class="form-field full" style="margin-top:4px;">
+          <label>O una captura de pantalla — pega la imagen con Ctrl+V arriba, o sube un archivo</label>
+          <input type="file" id="f-imagen-estado" accept="image/*" onchange="handleImagenEstadoSeleccionada(event)" ${m.loading?'disabled':''}>
+          <div id="imagen-estado-preview" style="margin-top:6px;"></div>
+        </div>
+        ${m.resultado ? `
+          <div class="field-note" style="background:var(--st-recibido-bg);color:var(--st-recibido);margin-top:10px;">
+            La IA sugiere: <strong>${escapeHTML(m.resultado.estado_sugerido)}</strong><br>
+            <span style="font-weight:400;">${escapeHTML(m.resultado.razon||'')}</span>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-ghost" onclick="closeActualizarEstadoModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="aplicarEstadoSugerido()">Aplicar este estado</button>
+          </div>
+        ` : `
+          <div class="form-actions">
+            <button class="btn btn-ghost" onclick="closeActualizarEstadoModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="handleAnalizarEstado()" ${m.loading?'disabled':''}>${m.loading?'Analizando…':'Analizar'}</button>
+          </div>
+        `}
       `}
     </div>
   </div>`;
@@ -1576,14 +1592,17 @@ function exportarExcelPedidos(desde, hasta){
       return true;
     });
   }
-  const datos = lista.map(p=>({
-    Proveedor: p.proveedor, Área: p.area||'', Solicitante: p.solicitante||'',
-    'N° de seguimiento': p.numero_seguimiento||'', Courier: p.courier||'',
-    Destino: p.destino||'', 'Monto USD': p.monto_usd, 'Monto CLP': p.monto_clp, Estado: p.estado,
-    Internacional: p.internacional ? 'Sí' : 'No', 'Agente aduanero': p.agente_aduanero ? 'Sí' : 'No',
-    'Fecha de la orden': p.fecha_orden||'', 'Fecha registro': p.fecha_registro||'',
-    'Fecha estimada': p.fecha_estimada||'', 'Última actualización': p.fecha_ultima_actualizacion||''
-  }));
+  const datos = lista.map(p=>{
+    const m = pedidoMonto(p);
+    return {
+      Proveedor: p.proveedor, Área: p.area||'', Solicitante: p.solicitante||'',
+      'N° de seguimiento': p.numero_seguimiento||'', Courier: p.courier||'',
+      Destino: p.destino||'', Monto: m.monto, Moneda: m.moneda||'', Estado: p.estado,
+      Internacional: p.internacional ? 'Sí' : 'No', 'Agente aduanero': p.agente_aduanero ? 'Sí' : 'No',
+      'Fecha de la orden': p.fecha_orden||'', 'Fecha registro': p.fecha_registro||'',
+      'Fecha estimada': p.fecha_estimada||'', 'Última actualización': p.fecha_ultima_actualizacion||''
+    };
+  });
   escribirExcel(datos, 'Pedidos', 'pedidos_' + todayISO() + '.xlsx');
 }
 function abrirExportar(){
@@ -1710,14 +1729,14 @@ function render(){
         `}
   ` : `<span class="dias-label">Usa los botones − / + en cada fila para ajustar el stock rápido, sin abrir el formulario.</span>`;
 
-  const bannerHTML = esPedidos ? `<div class="info-banner">El estado se actualiza desde el menú de cada pedido, o usando "Actualizar estado": abre la página de seguimiento con un clic, pega lo que veas, y la IA sugiere el estado correspondiente.</div>` : '';
+  const bannerHTML = '';
 
   const html = `
     <div class="topbar">
       <div class="topbar-inner">
         <div>
           <h1 class="page-title">${esPedidos ? 'Seguimiento de Pedidos' : 'Inventario'}</h1>
-          <p class="page-sub">Innovex — Adquisiciones · <span class="live-dot ${live?'on':'off'}"></span> ${live?'En vivo':'conectando…'}</p>
+          <p class="page-sub">Innovex</p>
         </div>
         <div class="stats-row">${statsHTML}</div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
