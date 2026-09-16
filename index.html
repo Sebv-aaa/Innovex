@@ -203,6 +203,7 @@ let state = {
   pedidos: [],
   pedidosFilters: { search:'', destino:'Todos', estado:'Todos', filtroRapido:null },
   showPedidoModal: false,
+  editPedidoId: null,
   deletePedidoConfirmId: null,
   agenteSummaryModal: null,
   actualizarEstadoModal: null,
@@ -531,6 +532,7 @@ function pedidoRowHTML(p){
         </div>
       ` : `
         ${p.pendiente_revision && puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="markAsReviewed('${p.id}')">Marcar como revisado</button>` : ''}
+        ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="openPedidoModal('${p.id}')">Editar</button>` : ''}
         ${p.numero_seguimiento && puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="openActualizarEstadoModal('${p.id}')">Actualizar estado</button>` : ''}
         ${p.agente_aduanero ? `<button class="btn-ghost btn-sm" onclick="handleAgenteSummary('${p.id}')">Resumen para agente</button>` : ''}
         ${p.documento_path
@@ -562,8 +564,33 @@ function pedidosListInnerHTML(){
 }
 function renderPedidosList(){ const c = document.getElementById('list-container'); if(c) c.innerHTML = pedidosListInnerHTML(); }
 
-function openPedidoModal(){ imagenExtraida = null; state.showPedidoModal = true; render(); validatePedidoForm(); }
-function closePedidoModal(){ state.showPedidoModal = false; render(); }
+function openPedidoModal(editId){
+  imagenExtraida = null;
+  state.editPedidoId = editId || null;
+  state.showPedidoModal = true;
+  render();
+  validatePedidoForm();
+  if(editId){
+    const p = state.pedidos.find(x=>x.id===editId);
+    if(p){
+      const m = pedidoMonto(p);
+      document.getElementById('f-proveedor').value = p.proveedor || '';
+      document.getElementById('f-moneda').value = m.moneda || 'CLP';
+      document.getElementById('f-monto').value = m.monto != null ? m.monto : '';
+      document.getElementById('f-tracking').value = p.numero_seguimiento || '';
+      document.getElementById('f-courier').value = p.courier || '';
+      document.getElementById('f-destino').value = p.destino || '';
+      document.getElementById('f-fecha').value = p.fecha_estimada || '';
+      document.getElementById('f-fecha-orden').value = p.fecha_orden || '';
+      document.getElementById('f-area').value = p.area || '';
+      document.getElementById('f-solicitante').value = p.solicitante || '';
+      document.getElementById('f-internacional').checked = !!p.internacional;
+      document.getElementById('f-agente-aduanero').checked = !!p.agente_aduanero;
+      validatePedidoForm();
+    }
+  }
+}
+function closePedidoModal(){ state.showPedidoModal = false; state.editPedidoId = null; render(); }
 function isPedidoFormValid(){
   const proveedor = document.getElementById('f-proveedor').value.trim();
   const monto = parseFloat(document.getElementById('f-monto').value);
@@ -669,9 +696,8 @@ async function handleGuardar(){
     const moneda = document.getElementById('f-moneda').value;
     const monto = parseFloat(document.getElementById('f-monto').value);
     const internacional = document.getElementById('f-internacional').checked;
-    const pedido = {
-      id: uidPedido(), proveedor,
-      monto, moneda,
+    const datosComunes = {
+      proveedor, monto, moneda,
       numero_seguimiento: document.getElementById('f-tracking').value.trim() || null,
       courier: document.getElementById('f-courier').value,
       destino: document.getElementById('f-destino').value,
@@ -680,14 +706,26 @@ async function handleGuardar(){
       area: document.getElementById('f-area').value.trim() || null,
       solicitante: document.getElementById('f-solicitante').value.trim() || null,
       internacional,
-      estado: 'En proceso', fecha_registro: todayISO(), fecha_ultima_actualizacion: todayISO(),
-      agente_aduanero: document.getElementById('f-agente-aduanero').checked, pendiente_revision: false
+      agente_aduanero: document.getElementById('f-agente-aduanero').checked
     };
-    await apiCreatePedido(pedido);
-    state.pedidos.unshift(pedido);
-    registrarHistorial('pedido', pedido.id, 'Pedido creado (' + proveedor + ')');
+    if(state.editPedidoId){
+      const datos = Object.assign({}, datosComunes, { fecha_ultima_actualizacion: todayISO() });
+      await apiUpdatePedido(state.editPedidoId, datos);
+      const p = state.pedidos.find(x=>x.id===state.editPedidoId);
+      if(p) Object.assign(p, datos);
+      registrarHistorial('pedido', state.editPedidoId, 'Pedido editado (' + proveedor + ')');
+      state.toast = 'Pedido actualizado — ' + proveedor;
+    }else{
+      const pedido = Object.assign({ id: uidPedido() }, datosComunes, {
+        estado: 'En proceso', fecha_registro: todayISO(), fecha_ultima_actualizacion: todayISO(), pendiente_revision: false
+      });
+      await apiCreatePedido(pedido);
+      state.pedidos.unshift(pedido);
+      registrarHistorial('pedido', pedido.id, 'Pedido creado (' + proveedor + ')');
+      state.toast = 'Pedido guardado — ' + proveedor;
+    }
     state.showPedidoModal = false;
-    state.toast = 'Pedido guardado — ' + proveedor;
+    state.editPedidoId = null;
     render();
     setTimeout(()=>{ state.toast = null; render(); }, 2600);
   }catch(err){
@@ -1140,15 +1178,16 @@ function assistantPanelHTML(){
    MODALES
    ============================================================ */
 function pedidoModalHTML(){
+  const editando = !!state.editPedidoId;
   return `
   <div class="modal-backdrop" onclick="if(event.target===this) closePedidoModal()">
     <div class="modal">
       <button class="modal-close" onclick="closePedidoModal()">×</button>
-      <h2 class="modal-title">Nuevo pedido</h2>
-      <p style="color:var(--ink-muted);font-size:13px;margin:0;">Registra el pedido manualmente o pega el correo de confirmación para que la IA complete los datos.</p>
+      <h2 class="modal-title">${editando ? 'Editar pedido' : 'Nuevo pedido'}</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0;">${editando ? 'Corrige o completa cualquier dato del pedido.' : 'Registra el pedido manualmente o pega el correo de confirmación para que la IA complete los datos.'}</p>
       <div class="modal-tabs">
         <button class="tab-btn active" id="tabbtn-manual" onclick="showTab('manual')">Datos manuales</button>
-        <button class="tab-btn" id="tabbtn-pegar" onclick="showTab('pegar')">Pegar correo / mensaje</button>
+        ${editando ? '' : `<button class="tab-btn" id="tabbtn-pegar" onclick="showTab('pegar')">Pegar correo / mensaje</button>`}
       </div>
       <div id="tab-pegar" style="display:none;">
         <div class="form-field full">
@@ -1227,7 +1266,7 @@ function pedidoModalHTML(){
         <div class="dias-label" id="form-hint" style="grid-column:1 / -1;">Completa todos los campos marcados con * para poder guardar.</div>
         <div class="form-actions" style="grid-column:1 / -1;">
           <button type="button" class="btn btn-ghost" onclick="closePedidoModal()">Cancelar</button>
-          <button type="button" id="btn-guardar" class="btn btn-primary" onclick="handleGuardar()" disabled>Guardar pedido</button>
+          <button type="button" id="btn-guardar" class="btn btn-primary" onclick="handleGuardar()" disabled>${editando ? 'Guardar cambios' : 'Guardar pedido'}</button>
         </div>
       </div>
     </div>
