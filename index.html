@@ -40,6 +40,9 @@
   .stat-chip.warn{ border-left-color:var(--st-atrasado); }
   .stat-value{ font-family:var(--font-display); font-size:22px; font-weight:600; line-height:1.1; }
   .stat-label{ font-size:11.5px; color:var(--ink-muted); margin-top:2px; }
+  button.stat-chip{ background:none; font-family:inherit; text-align:left; cursor:pointer; }
+  button.stat-chip:hover{ opacity:0.75; }
+  .stat-chip-active{ background:var(--surface-alt); border-radius:4px; padding:2px 8px 2px 6px; margin-left:-6px; }
 
   .tabs-row{ max-width:1280px; margin:0 auto; display:flex; gap:4px; }
   .tab-item{ background:none; border:none; padding:10px 4px; margin-right:22px; font-size:14px; font-family:var(--font-ui);
@@ -83,6 +86,8 @@
   .col-estado{ flex:1.8; }
   .col-fecha{ flex:1; }
   .col-acciones{ flex:1.2; text-align:right; }
+  .col-alertas{ flex:0 0 26px; display:flex; flex-direction:column; gap:4px; align-items:center; }
+  .alerta-icono{ font-size:15px; line-height:1; cursor:default; }
 
   .item-nombre, .proveedor-name{ font-weight:600; margin-bottom:3px; }
   .item-notas{ font-size:12px; color:var(--ink-muted); }
@@ -173,6 +178,7 @@ const COURIERS = ['DHL','UPS','MercadoLibre','Otro'];
 const DESTINOS = ['Puerto Montt','Valdivia'];
 const UBICACIONES = ['Puerto Montt','Valdivia'];
 const CATEGORIAS_SUGERIDAS = ['Herramientas','Tecnología','Materiales de maestranza','Seguridad','Oficina'];
+const AREAS_SUGERIDAS = ['Adquisiciones','Bodega','Logística','Mantenimiento','Operaciones','Administración'];
 const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const DEFAULT_TC = 930;
 
@@ -193,7 +199,7 @@ let state = {
 
   // ---- Pedidos ----
   pedidos: [],
-  pedidosFilters: { search:'', destino:'Todos', estado:'Todos' },
+  pedidosFilters: { search:'', destino:'Todos', estado:'Todos', filtroRapido:null },
   showPedidoModal: false,
   deletePedidoConfirmId: null,
   agenteSummaryModal: null,
@@ -202,7 +208,7 @@ let state = {
 
   // ---- Inventario ----
   insumos: [],
-  insumosFilters: { search:'', ubicacion:'Todos', categoria:'Todas' },
+  insumosFilters: { search:'', ubicacion:'Todos', categoria:'Todas', filtroRapido:null },
   showInsumoModal: false,
   editInsumoId: null,
   deleteInsumoConfirmId: null,
@@ -211,6 +217,7 @@ let state = {
   historialModal: null,
   transferirModal: null,
   adjuntarModal: null,
+  exportarModal: null,
   rol: 'editor'
 };
 
@@ -438,10 +445,15 @@ function computePedidoStats(){
   return { activos, atrasados, conAgente, pendientesRevision, vencidos };
 }
 function getFilteredPedidos(){
-  const { search, destino, estado } = state.pedidosFilters;
+  const { search, destino, estado, filtroRapido } = state.pedidosFilters;
   return state.pedidos.filter(p=>{
     if(destino!=='Todos' && p.destino!==destino) return false;
     if(estado!=='Todos' && p.estado!==estado) return false;
+    if(filtroRapido==='activos' && p.estado==='Recibido') return false;
+    if(filtroRapido==='atrasados' && !(p.estado!=='Recibido' && daysSince(p.fecha_ultima_actualizacion)>=5)) return false;
+    if(filtroRapido==='agente' && !p.agente_aduanero) return false;
+    if(filtroRapido==='revision' && !p.pendiente_revision) return false;
+    if(filtroRapido==='vencidos' && !estaVencido(p)) return false;
     if(search){
       const s = search.toLowerCase();
       const hay = (p.proveedor||'').toLowerCase().includes(s) || (p.numero_seguimiento||'').toLowerCase().includes(s);
@@ -454,8 +466,18 @@ function pedidoRowHTML(p){
   const meta = STATUS_META[p.estado] || STATUS_META['En proceso'];
   const dias = daysSince(p.fecha_ultima_actualizacion);
   const atrasado = p.estado!=='Recibido' && dias>=5;
+  const vencido = estaVencido(p);
+  const alertasIzquierda = [
+    vencido ? { icono:'⏰', titulo:'Vencido — pasó la fecha estimada de llegada' } : null,
+    atrasado ? { icono:'⚠', titulo:'Sin novedades hace ' + dias + ' días' } : null,
+    p.agente_aduanero ? { icono:'🛂', titulo:'Requiere agente aduanero' } : null,
+    p.pendiente_revision ? { icono:'✦', titulo:'Creado por IA — pendiente de revisión' } : null
+  ].filter(Boolean);
   return `
   <div class="row-item" style="border-left-color:${meta.color}">
+    <div class="col-alertas" title="${alertasIzquierda.map(a=>a.titulo).join(' · ')}">
+      ${alertasIzquierda.map(a=>`<span class="alerta-icono" title="${escapeHTML(a.titulo)}">${a.icono}</span>`).join('')}
+    </div>
     <div class="col col-proveedor">
       <div class="proveedor-name">${escapeHTML(p.proveedor)} ${p.pendiente_revision ? '<span class="badge badge-revision">✦ Creado por IA — pendiente de revisión</span>' : ''}</div>
       <div class="tracking-line">
@@ -463,6 +485,7 @@ function pedidoRowHTML(p){
         <span class="tracking-num">${escapeHTML(p.numero_seguimiento||'sin N° de seguimiento')}</span>
         ${trackingUrl(p) ? `<a href="${trackingUrl(p)}" target="_blank" rel="noopener" class="tracking-link">Ver en ${escapeHTML(p.courier)} ↗</a>` : ''}
       </div>
+      ${(p.area || p.solicitante) ? `<div class="dias-label">${[p.area, p.solicitante].filter(Boolean).map(escapeHTML).join(' · ')}</div>` : ''}
     </div>
     <div class="col col-destino">${escapeHTML(p.destino||'—')}</div>
     <div class="col col-monto">
@@ -482,7 +505,8 @@ function pedidoRowHTML(p){
     <div class="col col-fecha">
       <div class="dias-label">llega</div>
       <div>${fmtDate(p.fecha_estimada)}</div>
-      ${estaVencido(p) ? `<span class="badge badge-atrasado" style="margin-top:4px;">⚠ Vencido</span>` : ''}
+      ${p.fecha_orden ? `<div class="dias-label">orden: ${fmtDate(p.fecha_orden)}</div>` : ''}
+      ${vencido ? `<span class="badge badge-atrasado" style="margin-top:4px;">⚠ Vencido</span>` : ''}
     </div>
     <div class="col col-acciones" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
       ${state.deletePedidoConfirmId === p.id ? `
@@ -655,6 +679,7 @@ async function handleGuardar(){
       if(moneda === 'CLP'){ monto_clp = montoInput; monto_usd = +(montoInput/tc).toFixed(2); }
       else{ monto_usd = montoInput; monto_clp = Math.round(montoInput*tc); }
     }
+    const internacional = document.getElementById('f-internacional').checked;
     const pedido = {
       id: uidPedido(), proveedor,
       monto_usd, monto_clp, moneda_ingreso: moneda, tipo_cambio: tc,
@@ -662,8 +687,12 @@ async function handleGuardar(){
       courier: document.getElementById('f-courier').value,
       destino: document.getElementById('f-destino').value,
       fecha_estimada: document.getElementById('f-fecha').value || null,
+      fecha_orden: document.getElementById('f-fecha-orden').value || null,
+      area: document.getElementById('f-area').value.trim() || null,
+      solicitante: document.getElementById('f-solicitante').value.trim() || null,
+      internacional,
       estado: 'En proceso', fecha_registro: todayISO(), fecha_ultima_actualizacion: todayISO(),
-      agente_aduanero: !!(monto_usd && monto_usd > 3000), pendiente_revision: false
+      agente_aduanero: !!(internacional && monto_usd && monto_usd > 3000), pendiente_revision: false
     };
     await apiCreatePedido(pedido);
     state.pedidos.unshift(pedido);
@@ -750,16 +779,56 @@ async function copyAgenteText(){
   const el = document.getElementById('copy-feedback');
   if(el) el.textContent = ok ? 'Copiado ✓' : 'No se pudo copiar automáticamente — selecciona el texto y cópialo manualmente.';
 }
-function openActualizarEstadoModal(id){ state.actualizarEstadoModal = { pedidoId:id, texto:'', loading:false, resultado:null, error:null }; render(); }
+let imagenEstado = null; // { data, media_type } o null
+function openActualizarEstadoModal(id){ imagenEstado = null; state.actualizarEstadoModal = { pedidoId:id, texto:'', loading:false, resultado:null, error:null }; render(); }
 function closeActualizarEstadoModal(){ state.actualizarEstadoModal = null; render(); }
+function leerImagenEstadoComoBase64(file){
+  if(!file || file.type.indexOf('image') === -1) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const resultado = reader.result;
+    const match = resultado.match(/^data:(.*?);base64,(.*)$/);
+    if(!match) return;
+    imagenEstado = { media_type: match[1], data: match[2] };
+    const cont = document.getElementById('imagen-estado-preview');
+    if(cont){
+      cont.innerHTML = `<img src="${resultado}" style="max-width:170px;max-height:130px;border-radius:4px;border:1px solid var(--border);display:block;margin-bottom:6px;">
+        <button type="button" class="link-btn" onclick="quitarImagenEstado()">Quitar imagen</button>`;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+function handlePasteImagenEstado(event){
+  const items = event.clipboardData && event.clipboardData.items;
+  if(!items) return;
+  for(const item of items){
+    if(item.type.indexOf('image') !== -1){
+      leerImagenEstadoComoBase64(item.getAsFile());
+      event.preventDefault();
+      break;
+    }
+  }
+}
+function handleImagenEstadoSeleccionada(event){
+  const file = event.target.files && event.target.files[0];
+  if(file) leerImagenEstadoComoBase64(file);
+}
+function quitarImagenEstado(){
+  imagenEstado = null;
+  const cont = document.getElementById('imagen-estado-preview');
+  if(cont) cont.innerHTML = '';
+  const input = document.getElementById('f-imagen-estado');
+  if(input) input.value = '';
+}
 async function handleAnalizarEstado(){
   const texto = document.getElementById('estado-pegado').value.trim();
-  if(!texto){ state.actualizarEstadoModal.error = 'Pega primero el texto que ves en la página de seguimiento.'; render(); return; }
+  if(!texto && !imagenEstado){ state.actualizarEstadoModal.error = 'Pega el texto, o sube/pega una captura de la página de seguimiento.'; render(); return; }
   state.actualizarEstadoModal.texto = texto; state.actualizarEstadoModal.loading = true;
   state.actualizarEstadoModal.error = null; state.actualizarEstadoModal.resultado = null;
   render();
   try{
-    const raw = await callClaude(ESTADO_DESDE_TEXTO_PROMPT, texto);
+    const mensaje = texto || 'Determina el estado del envío a partir de esta captura de la página de seguimiento.';
+    const raw = await callClaude(ESTADO_DESDE_TEXTO_PROMPT, mensaje, imagenEstado);
     const data = parseJSONLoose(raw);
     if(!data.estado_sugerido || !ESTADOS.includes(data.estado_sugerido)){ state.actualizarEstadoModal.error = data.razon || 'No se pudo determinar un estado a partir de ese texto.'; }
     else{ state.actualizarEstadoModal.resultado = data; }
@@ -814,10 +883,12 @@ function computeInsumoStats(){
   return { totalInsumos, unidadesTotales, sinActualizar, bajoStock };
 }
 function getFilteredInsumos(){
-  const { search, ubicacion, categoria } = state.insumosFilters;
+  const { search, ubicacion, categoria, filtroRapido } = state.insumosFilters;
   return state.insumos.filter(i=>{
     if(ubicacion!=='Todos' && i.ubicacion!==ubicacion) return false;
     if(categoria!=='Todas' && (i.categoria||'')!==categoria) return false;
+    if(filtroRapido==='bajo' && !stockBajo(i)) return false;
+    if(filtroRapido==='viejo' && daysSince(i.fecha_ultima_actualizacion) < 90) return false;
     if(search){ const s = search.toLowerCase(); if(!(i.nombre||'').toLowerCase().includes(s)) return false; }
     return true;
   });
@@ -1137,6 +1208,23 @@ function pedidoModalHTML(){
           <label>Fecha estimada de llegada *</label>
           <input type="date" id="f-fecha" onchange="validatePedidoForm()">
         </div>
+        <div class="form-field">
+          <label>Fecha de la orden / pago</label>
+          <input type="date" id="f-fecha-orden">
+        </div>
+        <div class="form-field">
+          <label>Área / centro de costo</label>
+          <input type="text" id="f-area" list="areas-list" placeholder="Ej: Bodega, Logística">
+          <datalist id="areas-list">${AREAS_SUGERIDAS.map(a=>`<option value="${a}">`).join('')}</datalist>
+        </div>
+        <div class="form-field">
+          <label>Solicitado por</label>
+          <input type="text" id="f-solicitante" placeholder="Nombre de la persona">
+        </div>
+        <div class="form-field full" style="flex-direction:row;align-items:center;gap:8px;">
+          <input type="checkbox" id="f-internacional" style="width:auto;">
+          <label style="margin:0;">Es una compra internacional (afecta si requiere agente aduanero)</label>
+        </div>
         <div class="dias-label" id="form-hint" style="grid-column:1 / -1;">Completa todos los campos marcados con * para poder guardar.</div>
         <div class="form-actions" style="grid-column:1 / -1;">
           <button type="button" class="btn btn-ghost" onclick="closePedidoModal()">Cancelar</button>
@@ -1182,7 +1270,12 @@ function actualizarEstadoModalHTML(){
       </p>
       ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(m.error)}</div>` : ''}
       <div class="form-field full">
-        <textarea id="estado-pegado" placeholder="Pega aquí el texto de la página de seguimiento…" ${m.loading?'disabled':''}>${escapeHTML(m.texto||'')}</textarea>
+        <textarea id="estado-pegado" placeholder="Pega aquí el texto de la página de seguimiento…" onpaste="handlePasteImagenEstado(event)" ${m.loading?'disabled':''}>${escapeHTML(m.texto||'')}</textarea>
+      </div>
+      <div class="form-field full" style="margin-top:4px;">
+        <label>O una captura de pantalla — pega la imagen con Ctrl+V arriba, o sube un archivo</label>
+        <input type="file" id="f-imagen-estado" accept="image/*" onchange="handleImagenEstadoSeleccionada(event)" ${m.loading?'disabled':''}>
+        <div id="imagen-estado-preview" style="margin-top:6px;"></div>
       </div>
       ${m.resultado ? `
         <div class="field-note" style="background:var(--st-recibido-bg);color:var(--st-recibido);margin-top:10px;">
@@ -1442,27 +1535,17 @@ function insumoModalHTML(){
 /* ============================================================
    RENDER PRINCIPAL
    ============================================================ */
+function toggleFiltroRapidoPedidos(valor){
+  state.pedidosFilters.filtroRapido = (state.pedidosFilters.filtroRapido === valor) ? null : valor;
+  render();
+}
+function toggleFiltroRapidoInsumos(valor){
+  state.insumosFilters.filtroRapido = (state.insumosFilters.filtroRapido === valor) ? null : valor;
+  render();
+}
 function switchVista(v){ state.vista = v; render(); }
 
-function exportarExcel(){
-  const esPedidos = state.vista === 'pedidos';
-  let datos, nombreHoja, nombreArchivo;
-  if(esPedidos){
-    datos = getFilteredPedidos().map(p=>({
-      Proveedor: p.proveedor, 'N° de seguimiento': p.numero_seguimiento||'', Courier: p.courier||'',
-      Destino: p.destino||'', 'Monto USD': p.monto_usd, 'Monto CLP': p.monto_clp, Estado: p.estado,
-      'Agente aduanero': p.agente_aduanero ? 'Sí' : 'No', 'Fecha registro': p.fecha_registro||'',
-      'Fecha estimada': p.fecha_estimada||'', 'Última actualización': p.fecha_ultima_actualizacion||''
-    }));
-    nombreHoja = 'Pedidos'; nombreArchivo = 'pedidos_' + todayISO() + '.xlsx';
-  }else{
-    datos = getFilteredInsumos().map(i=>({
-      Nombre: i.nombre, Categoría: i.categoria||'', Ubicación: i.ubicacion, Cantidad: i.cantidad,
-      Unidad: i.unidad||'', 'Stock mínimo': i.stock_minimo!=null ? i.stock_minimo : '',
-      Notas: i.notas||'', 'Última actualización': i.fecha_ultima_actualizacion||''
-    }));
-    nombreHoja = 'Inventario'; nombreArchivo = 'inventario_' + todayISO() + '.xlsx';
-  }
+function escribirExcel(datos, nombreHoja, nombreArchivo){
   if(datos.length === 0){
     state.toast = 'No hay datos para exportar con el filtro actual.';
     render();
@@ -1473,6 +1556,83 @@ function exportarExcel(){
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
   XLSX.writeFile(wb, nombreArchivo);
+}
+function exportarExcelInsumos(){
+  const datos = getFilteredInsumos().map(i=>({
+    Nombre: i.nombre, Categoría: i.categoria||'', Ubicación: i.ubicacion, Cantidad: i.cantidad,
+    Unidad: i.unidad||'', 'Stock mínimo': i.stock_minimo!=null ? i.stock_minimo : '',
+    Notas: i.notas||'', 'Última actualización': i.fecha_ultima_actualizacion||''
+  }));
+  escribirExcel(datos, 'Inventario', 'inventario_' + todayISO() + '.xlsx');
+}
+function exportarExcelPedidos(desde, hasta){
+  let lista = getFilteredPedidos();
+  if(desde || hasta){
+    lista = lista.filter(p=>{
+      const fecha = p.fecha_orden || p.fecha_registro;
+      if(!fecha) return false;
+      if(desde && fecha < desde) return false;
+      if(hasta && fecha > hasta) return false;
+      return true;
+    });
+  }
+  const datos = lista.map(p=>({
+    Proveedor: p.proveedor, Área: p.area||'', Solicitante: p.solicitante||'',
+    'N° de seguimiento': p.numero_seguimiento||'', Courier: p.courier||'',
+    Destino: p.destino||'', 'Monto USD': p.monto_usd, 'Monto CLP': p.monto_clp, Estado: p.estado,
+    Internacional: p.internacional ? 'Sí' : 'No', 'Agente aduanero': p.agente_aduanero ? 'Sí' : 'No',
+    'Fecha de la orden': p.fecha_orden||'', 'Fecha registro': p.fecha_registro||'',
+    'Fecha estimada': p.fecha_estimada||'', 'Última actualización': p.fecha_ultima_actualizacion||''
+  }));
+  escribirExcel(datos, 'Pedidos', 'pedidos_' + todayISO() + '.xlsx');
+}
+function abrirExportar(){
+  if(state.vista !== 'pedidos'){ exportarExcelInsumos(); return; }
+  state.exportarModal = { rango:'todo' };
+  render();
+}
+function cerrarExportarModal(){ state.exportarModal = null; render(); }
+function confirmarExportar(){
+  const m = state.exportarModal;
+  let desde = null, hasta = null;
+  if(m.rango === '7d'){ desde = addDaysISO(-7); hasta = todayISO(); }
+  else if(m.rango === '30d'){ desde = addDaysISO(-30); hasta = todayISO(); }
+  else if(m.rango === 'personalizado'){
+    desde = document.getElementById('f-export-desde').value || null;
+    hasta = document.getElementById('f-export-hasta').value || null;
+  }
+  state.exportarModal = null;
+  render();
+  exportarExcelPedidos(desde, hasta);
+}
+function exportarModalHTML(){
+  const m = state.exportarModal;
+  if(!m) return '';
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) cerrarExportarModal()">
+    <div class="modal" style="max-width:400px;">
+      <button class="modal-close" onclick="cerrarExportarModal()">×</button>
+      <h2 class="modal-title">Exportar pedidos</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0 0 14px;">Usa la fecha de la orden (o de registro, si no tiene) para el rango. Se exportan los pedidos que coincidan con los filtros que tengas aplicados en la lista.</p>
+      <div class="form-field full">
+        <label>Rango</label>
+        <select id="f-export-rango" onchange="state.exportarModal.rango=this.value; document.getElementById('export-rango-custom').style.display = this.value==='personalizado' ? 'grid' : 'none';">
+          <option value="todo" ${m.rango==='todo'?'selected':''}>Todo</option>
+          <option value="7d" ${m.rango==='7d'?'selected':''}>Últimos 7 días</option>
+          <option value="30d" ${m.rango==='30d'?'selected':''}>Últimos 30 días</option>
+          <option value="personalizado" ${m.rango==='personalizado'?'selected':''}>Rango personalizado</option>
+        </select>
+      </div>
+      <div id="export-rango-custom" style="display:${m.rango==='personalizado'?'grid':'none'};grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
+        <div class="form-field"><label>Desde</label><input type="date" id="f-export-desde"></div>
+        <div class="form-field"><label>Hasta</label><input type="date" id="f-export-hasta"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="cerrarExportarModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmarExportar()">Exportar</button>
+      </div>
+    </div>
+  </div>`;
 }
 
 function render(){
@@ -1490,17 +1650,19 @@ function render(){
   const iStats = computeInsumoStats();
   const live = esPedidos ? state.realtimeConectado.pedidos : state.realtimeConectado.insumos;
 
+  const fp = state.pedidosFilters.filtroRapido;
+  const fi = state.insumosFilters.filtroRapido;
   const statsHTML = esPedidos ? `
-    <div class="stat-chip"><div class="stat-value">${pStats.activos}</div><div class="stat-label">pedidos activos</div></div>
-    <div class="stat-chip warn"><div class="stat-value">${pStats.atrasados}</div><div class="stat-label">sin novedades &gt;5 días</div></div>
-    <div class="stat-chip amber" style="border-left-color:var(--accent-warm)"><div class="stat-value">${pStats.conAgente}</div><div class="stat-label">con agente aduanero</div></div>
-    <div class="stat-chip" style="border-left-color:var(--st-transito)"><div class="stat-value">${pStats.pendientesRevision}</div><div class="stat-label">pendientes de revisión</div></div>
-    <div class="stat-chip warn"><div class="stat-value">${pStats.vencidos}</div><div class="stat-label">vencidos (pasó la fecha)</div></div>
+    <button type="button" class="stat-chip ${fp==='activos'?'stat-chip-active':''}" onclick="toggleFiltroRapidoPedidos('activos')"><div class="stat-value">${pStats.activos}</div><div class="stat-label">pedidos activos</div></button>
+    <button type="button" class="stat-chip warn ${fp==='atrasados'?'stat-chip-active':''}" onclick="toggleFiltroRapidoPedidos('atrasados')"><div class="stat-value">${pStats.atrasados}</div><div class="stat-label">sin novedades &gt;5 días</div></button>
+    <button type="button" class="stat-chip amber ${fp==='agente'?'stat-chip-active':''}" style="border-left-color:var(--accent-warm)" onclick="toggleFiltroRapidoPedidos('agente')"><div class="stat-value">${pStats.conAgente}</div><div class="stat-label">con agente aduanero</div></button>
+    <button type="button" class="stat-chip ${fp==='revision'?'stat-chip-active':''}" style="border-left-color:var(--st-transito)" onclick="toggleFiltroRapidoPedidos('revision')"><div class="stat-value">${pStats.pendientesRevision}</div><div class="stat-label">pendientes de revisión</div></button>
+    <button type="button" class="stat-chip warn ${fp==='vencidos'?'stat-chip-active':''}" onclick="toggleFiltroRapidoPedidos('vencidos')"><div class="stat-value">${pStats.vencidos}</div><div class="stat-label">vencidos (pasó la fecha)</div></button>
   ` : `
     <div class="stat-chip"><div class="stat-value">${iStats.totalInsumos}</div><div class="stat-label">insumos distintos</div></div>
     <div class="stat-chip"><div class="stat-value">${iStats.unidadesTotales}</div><div class="stat-label">unidades totales</div></div>
-    <div class="stat-chip warn"><div class="stat-value">${iStats.sinActualizar}</div><div class="stat-label">sin actualizar &gt;90 días</div></div>
-    <div class="stat-chip warn"><div class="stat-value">${iStats.bajoStock}</div><div class="stat-label">con stock bajo</div></div>
+    <button type="button" class="stat-chip warn ${fi==='viejo'?'stat-chip-active':''}" onclick="toggleFiltroRapidoInsumos('viejo')"><div class="stat-value">${iStats.sinActualizar}</div><div class="stat-label">sin actualizar &gt;90 días</div></button>
+    <button type="button" class="stat-chip warn ${fi==='bajo'?'stat-chip-active':''}" onclick="toggleFiltroRapidoInsumos('bajo')"><div class="stat-value">${iStats.bajoStock}</div><div class="stat-label">con stock bajo</div></button>
   `;
 
   const controlsHTML = esPedidos ? `
@@ -1515,7 +1677,7 @@ function render(){
           ${ESTADOS.map(e=>`<option ${state.pedidosFilters.estado===e?'selected':''}>${e}</option>`).join('')}
         </select>
         <div class="spacer"></div>
-        <button class="btn-ghost" onclick="exportarExcel()">Exportar</button>
+        <button class="btn-ghost" onclick="abrirExportar()">Exportar</button>
         ${puedeEditar() ? `<button class="btn btn-primary" onclick="openPedidoModal()">+ Nuevo pedido</button>` : ''}
   ` : `
         <input type="text" placeholder="Buscar por nombre…" value="${escapeHTML(state.insumosFilters.search)}"
@@ -1529,7 +1691,7 @@ function render(){
           ${categoriasExistentes().map(c=>`<option ${state.insumosFilters.categoria===c?'selected':''}>${c}</option>`).join('')}
         </select>
         <div class="spacer"></div>
-        <button class="btn-ghost" onclick="exportarExcel()">Exportar</button>
+        <button class="btn-ghost" onclick="abrirExportar()">Exportar</button>
         ${puedeEditar() ? `<button class="btn btn-primary" onclick="openInsumoModal()">+ Nuevo insumo</button>` : ''}
   `;
 
@@ -1586,6 +1748,7 @@ function render(){
     ${state.historialModal ? historialModalHTML() : ''}
     ${state.transferirModal ? transferirModalHTML() : ''}
     ${state.adjuntarModal ? adjuntarModalHTML() : ''}
+    ${state.exportarModal ? exportarModalHTML() : ''}
     ${state.toast ? `<div class="toast">${escapeHTML(state.toast)}</div>` : ''}
   `;
   document.getElementById('app').innerHTML = html;
