@@ -45,7 +45,7 @@ Responde ÚNICAMENTE con un objeto JSON, sin texto adicional, sin backticks. Usa
 - pedido_existente_id (el "id" de la lista de arriba si el correo se refiere a uno de esos pedidos, o null si es un pedido genuinamente nuevo que no está en la lista)
 - proveedor (string o null)
 - monto (número o null)
-- moneda ("USD", "CLP" o null)
+- moneda ("USD", "CLP", "EUR" o null)
 - numero_seguimiento (string o null)
 - courier (uno de "DHL", "UPS", "MercadoLibre", "Otro", o null)
 - destino ("Puerto Montt", "Valdivia" o null)
@@ -84,7 +84,7 @@ async function supaPatch(path, body) {
 }
 
 async function obtenerPedidosActivos() {
-  return supaGet('pedidos?estado=neq.Recibido&select=id,proveedor,numero_seguimiento,monto_usd,monto_clp,destino,estado');
+  return supaGet('pedidos?estado=neq.Recibido&select=id,proveedor,numero_seguimiento,monto,moneda,destino,estado');
 }
 
 async function clasificarCorreo(asunto, texto, pedidosActivos) {
@@ -196,9 +196,8 @@ async function main() {
         const nuevoPedido = {
           id: nuevoId(),
           proveedor: resultado.proveedor,
-          monto_usd: resultado.moneda === 'CLP' ? null : resultado.monto,
-          monto_clp: resultado.moneda === 'CLP' ? resultado.monto : null,
-          moneda_ingreso: resultado.moneda || null,
+          monto: resultado.monto || null,
+          moneda: resultado.moneda || null,
           numero_seguimiento: resultado.numero_seguimiento || null,
           courier: resultado.courier || null,
           destino: resultado.destino || null,
@@ -206,7 +205,10 @@ async function main() {
           fecha_registro: todayISO(),
           fecha_estimada: resultado.fecha_estimada || null,
           fecha_ultima_actualizacion: todayISO(),
-          agente_aduanero: !!(resultado.moneda !== 'CLP' && resultado.monto && resultado.monto > 3000),
+          // "Requiere agente aduanero" quedó como campo totalmente manual en el
+          // formulario (sin cálculo automático, por el bug de compras domésticas
+          // grandes) — no se calcula acá a propósito. Queda para revisión manual
+          // junto con el resto de pendiente_revision.
           pendiente_revision: true,
         };
         await supaPost('pedidos', nuevoPedido);
