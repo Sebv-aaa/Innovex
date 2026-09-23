@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Innovex — Dashboard</title>
+<title>Innovex — Adquisiciones</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg:#F5F4EF; --surface:#FFFFFF; --surface-alt:#EFEEE6; --border:#DEDCD1;
@@ -27,88 +27,222 @@
   #app{min-height:100vh;}
   .center-loading{ display:flex;align-items:center;justify-content:center;height:100vh; color:var(--ink-muted); font-family:var(--font-display); font-size:18px; }
   .login-box{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:36px 34px; width:100%; max-width:380px; text-align:left; }
-  .form-field label{ font-size:12px; color:var(--ink-muted); display:block; margin-bottom:5px; }
-  .form-field input{ width:100%; font-family:var(--font-ui); font-size:14px; padding:9px 10px; border:1px solid var(--border); border-radius:4px; background:var(--surface); color:var(--ink); outline:none; }
-  .form-field input:focus{ border-color:var(--accent); }
-  .field-note{ font-size:12px; color:var(--accent-warm); background:var(--accent-warm-bg); padding:8px 10px; border-radius:4px; margin-bottom:14px; }
+
+  .topbar{ padding:24px 40px 0; border-bottom:1px solid var(--border); background:var(--surface); }
+  .topbar-inner{ display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap; max-width:1280px; margin:0 auto; padding-bottom:18px; }
+  .page-title{ font-family:var(--font-display); font-size:26px; font-weight:600; margin:0 0 4px 0; letter-spacing:-0.01em; }
+  .page-sub{ color:var(--ink-muted); font-size:13px; margin:0; }
+  .live-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-left:6px; vertical-align:middle; }
+  .live-dot.on{ background:var(--st-recibido); }
+  .live-dot.off{ background:var(--ink-muted); }
+  .stats-row{ display:flex; gap:22px; flex-wrap:wrap; }
+  .stat-chip{ border-left:3px solid var(--accent); padding-left:10px; min-width:90px; }
+  .stat-chip.warn{ border-left-color:var(--st-atrasado); }
+  .stat-value{ font-family:var(--font-display); font-size:22px; font-weight:600; line-height:1.1; }
+  .stat-label{ font-size:11.5px; color:var(--ink-muted); margin-top:2px; }
+  button.stat-chip{ background:none; font-family:inherit; text-align:left; cursor:pointer; border-radius:4px; padding:4px 10px 4px 8px; margin:-4px -2px -4px -8px; transition:background 0.12s; }
+  button.stat-chip:hover{ background:var(--surface-alt); }
+  .stat-chip-active{ background:var(--accent) !important; }
+  .stat-chip-active .stat-value, .stat-chip-active .stat-label{ color:#fff; }
+
+  .tabs-row{ max-width:1280px; margin:0 auto; display:flex; gap:4px; }
+  .tab-item{ background:none; border:none; padding:10px 4px; margin-right:22px; font-size:14px; font-family:var(--font-ui);
+    color:var(--ink-muted); cursor:pointer; border-bottom:2px solid transparent; }
+  .tab-item.active{ color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+
+  .controls{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:14px 40px; background:var(--surface-alt); border-bottom:1px solid var(--border); }
+  .controls-inner{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; max-width:1280px; margin:0 auto; width:100%; }
+  .controls input[type=text], .controls select{
+    font-family:var(--font-ui); font-size:13.5px; color:var(--ink); background:var(--surface); border:1px solid var(--border);
+    border-radius:4px; padding:8px 10px; outline:none;
+  }
+  .controls input[type=text]:focus, .controls select:focus{ border-color:var(--accent); }
+  .controls input[type=text]{ min-width:200px; flex:1; }
+  .spacer{ flex:1; }
+
   .btn{ font-family:var(--font-ui); font-size:13.5px; font-weight:500; cursor:pointer; border-radius:4px; padding:9px 16px; border:1px solid transparent; }
   .btn-primary{ background:var(--accent); color:#fff; }
   .btn-primary:hover{ background:var(--accent-hover); }
+  .btn-ghost{ background:transparent; border-color:var(--border); color:var(--ink); }
+  .btn-ghost:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn-sm{ padding:5px 10px; font-size:12.5px; }
   .btn:disabled{ opacity:0.55; cursor:default; }
   .link-btn{ background:none;border:none;color:var(--ink-muted);font-size:12.5px; text-decoration:underline; cursor:pointer; font-family:var(--font-ui); padding:0; }
   .link-btn:hover{ color:var(--ink); }
+  .qty-btn{ width:26px; height:26px; border-radius:4px; border:1px solid var(--border); background:var(--surface); color:var(--ink); font-size:15px; font-weight:600; cursor:pointer; line-height:1; }
+  .qty-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .tracking-link{ font-size:11.5px; color:var(--accent); text-decoration:none; font-weight:600; }
+  .tracking-link:hover{ text-decoration:underline; }
 
-  .topbar{ padding:24px 40px 18px; border-bottom:1px solid var(--border); background:var(--surface); }
-  .topbar-inner{ display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap; max-width:1280px; margin:0 auto; }
-  .page-title{ font-family:var(--font-display); font-size:26px; font-weight:600; margin:0 0 4px 0; letter-spacing:-0.01em; }
-  .page-sub{ color:var(--ink-muted); font-size:13px; margin:0; }
+  .main{ max-width:1280px; margin:0 auto; padding:24px 40px 80px; }
+  .info-banner{ background:var(--accent-warm-bg); border:1px solid #E0C9A6; color:#5C4322; border-radius:4px; padding:10px 14px; font-size:13px; margin-bottom:18px; }
+  .list-header{ display:flex; gap:16px; padding:0 16px 8px; font-size:11.5px; color:var(--ink-muted); border-bottom:1px solid var(--border); }
+  .row-item{ display:flex; gap:16px; align-items:center; padding:14px 16px; border-bottom:1px solid var(--border); border-left:4px solid var(--accent); background:var(--surface); }
+  .col{ min-width:0; }
+  .col-nombre, .col-proveedor{ flex:2.2; }
+  .col-ubicacion, .col-destino{ flex:1; color:var(--ink-muted); }
+  .col-categoria{ flex:1.2; }
+  .col-cantidad{ flex:1.4; }
+  .col-monto{ flex:1.3; }
+  .col-estado{ flex:1.8; }
+  .col-fecha{ flex:1; }
+  .col-acciones{ flex:1.2; text-align:right; }
+  .col-alertas{ flex:0 0 26px; display:flex; flex-direction:column; gap:4px; align-items:center; }
+  .alerta-icono{ font-size:15px; line-height:1; cursor:default; }
+
+  .item-nombre, .proveedor-name{ font-weight:600; margin-bottom:3px; }
+  .item-notas{ font-size:12px; color:var(--ink-muted); }
+  .tracking-line{ display:flex; align-items:center; gap:6px; color:var(--ink-muted); font-size:12.5px; }
+  .courier-badge{ font-size:11px; font-weight:600; padding:1px 6px; border-radius:3px; background:var(--surface-alt); border:1px solid var(--border); color:var(--ink-muted); }
+  .tracking-num{ font-family:var(--font-mono); font-size:12px; }
+  .badge{ display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; background:var(--surface-alt); border:1px solid var(--border); color:var(--ink-muted); }
+  .badge-agente{ background:var(--accent-warm-bg); color:var(--accent-warm); margin-left:8px; border:none; }
+  .badge-revision{ background:var(--st-transito-bg); color:var(--st-transito); margin-left:8px; border:none; }
+  .badge-atrasado{ background:var(--st-atrasado-bg); color:var(--st-atrasado); border:none; }
   .dias-label{ font-size:11.5px; color:var(--ink-muted); }
+  .estado-select{ font-family:var(--font-ui); font-size:12.5px; font-weight:600; border-radius:20px; padding:4px 22px 4px 10px; border:1px solid var(--border);
+    background-color:var(--surface); color:var(--sel-color, var(--ink)); cursor:pointer; margin-bottom:4px; display:block; }
 
-  .main{ max-width:1280px; margin:0 auto; padding:28px 40px 80px; }
-  .note-banner{ background:var(--accent-warm-bg); border:1px solid #E0C9A6; color:#5C4322; border-radius:4px; padding:10px 14px; font-size:13px; margin-bottom:24px; }
-  .error-banner{ background:var(--st-atrasado-bg); border:1px solid #E0B3B0; color:var(--st-atrasado); border-radius:4px; padding:10px 14px; font-size:13px; margin-bottom:24px; }
+  .empty-state{ padding:48px 16px; text-align:center; color:var(--ink-muted); font-family:var(--font-display); font-size:16px; }
+  .footer-actions{ margin-top:22px; display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
 
-  .kpi-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(190px,1fr)); gap:14px; margin-bottom:32px; }
-  .kpi-card{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:16px 18px; }
-  .kpi-label{ font-size:12px; color:var(--ink-muted); margin:0 0 6px; }
-  .kpi-value{ font-family:var(--font-display); font-size:27px; font-weight:600; margin:0; }
-  .kpi-value.warn{ color:var(--st-atrasado); }
+  .modal-backdrop{ position:fixed; inset:0; background:rgba(20,20,18,0.45); z-index:50; display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; overflow-y:auto; }
+  .modal{ background:var(--surface); border-radius:6px; max-width:560px; width:100%; padding:28px 30px 26px; box-shadow:0 12px 32px rgba(0,0,0,0.18); }
+  .modal-title{ font-family:var(--font-display); font-size:20px; margin:0 0 4px; }
+  .modal-close{ float:right; background:none; border:none; font-size:20px; color:var(--ink-muted); cursor:pointer; line-height:1; }
+  .modal-tabs{ display:flex; gap:4px; margin:18px 0 18px; border-bottom:1px solid var(--border); }
+  .tab-btn{ background:none; border:none; padding:9px 4px; margin-right:18px; font-size:13.5px; color:var(--ink-muted); cursor:pointer; border-bottom:2px solid transparent; font-family:var(--font-ui); }
+  .tab-btn.active{ color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+  .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px; }
+  .form-field{ display:flex; flex-direction:column; gap:5px; }
+  .form-field.full{ grid-column:1 / -1; }
+  .form-field label{ font-size:12px; color:var(--ink-muted); }
+  .form-field input, .form-field select, .form-field textarea{
+    font-family:var(--font-ui); font-size:14px; padding:9px 10px; border:1px solid var(--border); border-radius:4px; background:var(--surface); color:var(--ink); outline:none;
+  }
+  .form-field input:focus, .form-field select:focus, .form-field textarea:focus{ border-color:var(--accent); }
+  .form-field textarea{ resize:vertical; min-height:70px; font-family:var(--font-ui); }
+  .form-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:22px; }
+  .extract-status{ font-size:12.5px; color:var(--ink-muted); margin-top:8px; min-height:16px; }
+  .field-note{ font-size:12px; color:var(--accent-warm); background:var(--accent-warm-bg); padding:8px 10px; border-radius:4px; margin-bottom:14px; }
 
-  .section-title{ font-family:var(--font-display); font-size:17px; margin:0 0 14px; }
-  .chart-box{ position:relative; width:100%; height:240px; margin-bottom:36px; }
+  .assistant-toggle{ position:fixed; bottom:24px; right:24px; z-index:40; background:var(--accent); color:#fff; border:none; border-radius:24px;
+    padding:12px 20px; font-family:var(--font-ui); font-size:13.5px; font-weight:600; cursor:pointer; box-shadow:0 6px 18px rgba(27,75,67,0.35); }
+  .assistant-toggle:hover{ background:var(--accent-hover); }
+  .assistant-panel{ position:fixed; top:0; right:0; height:100vh; width:390px; max-width:92vw; background:var(--surface); border-left:1px solid var(--border);
+    z-index:45; display:flex; flex-direction:column; box-shadow:-8px 0 24px rgba(0,0,0,0.10); }
+  .assistant-header{ padding:20px 20px 14px; border-bottom:1px solid var(--border); }
+  .assistant-header h3{ font-family:var(--font-display); font-size:18px; margin:0 0 2px; }
+  .assistant-header p{ font-size:12px; color:var(--ink-muted); margin:0; }
+  .assistant-close{ float:right; background:none; border:none; font-size:19px; color:var(--ink-muted); cursor:pointer; }
+  .quick-prompts{ display:flex; flex-wrap:wrap; gap:6px; padding:12px 20px; border-bottom:1px solid var(--border); }
+  .quick-prompt-btn{ font-size:11.5px; padding:5px 10px; border-radius:20px; border:1px solid var(--border); background:var(--surface-alt); color:var(--ink); cursor:pointer; font-family:var(--font-ui); }
+  .quick-prompt-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .chat-log{ flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:12px; }
+  .chat-empty{ color:var(--ink-muted); font-size:13px; padding-top:12px; }
+  .chat-msg{ max-width:88%; padding:9px 12px; border-radius:8px; font-size:13.5px; white-space:pre-wrap; }
+  .chat-msg.user{ align-self:flex-end; background:var(--accent); color:#fff; }
+  .chat-msg.assistant{ align-self:flex-start; background:var(--surface-alt); color:var(--ink); }
+  .chat-typing{ align-self:flex-start; color:var(--ink-muted); font-size:12.5px; padding:0 4px; }
+  .assistant-input-row{ display:flex; gap:8px; padding:14px 20px 20px; border-top:1px solid var(--border); }
+  .assistant-input-row input{ flex:1; font-family:var(--font-ui); font-size:13.5px; padding:9px 10px; border:1px solid var(--border); border-radius:4px; outline:none; }
+  .assistant-input-row input:focus{ border-color:var(--accent); }
 
-  table.table-simple{ width:100%; border-collapse:collapse; font-size:13.5px; margin-bottom:36px; }
-  table.table-simple th{ text-align:left; font-size:11.5px; color:var(--ink-muted); font-weight:600; padding:0 10px 8px; border-bottom:1px solid var(--border); }
-  table.table-simple td{ padding:10px 10px; border-bottom:1px solid var(--border); }
-  table.table-simple td.num{ text-align:right; font-family:var(--font-mono); }
+  .toast{ position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:60; background:var(--ink); color:#fff; padding:11px 22px;
+    border-radius:6px; font-size:13.5px; font-weight:500; box-shadow:0 8px 22px rgba(0,0,0,0.25); }
 
   @media (max-width:760px){
-    .topbar, .main{ padding-left:18px; padding-right:18px; }
+    .topbar, .controls, .main{ padding-left:18px; padding-right:18px; }
+    .row-item{ flex-wrap:wrap; }
+    .col-nombre, .col-proveedor{ flex:1 1 100%; }
+    .col-ubicacion, .col-destino, .col-categoria, .col-cantidad, .col-monto, .col-estado, .col-fecha, .col-acciones{ flex:1 1 45%; }
+    .list-header{ display:none; }
+    .form-grid{ grid-template-columns:1fr; }
+    .assistant-panel{ width:100%; max-width:100%; }
   }
 </style>
 </head>
 <body>
-<div id="app"><div class="center-loading">Cargando…</div></div>
+<div id="app"><div class="center-loading">Cargando sistema…</div></div>
 
 <script>
 /* ============================================================
-   CONFIGURACIÓN COMPARTIDA — misma que app.html
+   CONFIGURACIÓN COMPARTIDA
    ============================================================ */
 const SUPABASE_URL = 'https://wncejgicemnaneptrrsq.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_DrQ2zuhGaxF09jQUrssLWQ_lLKtVbnL';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const CLAUDE_PROXY_URL = SUPABASE_URL + '/functions/v1/claude-proxy';
 
 const ESTADOS = ['En proceso','En tránsito','En aduana','En destino','Recibido'];
+const COURIERS = ['DHL','UPS','MercadoLibre','Otro'];
+const MONEDAS = ['CLP','USD','EUR'];
+const DESTINOS = ['Puerto Montt','Valdivia'];
+const UBICACIONES = ['Puerto Montt','Valdivia'];
+const CATEGORIAS_SUGERIDAS = ['Herramientas','Tecnología','Materiales de maestranza','Seguridad','Oficina'];
+const AREAS_SUGERIDAS = ['Adquisiciones','Bodega','Logística','Mantenimiento','Operaciones','Administración'];
 const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-const MESES_LARGO = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const DEFAULT_TC = 930;
 
-// Mismos colores que --st-* en app.html, en hex porque Chart.js (canvas) no puede leer variables CSS.
-const ESTADO_COLOR = {
-  'En proceso':  '#6B7563',
-  'En tránsito': '#2E5C8A',
-  'En aduana':   '#A6761D',
-  'En destino':  '#1B4B43',
-  'Recibido':    '#2F6B3A'
+const STATUS_META = {
+  'En proceso':  {color:'var(--st-proceso)'},
+  'En tránsito': {color:'var(--st-transito)'},
+  'En aduana':   {color:'var(--st-aduana)'},
+  'En destino':  {color:'var(--st-destino)'},
+  'Recibido':    {color:'var(--st-recibido)'}
 };
 
-let state = { session:null, loginError:null, loginLoading:false, loadError:null, pedidos:[], insumos:[] };
-let chartEstadosInstance = null, chartTendenciaInstance = null;
+let state = {
+  vista: 'pedidos', // 'pedidos' | 'inventario'
+  session: null, loginError: null, loginLoading: false,
+  toast: null, loadError: null,
+  showAssistant: false, chatHistory: [], assistantLoading: false,
+  realtimeConectado: { pedidos:false, insumos:false },
+
+  // ---- Pedidos ----
+  pedidos: [],
+  pedidosFilters: { search:'', destino:'Todos', estado:'Todos', filtroRapido:null },
+  showPedidoModal: false,
+  deletePedidoConfirmId: null,
+  agenteSummaryModal: null,
+  actualizarEstadoModal: null,
+  confirmAction: null,
+
+  // ---- Inventario ----
+  insumos: [],
+  insumosFilters: { search:'', ubicacion:'Todos', categoria:'Todas', filtroRapido:null },
+  showInsumoModal: false,
+  editInsumoId: null,
+  deleteInsumoConfirmId: null,
+
+  // ---- Compartido: historial, transferencias, roles ----
+  historialModal: null,
+  transferirModal: null,
+  adjuntarModal: null,
+  exportarModal: null,
+  rol: 'editor'
+};
 
 /* ============================================================
-   UTILIDADES — copiadas de app.html para mantener consistencia
+   UTILIDADES COMPARTIDAS
    ============================================================ */
 function todayISO(){ return new Date().toISOString().slice(0,10); }
+function addDaysISO(n){ const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
 function daysSince(iso){
   if(!iso) return 0;
   const d = new Date(iso+'T00:00:00'); const t = new Date(); t.setHours(0,0,0,0);
   return Math.max(0, Math.round((t-d)/86400000));
 }
-function escapeHTML(str){
-  if(str===null || str===undefined) return '';
-  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function fmtDate(iso){
+  if(!iso) return '—';
+  const d = new Date(iso+'T00:00:00');
+  return d.getDate()+' '+MESES[d.getMonth()];
 }
+function fmtUSD(n){ if(n===null||n===undefined||n==='') return '—'; return Number(n).toLocaleString('es-CL'); }
+function fmtCLP(n){ if(n===null||n===undefined||n==='') return '—'; return Math.round(n).toLocaleString('es-CL'); }
 function pedidoMonto(p){
   if(p.monto != null && p.moneda) return { monto: p.monto, moneda: p.moneda };
+  // Respaldo para pedidos guardados antes de simplificar el monto (sin tipo de cambio).
   if(p.moneda_ingreso === 'CLP') return { monto: p.monto_clp, moneda: 'CLP' };
   if(p.monto_usd != null) return { monto: p.monto_usd, moneda: 'USD' };
   return { monto: null, moneda: null };
@@ -120,30 +254,164 @@ function fmtMonto(moneda, monto){
   if(moneda==='EUR') return '€' + val;
   return 'US$' + val;
 }
-function estaVencido(p){
-  return p.estado !== 'Recibido' && !!p.fecha_estimada && p.fecha_estimada < todayISO();
+function escapeHTML(str){
+  if(str===null || str===undefined) return '';
+  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+function uidPedido(){ return 'p'+Date.now()+Math.random().toString(16).slice(2,7); }
+function uidInsumo(){ return 'i'+Date.now()+Math.random().toString(16).slice(2,7); }
 function withTimeout(promise, ms){
   return Promise.race([ promise, new Promise((_, reject)=> setTimeout(()=> reject(new Error('La operación tardó demasiado')), ms)) ]);
 }
+function parseJSONLoose(text){
+  try{ return JSON.parse(text.replace(/```json/gi,'').replace(/```/g,'').trim()); }
+  catch(e){ return {}; }
+}
+function nuevoIdHistorial(){ return 'h'+Date.now()+Math.random().toString(16).slice(2,7); }
+async function registrarHistorial(entidad, entidad_id, descripcion){
+  try{
+    await supabaseClient.from('historial').insert({ id: nuevoIdHistorial(), entidad, entidad_id, descripcion, fecha: new Date().toISOString() });
+  }catch(e){ console.warn('No se pudo registrar en el historial', e); }
+}
+async function abrirHistorialModal(entidad, entidad_id, nombre){
+  state.historialModal = { entidad, entidad_id, nombre, items: [], loading: true, error: null };
+  render();
+  try{
+    const { data, error } = await withTimeout(
+      supabaseClient.from('historial').select('*').eq('entidad', entidad).eq('entidad_id', entidad_id).order('fecha', { ascending:false }),
+      10000
+    );
+    if(error) throw error;
+    state.historialModal.items = data;
+  }catch(e){ state.historialModal.error = 'No se pudo cargar el historial: ' + (e && e.message ? e.message : 'error desconocido'); }
+  state.historialModal.loading = false;
+  render();
+}
+function cerrarHistorialModal(){ state.historialModal = null; render(); }
 
 /* ============================================================
-   LOGIN — mismo patrón que app.html (comparte sesión si ya
-   inició sesión ahí, porque Supabase guarda la sesión en el
-   mismo origen)
+   API — PEDIDOS
+   ============================================================ */
+async function apiGetPedidos(){
+  const { data, error } = await withTimeout(supabaseClient.from('pedidos').select('*').order('fecha_registro', { ascending:false }), 10000);
+  if(error) throw new Error('Error al leer los pedidos: ' + error.message);
+  return data;
+}
+async function apiCreatePedido(pedido){
+  const { error } = await withTimeout(supabaseClient.from('pedidos').insert(pedido), 10000);
+  if(error) throw new Error('Error al crear el pedido: ' + error.message);
+}
+async function apiUpdatePedido(id, updates){
+  const { error } = await withTimeout(supabaseClient.from('pedidos').update(updates).eq('id', id), 10000);
+  if(error) throw new Error('Error al actualizar el pedido: ' + error.message);
+}
+async function apiDeletePedido(id){
+  const { error } = await withTimeout(supabaseClient.from('pedidos').delete().eq('id', id), 10000);
+  if(error) throw new Error('Error al eliminar el pedido: ' + error.message);
+}
+
+/* ============================================================
+   API — INVENTARIO
+   ============================================================ */
+async function apiGetInsumos(){
+  const { data, error } = await withTimeout(supabaseClient.from('inventario').select('*').order('nombre', { ascending:true }), 10000);
+  if(error) throw new Error('Error al leer el inventario: ' + error.message);
+  return data;
+}
+async function apiCreateInsumo(item){
+  const { error } = await withTimeout(supabaseClient.from('inventario').insert(item), 10000);
+  if(error) throw new Error('Error al crear el insumo: ' + error.message);
+}
+async function apiUpdateInsumo(id, updates){
+  const { error } = await withTimeout(supabaseClient.from('inventario').update(updates).eq('id', id), 10000);
+  if(error) throw new Error('Error al actualizar el insumo: ' + error.message);
+}
+async function apiDeleteInsumo(id){
+  const { error } = await withTimeout(supabaseClient.from('inventario').delete().eq('id', id), 10000);
+  if(error) throw new Error('Error al eliminar el insumo: ' + error.message);
+}
+
+/* ============================================================
+   IA (Claude API vía claude-proxy) — COMPARTIDO
+   ============================================================ */
+async function callClaude(systemPrompt, userMessage, imagen){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if(!session) throw new Error('Sesión no válida. Vuelve a iniciar sesión.');
+  const body = { system: systemPrompt, message: userMessage };
+  if(imagen) body.imagen = imagen; // { data, media_type }
+  const response = await fetch(CLAUDE_PROXY_URL, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + session.access_token },
+    body: JSON.stringify(body)
+  });
+  const data = await response.json();
+  if(!data || !data.content){ throw new Error((data && data.error && data.error.message) || 'Error de API'); }
+  return data.content.map(b=>b.text||'').join('\n');
+}
+
+const EXTRACT_SYSTEM_PROMPT = `Eres un extractor de datos para el sistema de seguimiento de pedidos de Innovex.
+A partir del texto de un correo o mensaje de confirmación de envío, extrae los datos del pedido.
+Responde ÚNICAMENTE con un objeto JSON, sin texto adicional, sin explicaciones, sin backticks de markdown.
+Usa exactamente estas claves:
+- proveedor (string o null)
+- monto (número, sin símbolo ni separadores de miles, o null)
+- moneda (uno de "USD", "CLP" o "EUR" según el símbolo o contexto del texto; si no es claro, usa "CLP")
+- numero_seguimiento (string o null)
+- courier (uno de "DHL", "UPS", "MercadoLibre", "Otro", o null si no se identifica con certeza)
+- fecha_estimada (formato YYYY-MM-DD, o null si no se menciona)
+- destino ("Puerto Montt", "Valdivia" o null si no se menciona)
+Si un dato no aparece explícitamente en el texto, usa null. No inventes información.`;
+
+function assistantSystemPromptPedidos(contextData){
+  return `Eres el asistente de IA del sistema de seguimiento de pedidos del área de Adquisiciones de Innovex.
+Respondes en español, de forma breve, clara y directa, basándote únicamente en los datos de pedidos entregados a continuación.
+Cada pedido tiene su monto en dólares (monto_usd) y su equivalente en pesos chilenos (monto_clp).
+"fecha_registro" es cuándo se agregó el pedido al sistema — úsala para responder preguntas sobre pedidos nuevos o recientes.
+"pendiente_revision" en true significa que el pedido lo creó automáticamente el lector de correo con IA y nadie lo ha confirmado todavía.
+Si la pregunta no se puede responder con estos datos, dilo con honestidad.
+Hoy es ${todayISO()}.
+
+Datos de pedidos (JSON):
+${JSON.stringify(contextData)}`;
+}
+function assistantSystemPromptInsumos(contextData){
+  return `Eres el asistente de IA del sistema de inventario del área de Adquisiciones de Innovex.
+Respondes en español, de forma breve, clara y directa, basándote únicamente en los datos de inventario entregados a continuación.
+Cada insumo tiene su ubicación (Puerto Montt o Valdivia) y su cantidad actual.
+Si la pregunta no se puede responder con estos datos, dilo con honestidad.
+Hoy es ${todayISO()}.
+
+Datos de inventario (JSON):
+${JSON.stringify(contextData)}`;
+}
+
+const AGENTE_SYSTEM_PROMPT = `Genera un resumen breve y formal en español de este pedido de compra internacional, listo para enviar por correo a un agente de aduana externo que gestionará el trámite.
+Incluye: proveedor, monto, número de seguimiento, empresa transportista, destino y fecha estimada de llegada.
+Formato de texto plano, listo para copiar y pegar, sin markdown, sin encabezados de correo (sin "Asunto:" ni "Estimado/a").`;
+
+const ESTADO_DESDE_TEXTO_PROMPT = `Eres un asistente que interpreta el texto de una página de seguimiento de envíos (DHL, UPS, MercadoLibre, u otra) que un usuario pegó tal como lo vio en pantalla, y sugiere a cuál de estos estados corresponde en el sistema de Innovex: "En proceso", "En tránsito", "En aduana", "En destino", "Recibido".
+
+Responde ÚNICAMENTE con un objeto JSON, sin texto adicional, sin backticks. Usa exactamente estas claves:
+- estado_sugerido (uno de los cinco valores exactos de arriba, o null si el texto no permite determinarlo con confianza)
+- razon (una frase breve en español explicando por qué, o qué faltó si no se pudo determinar)
+
+Si el texto pegado no parece ser de una página de seguimiento o no tiene información de estado clara, responde con estado_sugerido: null.`;
+
+/* ============================================================
+   LOGIN — COMPARTIDO
    ============================================================ */
 function loginScreenHTML(){
   return `
   <div class="center-loading" style="flex-direction:column;">
     <div class="login-box">
       <h1 class="page-title" style="margin-bottom:4px;">Innovex</h1>
-      <p class="page-sub" style="margin-bottom:24px;">Dashboard — Vista general</p>
+      <p class="page-sub" style="margin-bottom:24px;">Adquisiciones — Pedidos e Inventario</p>
       ${state.loginError ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-bottom:14px;">${escapeHTML(state.loginError)}</div>` : ''}
-      <div class="form-field" style="margin-bottom:12px;">
+      <div class="form-field full" style="margin-bottom:12px;">
         <label>Correo</label>
         <input type="email" id="login-email" placeholder="tu@innovex.cl" onkeydown="if(event.key==='Enter') handleLogin()">
       </div>
-      <div class="form-field" style="margin-bottom:20px;">
+      <div class="form-field full" style="margin-bottom:20px;">
         <label>Contraseña</label>
         <input type="password" id="login-password" onkeydown="if(event.key==='Enter') handleLogin()">
       </div>
@@ -166,214 +434,1525 @@ async function handleLogin(){
 async function handleLogout(){
   await supabaseClient.auth.signOut();
   state.session = null; state.pedidos = []; state.insumos = [];
+  if(realtimeChannelPedidos){ supabaseClient.removeChannel(realtimeChannelPedidos); realtimeChannelPedidos = null; }
+  if(realtimeChannelInsumos){ supabaseClient.removeChannel(realtimeChannelInsumos); realtimeChannelInsumos = null; }
   render();
 }
 
 /* ============================================================
-   DATOS — solo lectura
+   PEDIDOS — lógica de negocio
    ============================================================ */
-async function apiGetPedidos(){
-  const { data, error } = await withTimeout(supabaseClient.from('pedidos').select('*'), 10000);
-  if(error) throw new Error('Error al leer los pedidos: ' + error.message);
-  return data;
+function trackingUrl(p){
+  if(!p.numero_seguimiento) return null;
+  const num = encodeURIComponent(p.numero_seguimiento);
+  if(p.courier === 'DHL') return `https://www.dhl.com/cl-es/home/rastreo.html?tracking-id=${num}`;
+  if(p.courier === 'UPS') return `https://www.ups.com/track?loc=es_CL&tracknum=${num}`;
+  return null;
 }
-async function apiGetInsumos(){
-  const { data, error } = await withTimeout(supabaseClient.from('inventario').select('*'), 10000);
-  if(error) throw new Error('Error al leer el inventario: ' + error.message);
-  return data;
+function estaVencido(p){
+  return p.estado !== 'Recibido' && !!p.fecha_estimada && p.fecha_estimada < todayISO();
 }
-
-/* ============================================================
-   CÁLCULOS — misma lógica de negocio que app.html
-   ============================================================ */
-function computeKPIs(){
+function computePedidoStats(){
   const activos = state.pedidos.filter(p=>p.estado!=='Recibido').length;
-  const atrasadosIds = new Set(state.pedidos.filter(p=>p.estado!=='Recibido' && daysSince(p.fecha_ultima_actualizacion)>=5).map(p=>p.id));
-  const vencidosIds = new Set(state.pedidos.filter(estaVencido).map(p=>p.id));
-  const requierenAtencion = new Set([...atrasadosIds, ...vencidosIds]).size;
+  const atrasados = state.pedidos.filter(p=>p.estado!=='Recibido' && daysSince(p.fecha_ultima_actualizacion)>=5).length;
+  const conAgente = state.pedidos.filter(p=>p.agente_aduanero).length;
   const pendientesRevision = state.pedidos.filter(p=>p.pendiente_revision).length;
-  const stockBajo = state.insumos.filter(i=> i.stock_minimo!=null && parseFloat(i.cantidad) < parseFloat(i.stock_minimo)).length;
-  return { activos, requierenAtencion, pendientesRevision, stockBajo };
+  const vencidos = state.pedidos.filter(estaVencido).length;
+  return { activos, atrasados, conAgente, pendientesRevision, vencidos };
 }
-function pedidosPorEstado(){
-  return ESTADOS.map(e => state.pedidos.filter(p=>p.estado===e).length);
-}
-function pedidosPorMes(){
-  // Agrupa por mes de fecha_registro. Solo muestra meses que realmente
-  // tienen datos — con pruebas reales recién comenzando, puede ser
-  // solo uno o dos puntos por ahora, y eso es correcto mostrarlo así.
-  const conteo = {};
-  state.pedidos.forEach(p=>{
-    if(!p.fecha_registro) return;
-    const ym = p.fecha_registro.slice(0,7);
-    conteo[ym] = (conteo[ym]||0) + 1;
+function getFilteredPedidos(){
+  const { search, destino, estado, filtroRapido } = state.pedidosFilters;
+  return state.pedidos.filter(p=>{
+    if(destino!=='Todos' && p.destino!==destino) return false;
+    if(estado!=='Todos' && p.estado!==estado) return false;
+    if(filtroRapido==='activos' && p.estado==='Recibido') return false;
+    if(filtroRapido==='atrasados' && !(p.estado!=='Recibido' && daysSince(p.fecha_ultima_actualizacion)>=5)) return false;
+    if(filtroRapido==='agente' && !p.agente_aduanero) return false;
+    if(filtroRapido==='revision' && !p.pendiente_revision) return false;
+    if(filtroRapido==='vencidos' && !estaVencido(p)) return false;
+    if(search){
+      const s = search.toLowerCase();
+      const hay = (p.proveedor||'').toLowerCase().includes(s) || (p.numero_seguimiento||'').toLowerCase().includes(s);
+      if(!hay) return false;
+    }
+    return true;
   });
-  const meses = Object.keys(conteo).sort();
-  return {
-    labels: meses.map(ym=>{
-      const [y,m] = ym.split('-');
-      return MESES[parseInt(m,10)-1] + ' ' + y.slice(2);
-    }),
-    valores: meses.map(ym=>conteo[ym])
+}
+function pedidoRowHTML(p){
+  const meta = STATUS_META[p.estado] || STATUS_META['En proceso'];
+  const dias = daysSince(p.fecha_ultima_actualizacion);
+  const atrasado = p.estado!=='Recibido' && dias>=5;
+  const vencido = estaVencido(p);
+  const alertasIzquierda = [
+    vencido ? { icono:'⏰', titulo:'Vencido — pasó la fecha estimada de llegada' } : null,
+    atrasado ? { icono:'⚠', titulo:'Sin novedades hace ' + dias + ' días' } : null,
+    p.agente_aduanero ? { icono:'🛂', titulo:'Requiere agente aduanero' } : null,
+    p.pendiente_revision ? { icono:'✦', titulo:'Creado por IA — pendiente de revisión' } : null
+  ].filter(Boolean);
+  return `
+  <div class="row-item" style="border-left-color:${meta.color}">
+    <div class="col-alertas" title="${alertasIzquierda.map(a=>a.titulo).join(' · ')}">
+      ${alertasIzquierda.map(a=>`<span class="alerta-icono" title="${escapeHTML(a.titulo)}">${a.icono}</span>`).join('')}
+    </div>
+    <div class="col col-proveedor">
+      <div class="proveedor-name">${escapeHTML(p.proveedor)} ${p.pendiente_revision ? '<span class="badge badge-revision">✦ Creado por IA — pendiente de revisión</span>' : ''}</div>
+      <div class="tracking-line">
+        <span class="courier-badge">${escapeHTML(p.courier||'—')}</span>
+        <span class="tracking-num">${escapeHTML(p.numero_seguimiento||'sin N° de seguimiento')}</span>
+        ${trackingUrl(p) ? `<a href="${trackingUrl(p)}" target="_blank" rel="noopener" class="tracking-link">Ver en ${escapeHTML(p.courier)} ↗</a>` : ''}
+      </div>
+      ${(p.area || p.solicitante) ? `<div class="dias-label">${[p.area, p.solicitante].filter(Boolean).map(escapeHTML).join(' · ')}</div>` : ''}
+    </div>
+    <div class="col col-destino">${escapeHTML(p.destino||'—')}</div>
+    <div class="col col-monto">
+      ${fmtMonto(pedidoMonto(p).moneda, pedidoMonto(p).monto)}
+      ${p.agente_aduanero ? '<span class="badge badge-agente">Agente aduanero</span>' : ''}
+    </div>
+    <div class="col col-estado">
+      <select class="estado-select" style="--sel-color:${meta.color}" onchange="updateEstado('${p.id}', this.value)" ${puedeEditar()?'':'disabled'}>
+        ${ESTADOS.map(e=>`<option value="${e}" ${e===p.estado?'selected':''}>${e}</option>`).join('')}
+      </select>
+      ${atrasado
+        ? `<span class="badge badge-atrasado">⚠ Sin novedades hace ${dias} días</span>`
+        : `<span class="dias-label">Actualizado ${dias===0?'hoy':'hace '+dias+' días'}</span>`}
+    </div>
+    <div class="col col-fecha">
+      <div class="dias-label">llega</div>
+      <div>${fmtDate(p.fecha_estimada)}</div>
+      ${p.fecha_orden ? `<div class="dias-label">orden: ${fmtDate(p.fecha_orden)}</div>` : ''}
+      ${vencido ? `<span class="badge badge-atrasado" style="margin-top:4px;">⚠ Vencido</span>` : ''}
+    </div>
+    <div class="col col-acciones" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+      ${state.deletePedidoConfirmId === p.id ? `
+        <span class="dias-label">¿Eliminar este pedido?</span>
+        <div style="display:flex;gap:8px;">
+          <button class="link-btn" onclick="confirmDeletePedido('${p.id}')">Sí, eliminar</button>
+          <button class="link-btn" onclick="cancelDeletePedidoConfirm()">Cancelar</button>
+        </div>
+      ` : `
+        ${p.pendiente_revision && puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="markAsReviewed('${p.id}')">Marcar como revisado</button>` : ''}
+        ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="openActualizarEstadoModal('${p.id}')">Actualizar estado</button>` : ''}
+        ${p.agente_aduanero ? `<button class="btn-ghost btn-sm" onclick="handleAgenteSummary('${p.id}')">Resumen para agente</button>` : ''}
+        ${p.documento_path
+          ? `<button class="btn-ghost btn-sm" onclick="verDocumento('${p.id}')">Ver documento</button>${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="eliminarDocumento('${p.id}')">Quitar documento</button>` : ''}`
+          : (puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="abrirAdjuntarModal('${p.id}')">Adjuntar documento</button>` : '')}
+        <button class="btn-ghost btn-sm" onclick="abrirHistorialModal('pedido','${p.id}','${escapeHTML(p.proveedor).replace(/'/g,"\\'")}')">Ver historial</button>
+        ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="askDeletePedidoConfirm('${p.id}')">Eliminar</button>` : ''}
+      `}
+    </div>
+  </div>`;
+}
+function pedidosListInnerHTML(){
+  const list = getFilteredPedidos();
+  if(state.pedidos.length===0){
+    return `<div class="empty-state">Aún no hay pedidos registrados.<br><span style="font-family:var(--font-ui);font-size:13px;">Usa «+ Nuevo pedido» para agregar el primero.</span></div>`;
+  }
+  if(list.length===0) return `<div class="empty-state">Ningún pedido coincide con el filtro actual.</div>`;
+  return `
+    <div class="list-header">
+      <div class="col col-proveedor">Proveedor / seguimiento</div>
+      <div class="col col-destino">Destino</div>
+      <div class="col col-monto">Monto</div>
+      <div class="col col-estado">Estado</div>
+      <div class="col col-fecha">Llegada</div>
+      <div class="col col-acciones"></div>
+    </div>
+    ${list.map(pedidoRowHTML).join('')}
+  `;
+}
+function renderPedidosList(){ const c = document.getElementById('list-container'); if(c) c.innerHTML = pedidosListInnerHTML(); }
+
+function openPedidoModal(){ imagenExtraida = null; state.showPedidoModal = true; render(); validatePedidoForm(); }
+function closePedidoModal(){ state.showPedidoModal = false; render(); }
+function isPedidoFormValid(){
+  const proveedor = document.getElementById('f-proveedor').value.trim();
+  const monto = parseFloat(document.getElementById('f-monto').value);
+  const tracking = document.getElementById('f-tracking').value.trim();
+  const courier = document.getElementById('f-courier').value;
+  const destino = document.getElementById('f-destino').value;
+  const fecha = document.getElementById('f-fecha').value;
+  return proveedor !== '' && !isNaN(monto) && monto > 0 && tracking !== '' && courier !== '' && destino !== '' && fecha !== '';
+}
+function validatePedidoForm(){
+  const btn = document.getElementById('btn-guardar');
+  const hint = document.getElementById('form-hint');
+  if(!btn) return;
+  const ok = isPedidoFormValid();
+  btn.disabled = !ok;
+  if(hint) hint.style.display = ok ? 'none' : 'block';
+}
+function showTab(tab){
+  document.getElementById('tab-manual').style.display = tab==='manual' ? 'grid' : 'none';
+  document.getElementById('tab-pegar').style.display = tab==='pegar' ? 'block' : 'none';
+  document.getElementById('tabbtn-manual').classList.toggle('active', tab==='manual');
+  document.getElementById('tabbtn-pegar').classList.toggle('active', tab==='pegar');
+}
+let imagenExtraida = null; // { data, media_type } o null
+
+function leerImagenComoBase64(file){
+  if(!file || file.type.indexOf('image') === -1) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const resultado = reader.result;
+    const match = resultado.match(/^data:(.*?);base64,(.*)$/);
+    if(!match) return;
+    imagenExtraida = { media_type: match[1], data: match[2] };
+    const cont = document.getElementById('imagen-preview-container');
+    if(cont){
+      cont.innerHTML = `<img src="${resultado}" style="max-width:170px;max-height:130px;border-radius:4px;border:1px solid var(--border);display:block;margin-bottom:6px;">
+        <button type="button" class="link-btn" onclick="quitarImagenExtraida()">Quitar imagen</button>`;
+    }
   };
+  reader.readAsDataURL(file);
 }
-function gastoPorMonedaEsteMes(){
-  const ym = todayISO().slice(0,7);
-  const totales = {};
-  state.pedidos.forEach(p=>{
-    const fecha = p.fecha_orden || p.fecha_registro;
-    if(!fecha || !fecha.startsWith(ym)) return;
-    const m = pedidoMonto(p);
-    if(m.monto==null || !m.moneda) return;
-    totales[m.moneda] = (totales[m.moneda]||0) + Number(m.monto);
-  });
-  return totales;
+function handlePasteImagen(event){
+  const items = event.clipboardData && event.clipboardData.items;
+  if(!items) return;
+  for(const item of items){
+    if(item.type.indexOf('image') !== -1){
+      leerImagenComoBase64(item.getAsFile());
+      event.preventDefault();
+      break;
+    }
+  }
 }
-function gastoPorArea(){
-  // { area: { CLP: n, USD: n, EUR: n } }
-  const resultado = {};
-  state.pedidos.forEach(p=>{
-    const area = p.area || 'Sin área';
-    const m = pedidoMonto(p);
-    if(m.monto==null || !m.moneda) return;
-    if(!resultado[area]) resultado[area] = { CLP:0, USD:0, EUR:0 };
-    resultado[area][m.moneda] = (resultado[area][m.moneda]||0) + Number(m.monto);
-  });
-  return resultado;
+function handleImagenSeleccionada(event){
+  const file = event.target.files && event.target.files[0];
+  if(file) leerImagenComoBase64(file);
 }
-
-/* ============================================================
-   RENDER
-   ============================================================ */
-function render(){
-  if(!state.session){ document.getElementById('app').innerHTML = loginScreenHTML(); return; }
-
-  if(state.loadError){
-    document.getElementById('app').innerHTML = `
-      <div class="topbar"><div class="topbar-inner"><h1 class="page-title">Innovex — Dashboard</h1></div></div>
-      <div class="main"><div class="error-banner">${escapeHTML(state.loadError)}</div>
-      <button class="btn btn-primary" onclick="cargarTodo()">Reintentar</button></div>`;
+function quitarImagenExtraida(){
+  imagenExtraida = null;
+  const cont = document.getElementById('imagen-preview-container');
+  if(cont) cont.innerHTML = '';
+  const input = document.getElementById('f-imagen-correo');
+  if(input) input.value = '';
+}
+async function handleExtract(){
+  const btn = document.getElementById('btn-extract');
+  const status = document.getElementById('extract-status');
+  const text = document.getElementById('f-pegado').value.trim();
+  if(!text && !imagenExtraida){ status.textContent = 'Pega el texto, o sube/pega una captura del correo.'; return; }
+  btn.disabled = true; status.textContent = 'Extrayendo datos con IA…';
+  try{
+    const mensaje = text || 'Extrae los datos del pedido a partir de esta captura de un correo o mensaje.';
+    const raw = await callClaude(EXTRACT_SYSTEM_PROMPT, mensaje, imagenExtraida);
+    const data = parseJSONLoose(raw);
+    if(data.proveedor) document.getElementById('f-proveedor').value = data.proveedor;
+    if(MONEDAS.includes(data.moneda)) document.getElementById('f-moneda').value = data.moneda;
+    if(data.monto) document.getElementById('f-monto').value = data.monto;
+    if(data.numero_seguimiento) document.getElementById('f-tracking').value = data.numero_seguimiento;
+    if(data.courier && COURIERS.includes(data.courier)) document.getElementById('f-courier').value = data.courier;
+    if(data.destino && DESTINOS.includes(data.destino)) document.getElementById('f-destino').value = data.destino;
+    if(data.fecha_estimada) document.getElementById('f-fecha').value = data.fecha_estimada;
+    validatePedidoForm();
+    showTab('manual');
+    document.getElementById('extract-note').style.display = 'block';
+    status.textContent = '';
+  }catch(e){
+    status.textContent = 'No se pudo extraer la información. Puedes completar los datos manualmente.';
+  }
+  btn.disabled = false;
+}
+async function handleGuardar(){
+  const errorEl = document.getElementById('form-error');
+  errorEl.style.display = 'none';
+  if(!isPedidoFormValid()){
+    errorEl.textContent = 'No se puede guardar: completa todos los campos.';
+    errorEl.style.display = 'block';
+    validatePedidoForm();
     return;
   }
+  const proveedor = document.getElementById('f-proveedor').value.trim();
+  const submitBtn = document.getElementById('btn-guardar');
+  submitBtn.disabled = true; submitBtn.textContent = 'Guardando…';
+  try{
+    const moneda = document.getElementById('f-moneda').value;
+    const monto = parseFloat(document.getElementById('f-monto').value);
+    const internacional = document.getElementById('f-internacional').checked;
+    const pedido = {
+      id: uidPedido(), proveedor, monto, moneda,
+      numero_seguimiento: document.getElementById('f-tracking').value.trim() || null,
+      courier: document.getElementById('f-courier').value,
+      destino: document.getElementById('f-destino').value,
+      fecha_estimada: document.getElementById('f-fecha').value || null,
+      fecha_orden: document.getElementById('f-fecha-orden').value || null,
+      area: document.getElementById('f-area').value.trim() || null,
+      solicitante: document.getElementById('f-solicitante').value.trim() || null,
+      internacional,
+      estado: 'En proceso', fecha_registro: todayISO(), fecha_ultima_actualizacion: todayISO(),
+      agente_aduanero: document.getElementById('f-agente-aduanero').checked, pendiente_revision: false
+    };
+    await apiCreatePedido(pedido);
+    state.pedidos.unshift(pedido);
+    registrarHistorial('pedido', pedido.id, 'Pedido creado (' + proveedor + ')');
+    state.showPedidoModal = false;
+    state.toast = 'Pedido guardado — ' + proveedor;
+    render();
+    setTimeout(()=>{ state.toast = null; render(); }, 2600);
+  }catch(err){
+    submitBtn.disabled = false; submitBtn.textContent = 'Guardar pedido';
+    errorEl.textContent = 'Ocurrió un error al guardar: ' + (err && err.message ? err.message : 'error desconocido') + '. Intenta nuevamente.';
+    errorEl.style.display = 'block';
+  }
+}
+async function updateEstado(id, value){
+  const p = state.pedidos.find(x=>x.id===id);
+  if(!p) return;
+  const prevEstado = p.estado, prevFecha = p.fecha_ultima_actualizacion;
+  if(prevEstado === value) return;
+  p.estado = value; p.fecha_ultima_actualizacion = todayISO();
+  render();
+  try{
+    await apiUpdatePedido(id, { estado: value, fecha_ultima_actualizacion: p.fecha_ultima_actualizacion });
+    registrarHistorial('pedido', id, 'Estado cambiado de "' + prevEstado + '" a "' + value + '"');
+  }
+  catch(e){
+    p.estado = prevEstado; p.fecha_ultima_actualizacion = prevFecha;
+    state.toast = 'No se pudo guardar el cambio de estado. Intenta de nuevo.';
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 3200);
+  }
+}
+async function markAsReviewed(id){
+  const p = state.pedidos.find(x=>x.id===id);
+  if(!p) return;
+  p.pendiente_revision = false;
+  render();
+  try{ await apiUpdatePedido(id, { pendiente_revision: false }); }
+  catch(e){
+    p.pendiente_revision = true;
+    state.toast = 'No se pudo guardar el cambio. Intenta de nuevo.';
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 3200);
+  }
+}
+function askDeletePedidoConfirm(id){ state.deletePedidoConfirmId = id; renderPedidosList(); }
+function cancelDeletePedidoConfirm(){ state.deletePedidoConfirmId = null; renderPedidosList(); }
+async function confirmDeletePedido(id){
+  state.deletePedidoConfirmId = null;
+  const p = state.pedidos.find(x=>x.id===id);
+  try{
+    await apiDeletePedido(id);
+    state.pedidos = state.pedidos.filter(x=>x.id!==id);
+    state.toast = 'Pedido eliminado.';
+    if(p) registrarHistorial('pedido', id, 'Pedido eliminado (' + p.proveedor + ')');
+  }
+  catch(e){ state.toast = 'No se pudo eliminar el pedido. Intenta de nuevo.'; }
+  render();
+  setTimeout(()=>{ state.toast = null; render(); }, 2600);
+}
+async function handleAgenteSummary(id){
+  const p = state.pedidos.find(x=>x.id===id);
+  if(!p) return;
+  state.agenteSummaryModal = { pedidoId:id, text:null, loading:true };
+  render();
+  try{ const text = await callClaude(AGENTE_SYSTEM_PROMPT, JSON.stringify(p)); state.agenteSummaryModal = { pedidoId:id, text, loading:false }; }
+  catch(e){ state.agenteSummaryModal = { pedidoId:id, text:'No se pudo generar el resumen. Intenta nuevamente.', loading:false }; }
+  render();
+}
+function closeAgenteModal(){ state.agenteSummaryModal = null; render(); }
+async function copyAgenteText(){
+  const t = state.agenteSummaryModal && state.agenteSummaryModal.text;
+  if(!t) return;
+  let ok = false;
+  try{ await navigator.clipboard.writeText(t); ok = true; }
+  catch(e){
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      ok = document.execCommand('copy'); document.body.removeChild(ta);
+    }catch(e2){ ok = false; }
+  }
+  const el = document.getElementById('copy-feedback');
+  if(el) el.textContent = ok ? 'Copiado ✓' : 'No se pudo copiar automáticamente — selecciona el texto y cópialo manualmente.';
+}
+let imagenEstado = null; // { data, media_type } o null
+function openActualizarEstadoModal(id){ imagenEstado = null; state.actualizarEstadoModal = { pedidoId:id, modo:'ia', texto:'', loading:false, resultado:null, error:null }; render(); }
+function cambiarModoEstadoModal(modo){
+  state.actualizarEstadoModal.modo = modo;
+  state.actualizarEstadoModal.error = null;
+  render();
+  if(modo === 'manual') precargarFormularioEstadoManual();
+}
+function precargarFormularioEstadoManual(){
+  const p = state.pedidos.find(x=>x.id===state.actualizarEstadoModal.pedidoId);
+  if(!p) return;
+  const m = pedidoMonto(p);
+  document.getElementById('em-proveedor').value = p.proveedor || '';
+  document.getElementById('em-moneda').value = m.moneda || 'CLP';
+  document.getElementById('em-monto').value = m.monto != null ? m.monto : '';
+  document.getElementById('em-tracking').value = p.numero_seguimiento || '';
+  document.getElementById('em-courier').value = p.courier || '';
+  document.getElementById('em-destino').value = p.destino || '';
+  document.getElementById('em-fecha').value = p.fecha_estimada || '';
+  document.getElementById('em-fecha-orden').value = p.fecha_orden || '';
+  document.getElementById('em-area').value = p.area || '';
+  document.getElementById('em-solicitante').value = p.solicitante || '';
+  document.getElementById('em-internacional').checked = !!p.internacional;
+  document.getElementById('em-agente-aduanero').checked = !!p.agente_aduanero;
+  document.getElementById('em-estado').value = p.estado;
+}
+async function handleGuardarEdicionEstado(){
+  const id = state.actualizarEstadoModal.pedidoId;
+  const p = state.pedidos.find(x=>x.id===id);
+  if(!p) return;
+  const btn = document.getElementById('em-btn-guardar');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    const nuevoEstado = document.getElementById('em-estado').value;
+    const estadoAnterior = p.estado;
+    const datos = {
+      proveedor: document.getElementById('em-proveedor').value.trim(),
+      moneda: document.getElementById('em-moneda').value,
+      monto: parseFloat(document.getElementById('em-monto').value),
+      numero_seguimiento: document.getElementById('em-tracking').value.trim() || null,
+      courier: document.getElementById('em-courier').value,
+      destino: document.getElementById('em-destino').value,
+      fecha_estimada: document.getElementById('em-fecha').value || null,
+      fecha_orden: document.getElementById('em-fecha-orden').value || null,
+      area: document.getElementById('em-area').value.trim() || null,
+      solicitante: document.getElementById('em-solicitante').value.trim() || null,
+      internacional: document.getElementById('em-internacional').checked,
+      agente_aduanero: document.getElementById('em-agente-aduanero').checked,
+      estado: nuevoEstado,
+      fecha_ultima_actualizacion: todayISO()
+    };
+    await apiUpdatePedido(id, datos);
+    Object.assign(p, datos);
+    if(nuevoEstado !== estadoAnterior){
+      registrarHistorial('pedido', id, 'Estado cambiado de "' + estadoAnterior + '" a "' + nuevoEstado + '"');
+    }
+    registrarHistorial('pedido', id, 'Pedido editado (' + datos.proveedor + ')');
+    closeActualizarEstadoModal();
+    state.toast = 'Pedido actualizado.';
+    render();
+    setTimeout(()=>{ state.toast = null; render(); }, 2600);
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Guardar cambios';
+    state.toast = 'No se pudo guardar: ' + (e && e.message ? e.message : 'error desconocido');
+    render();
+    setTimeout(()=>{ state.toast = null; render(); }, 3200);
+  }
+}
+function closeActualizarEstadoModal(){ state.actualizarEstadoModal = null; render(); }
+function leerImagenEstadoComoBase64(file){
+  if(!file || file.type.indexOf('image') === -1) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const resultado = reader.result;
+    const match = resultado.match(/^data:(.*?);base64,(.*)$/);
+    if(!match) return;
+    imagenEstado = { media_type: match[1], data: match[2] };
+    const cont = document.getElementById('imagen-estado-preview');
+    if(cont){
+      cont.innerHTML = `<img src="${resultado}" style="max-width:170px;max-height:130px;border-radius:4px;border:1px solid var(--border);display:block;margin-bottom:6px;">
+        <button type="button" class="link-btn" onclick="quitarImagenEstado()">Quitar imagen</button>`;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+function handlePasteImagenEstado(event){
+  const items = event.clipboardData && event.clipboardData.items;
+  if(!items) return;
+  for(const item of items){
+    if(item.type.indexOf('image') !== -1){
+      leerImagenEstadoComoBase64(item.getAsFile());
+      event.preventDefault();
+      break;
+    }
+  }
+}
+function handleImagenEstadoSeleccionada(event){
+  const file = event.target.files && event.target.files[0];
+  if(file) leerImagenEstadoComoBase64(file);
+}
+function quitarImagenEstado(){
+  imagenEstado = null;
+  const cont = document.getElementById('imagen-estado-preview');
+  if(cont) cont.innerHTML = '';
+  const input = document.getElementById('f-imagen-estado');
+  if(input) input.value = '';
+}
+async function handleAnalizarEstado(){
+  const texto = document.getElementById('estado-pegado').value.trim();
+  if(!texto && !imagenEstado){ state.actualizarEstadoModal.error = 'Pega el texto, o sube/pega una captura de la página de seguimiento.'; render(); return; }
+  state.actualizarEstadoModal.texto = texto; state.actualizarEstadoModal.loading = true;
+  state.actualizarEstadoModal.error = null; state.actualizarEstadoModal.resultado = null;
+  render();
+  try{
+    const mensaje = texto || 'Determina el estado del envío a partir de esta captura de la página de seguimiento.';
+    const raw = await callClaude(ESTADO_DESDE_TEXTO_PROMPT, mensaje, imagenEstado);
+    const data = parseJSONLoose(raw);
+    if(!data.estado_sugerido || !ESTADOS.includes(data.estado_sugerido)){ state.actualizarEstadoModal.error = data.razon || 'No se pudo determinar un estado a partir de ese texto.'; }
+    else{ state.actualizarEstadoModal.resultado = data; }
+  }catch(e){ state.actualizarEstadoModal.error = 'No se pudo analizar el texto. Intenta nuevamente.'; }
+  state.actualizarEstadoModal.loading = false;
+  render();
+}
+async function aplicarEstadoSugerido(){
+  const modal = state.actualizarEstadoModal;
+  if(!modal || !modal.resultado) return;
+  const id = modal.pedidoId, nuevoEstado = modal.resultado.estado_sugerido;
+  closeActualizarEstadoModal();
+  await updateEstado(id, nuevoEstado);
+}
+function askConfirm(action){ state.confirmAction = action; render(); }
+function cancelConfirm(){ state.confirmAction = null; render(); }
+function seedPedidos(){
+  return [
+    { id:uidPedido(), proveedor:'Guangzhou Tools Co.', monto:4200, moneda:'USD', area:'Bodega', solicitante:'Equipo de Bodega', internacional:true, numero_seguimiento:'1Z999AA10123456784', courier:'UPS', destino:'Puerto Montt', estado:'En tránsito', fecha_registro:addDaysISO(-10), fecha_orden:addDaysISO(-10), fecha_estimada:addDaysISO(3), fecha_ultima_actualizacion:addDaysISO(-6), agente_aduanero:true, pendiente_revision:false },
+    { id:uidPedido(), proveedor:'Ferretería del Sur SpA', monto:790000, moneda:'CLP', area:'Mantenimiento', solicitante:null, internacional:false, numero_seguimiento:'DHL7788990011', courier:'DHL', destino:'Valdivia', estado:'En proceso', fecha_registro:addDaysISO(-2), fecha_orden:addDaysISO(-2), fecha_estimada:addDaysISO(7), fecha_ultima_actualizacion:addDaysISO(-2), agente_aduanero:false, pendiente_revision:false }
+  ];
+}
+async function handleResetDemo(){
+  state.confirmAction = null;
+  const seeds = seedPedidos();
+  try{ for(const p of seeds){ await apiCreatePedido(p); } state.pedidos = await apiGetPedidos(); state.toast = 'Datos de ejemplo agregados.'; }
+  catch(e){ state.toast = 'Hubo un problema agregando los datos de ejemplo: ' + (e && e.message ? e.message : 'error desconocido'); try{ state.pedidos = await apiGetPedidos(); }catch(e2){} }
+  render();
+  setTimeout(()=>{ state.toast = null; render(); }, 2800);
+}
+async function handleClearAll(){
+  state.confirmAction = null;
+  const idsAEliminar = state.pedidos.map(p=>p.id);
+  try{ for(const id of idsAEliminar){ await apiDeletePedido(id); } state.pedidos = []; state.toast = 'Todos los pedidos fueron eliminados.'; }
+  catch(e){ state.toast = 'Hubo un problema eliminando algunos pedidos: ' + (e && e.message ? e.message : 'error desconocido'); try{ state.pedidos = await apiGetPedidos(); }catch(e2){} }
+  render();
+  setTimeout(()=>{ state.toast = null; render(); }, 2800);
+}
 
-  const kpis = computeKPIs();
-  const gastoMon = gastoPorMonedaEsteMes();
-  const gastoArea = gastoPorArea();
-  const estados = pedidosPorEstado();
-  const tendencia = pedidosPorMes();
+/* ============================================================
+   INVENTARIO — lógica de negocio
+   ============================================================ */
+function stockBajo(i){
+  return i.stock_minimo != null && parseFloat(i.cantidad) < parseFloat(i.stock_minimo);
+}
+function computeInsumoStats(){
+  const totalInsumos = state.insumos.length;
+  const unidadesTotales = state.insumos.reduce((sum,i)=> sum + (parseFloat(i.cantidad)||0), 0);
+  const sinActualizar = state.insumos.filter(i=> daysSince(i.fecha_ultima_actualizacion) >= 90).length;
+  const bajoStock = state.insumos.filter(stockBajo).length;
+  return { totalInsumos, unidadesTotales, sinActualizar, bajoStock };
+}
+function getFilteredInsumos(){
+  const { search, ubicacion, categoria, filtroRapido } = state.insumosFilters;
+  return state.insumos.filter(i=>{
+    if(ubicacion!=='Todos' && i.ubicacion!==ubicacion) return false;
+    if(categoria!=='Todas' && (i.categoria||'')!==categoria) return false;
+    if(filtroRapido==='bajo' && !stockBajo(i)) return false;
+    if(filtroRapido==='viejo' && daysSince(i.fecha_ultima_actualizacion) < 90) return false;
+    if(search){ const s = search.toLowerCase(); if(!(i.nombre||'').toLowerCase().includes(s)) return false; }
+    return true;
+  });
+}
+function categoriasExistentes(){
+  const set = new Set();
+  state.insumos.forEach(i=>{ if(i.categoria) set.add(i.categoria); });
+  return Array.from(set).sort();
+}
+function insumoRowHTML(i){
+  const dias = daysSince(i.fecha_ultima_actualizacion);
+  const vieja = dias >= 90;
+  const bajo = stockBajo(i);
+  return `
+  <div class="row-item" ${bajo ? 'style="border-left-color:var(--st-atrasado)"' : ''}>
+    <div class="col col-nombre">
+      <div class="item-nombre">${escapeHTML(i.nombre)}</div>
+      ${i.notas ? `<div class="item-notas">${escapeHTML(i.notas)}</div>` : ''}
+    </div>
+    <div class="col col-categoria">${i.categoria ? `<span class="badge">${escapeHTML(i.categoria)}</span>` : '<span class="dias-label">—</span>'}</div>
+    <div class="col col-ubicacion">${escapeHTML(i.ubicacion)}</div>
+    <div class="col col-cantidad">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="qty-btn" onclick="ajustarCantidad('${i.id}', -1)" ${puedeEditar()?'':'disabled'}>−</button>
+        <strong>${i.cantidad}</strong>${i.unidad ? ` <span class="dias-label">${escapeHTML(i.unidad)}</span>` : ''}
+        <button class="qty-btn" onclick="ajustarCantidad('${i.id}', 1)" ${puedeEditar()?'':'disabled'}>+</button>
+      </div>
+      ${bajo ? `<span class="badge badge-atrasado" style="margin-top:4px;">⚠ Stock bajo (mín. ${i.stock_minimo})</span>` : ''}
+      ${vieja ? `<span class="badge badge-atrasado" style="margin-top:4px;">⚠ Sin actualizar hace ${dias} días</span>` : `<span class="dias-label">Actualizado ${dias===0?'hoy':'hace '+dias+' días'}</span>`}
+    </div>
+    <div class="col col-fecha">
+      <div class="dias-label">últ. cambio</div>
+      <div>${fmtDate(i.fecha_ultima_actualizacion)}</div>
+    </div>
+    <div class="col col-acciones" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+      ${state.deleteInsumoConfirmId === i.id ? `
+        <span class="dias-label">¿Eliminar?</span>
+        <div style="display:flex;gap:8px;">
+          <button class="link-btn" onclick="confirmDeleteInsumo('${i.id}')">Sí, eliminar</button>
+          <button class="link-btn" onclick="cancelDeleteInsumoConfirm()">Cancelar</button>
+        </div>
+      ` : `
+        ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="openInsumoModal('${i.id}')">Editar</button>` : ''}
+        ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="abrirTransferirModal('${i.id}')">Transferir</button>` : ''}
+        <button class="btn-ghost btn-sm" onclick="abrirHistorialModal('insumo','${i.id}','${escapeHTML(i.nombre).replace(/'/g,"\\'")}')">Ver historial</button>
+        ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="askDeleteInsumoConfirm('${i.id}')">Eliminar</button>` : ''}
+      `}
+    </div>
+  </div>`;
+}
+function insumosListInnerHTML(){
+  const list = getFilteredInsumos();
+  if(state.insumos.length===0){
+    return `<div class="empty-state">Aún no hay insumos registrados.<br><span style="font-family:var(--font-ui);font-size:13px;">Usa «+ Nuevo insumo» para agregar el primero.</span></div>`;
+  }
+  if(list.length===0) return `<div class="empty-state">Ningún insumo coincide con el filtro actual.</div>`;
+  return `
+    <div class="list-header">
+      <div class="col col-nombre">Insumo</div>
+      <div class="col col-categoria">Categoría</div>
+      <div class="col col-ubicacion">Ubicación</div>
+      <div class="col col-cantidad">Cantidad</div>
+      <div class="col col-fecha">Últ. cambio</div>
+      <div class="col col-acciones"></div>
+    </div>
+    ${list.map(insumoRowHTML).join('')}
+  `;
+}
+function renderInsumosList(){ const c = document.getElementById('list-container'); if(c) c.innerHTML = insumosListInnerHTML(); }
 
-  const gastoMonHTML = ['CLP','USD','EUR']
-    .filter(mon => gastoMon[mon])
-    .map(mon => fmtMonto(mon, gastoMon[mon]))
-    .join(' · ') || 'Sin pedidos con monto registrados este mes';
+function openInsumoModal(editId){
+  state.editInsumoId = editId || null;
+  state.showInsumoModal = true;
+  render();
+  validateInsumoForm();
+  if(editId){
+    const item = state.insumos.find(i=>i.id===editId);
+    if(item){
+      document.getElementById('f-nombre').value = item.nombre || '';
+      document.getElementById('f-categoria').value = item.categoria || '';
+      document.getElementById('f-ubicacion').value = item.ubicacion || '';
+      document.getElementById('f-cantidad').value = item.cantidad != null ? item.cantidad : '';
+      document.getElementById('f-unidad').value = item.unidad || '';
+      document.getElementById('f-notas').value = item.notas || '';
+      document.getElementById('f-stock-minimo').value = item.stock_minimo != null ? item.stock_minimo : '';
+      validateInsumoForm();
+    }
+  }
+}
+function closeInsumoModal(){ state.showInsumoModal = false; state.editInsumoId = null; render(); }
+function isInsumoFormValid(){
+  const nombre = document.getElementById('f-nombre').value.trim();
+  const ubicacion = document.getElementById('f-ubicacion').value;
+  const cantidad = document.getElementById('f-cantidad').value;
+  return nombre !== '' && ubicacion !== '' && cantidad !== '' && !isNaN(parseFloat(cantidad)) && parseFloat(cantidad) >= 0;
+}
+function validateInsumoForm(){
+  const btn = document.getElementById('btn-guardar-item');
+  const hint = document.getElementById('form-hint');
+  if(!btn) return;
+  const ok = isInsumoFormValid();
+  btn.disabled = !ok;
+  if(hint) hint.style.display = ok ? 'none' : 'block';
+}
+async function handleGuardarItem(){
+  const errorEl = document.getElementById('form-error');
+  errorEl.style.display = 'none';
+  if(!isInsumoFormValid()){ errorEl.textContent = 'No se puede guardar: completa nombre, ubicación y cantidad.'; errorEl.style.display = 'block'; return; }
+  const btn = document.getElementById('btn-guardar-item');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    const datos = {
+      nombre: document.getElementById('f-nombre').value.trim(),
+      categoria: document.getElementById('f-categoria').value.trim() || null,
+      ubicacion: document.getElementById('f-ubicacion').value,
+      cantidad: parseFloat(document.getElementById('f-cantidad').value),
+      unidad: document.getElementById('f-unidad').value.trim() || null,
+      notas: document.getElementById('f-notas').value.trim() || null,
+      stock_minimo: document.getElementById('f-stock-minimo').value !== '' ? parseFloat(document.getElementById('f-stock-minimo').value) : null,
+      fecha_ultima_actualizacion: todayISO()
+    };
+    if(state.editInsumoId){
+      await apiUpdateInsumo(state.editInsumoId, datos);
+      const item = state.insumos.find(i=>i.id===state.editInsumoId);
+      if(item) Object.assign(item, datos);
+      state.toast = 'Insumo actualizado — ' + datos.nombre;
+      registrarHistorial('insumo', state.editInsumoId, 'Insumo editado (' + datos.nombre + ')');
+    }else{
+      const nuevo = Object.assign({ id: uidInsumo() }, datos);
+      await apiCreateInsumo(nuevo);
+      state.insumos.unshift(nuevo);
+      state.toast = 'Insumo agregado — ' + datos.nombre;
+      registrarHistorial('insumo', nuevo.id, 'Insumo creado (' + datos.nombre + ', cantidad inicial ' + datos.cantidad + ')');
+    }
+    state.showInsumoModal = false; state.editInsumoId = null;
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 2600);
+  }catch(err){
+    btn.disabled = false; btn.textContent = 'Guardar';
+    errorEl.textContent = 'Ocurrió un error al guardar: ' + (err && err.message ? err.message : 'error desconocido');
+    errorEl.style.display = 'block';
+  }
+}
+async function ajustarCantidad(id, delta){
+  const item = state.insumos.find(i=>i.id===id);
+  if(!item) return;
+  const nuevaCantidad = Math.max(0, (parseFloat(item.cantidad)||0) + delta);
+  const prevCantidad = item.cantidad, prevFecha = item.fecha_ultima_actualizacion;
+  item.cantidad = nuevaCantidad; item.fecha_ultima_actualizacion = todayISO();
+  renderInsumosList();
+  try{
+    await apiUpdateInsumo(id, { cantidad: nuevaCantidad, fecha_ultima_actualizacion: item.fecha_ultima_actualizacion });
+    registrarHistorial('insumo', id, 'Cantidad ajustada de ' + prevCantidad + ' a ' + nuevaCantidad);
+  }
+  catch(e){
+    item.cantidad = prevCantidad; item.fecha_ultima_actualizacion = prevFecha;
+    state.toast = 'No se pudo guardar el ajuste. Intenta de nuevo.';
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 3200);
+  }
+}
+function askDeleteInsumoConfirm(id){ state.deleteInsumoConfirmId = id; renderInsumosList(); }
+function cancelDeleteInsumoConfirm(){ state.deleteInsumoConfirmId = null; renderInsumosList(); }
+async function confirmDeleteInsumo(id){
+  state.deleteInsumoConfirmId = null;
+  const item = state.insumos.find(i=>i.id===id);
+  try{
+    await apiDeleteInsumo(id);
+    state.insumos = state.insumos.filter(i=>i.id!==id);
+    state.toast = 'Insumo eliminado.';
+    if(item) registrarHistorial('insumo', id, 'Insumo eliminado (' + item.nombre + ')');
+  }
+  catch(e){ state.toast = 'No se pudo eliminar el insumo. Intenta de nuevo.'; }
+  render();
+  setTimeout(()=>{ state.toast = null; render(); }, 2600);
+}
 
-  const areasFilas = Object.keys(gastoArea).sort().map(area=>{
-    const g = gastoArea[area];
-    return `<tr>
-      <td>${escapeHTML(area)}</td>
-      <td class="num">${g.CLP ? fmtMonto('CLP', g.CLP) : '—'}</td>
-      <td class="num">${g.USD ? fmtMonto('USD', g.USD) : '—'}</td>
-      <td class="num">${g.EUR ? fmtMonto('EUR', g.EUR) : '—'}</td>
-    </tr>`;
-  }).join('');
+/* ============================================================
+   ASISTENTE DE IA — COMPARTIDO (contenido depende de state.vista)
+   ============================================================ */
+function toggleAssistant(){ state.showAssistant = !state.showAssistant; render(); }
+async function handleAskAssistant(preset){
+  const input = document.getElementById('assistant-input');
+  const question = preset || (input ? input.value.trim() : '');
+  if(!question) return;
+  state.chatHistory.push({ role:'user', text:question });
+  state.assistantLoading = true;
+  render();
+  try{
+    let systemPrompt;
+    if(state.vista === 'pedidos'){
+      const contextData = state.pedidos.map(p=>{
+        const m = pedidoMonto(p);
+        return {
+          proveedor:p.proveedor, monto:m.monto, moneda:m.moneda, area:p.area, solicitante:p.solicitante,
+          courier:p.courier, numero_seguimiento:p.numero_seguimiento, destino:p.destino, estado:p.estado,
+          internacional: !!p.internacional, fecha_orden:p.fecha_orden,
+          fecha_registro:p.fecha_registro, fecha_estimada:p.fecha_estimada,
+          dias_sin_actualizacion: daysSince(p.fecha_ultima_actualizacion), agente_aduanero:p.agente_aduanero,
+          pendiente_revision: !!p.pendiente_revision
+        };
+      });
+      systemPrompt = assistantSystemPromptPedidos(contextData);
+    }else{
+      const contextData = state.insumos.map(i=>({
+        nombre:i.nombre, categoria:i.categoria, ubicacion:i.ubicacion, cantidad:i.cantidad, unidad:i.unidad,
+        notas:i.notas, dias_sin_actualizar: daysSince(i.fecha_ultima_actualizacion)
+      }));
+      systemPrompt = assistantSystemPromptInsumos(contextData);
+    }
+    const answer = await callClaude(systemPrompt, question);
+    state.chatHistory.push({ role:'assistant', text:answer });
+  }catch(e){
+    state.chatHistory.push({ role:'assistant', text:'No pude conectarme con la IA. Intenta nuevamente.' });
+  }
+  state.assistantLoading = false;
+  render();
+  setTimeout(()=>{ const el=document.getElementById('chat-log'); if(el) el.scrollTop = el.scrollHeight; },0);
+}
+function assistantPanelHTML(){
+  const placeholder = state.vista === 'pedidos'
+    ? 'Pregúntame por ejemplo: «¿qué pedidos llegan esta semana a Valdivia?» o «¿cuáles están atrasados?».'
+    : 'Pregúntame por ejemplo: «¿qué hay en Valdivia?» o «¿qué insumos no se actualizan hace tiempo?».';
+  const chatContent = state.chatHistory.length===0 ? `<div class="chat-empty">${placeholder}</div>` : state.chatHistory.map(m=>`<div class="chat-msg ${m.role}">${escapeHTML(m.text)}</div>`).join('');
+  const quickPrompts = state.vista === 'pedidos' ? `
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('Dame un resumen del estado de todos los pedidos activos.')">Resumen diario</button>
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('¿Qué pedidos están atrasados y hace cuántos días?')">¿Qué está atrasado?</button>
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('¿Qué pedidos requieren agente aduanero?')">Con agente aduanero</button>
+    ` : `
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('Dame un resumen de lo que hay en cada ubicación.')">Resumen por ubicación</button>
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('¿Qué insumos no se actualizan hace más de 90 días?')">Sin movimiento</button>
+      <button class="quick-prompt-btn" onclick="handleAskAssistant('¿Qué insumos tienen menos de 3 unidades?')">Stock bajo</button>
+    `;
+  return `
+  <div class="assistant-panel">
+    <div class="assistant-header">
+      <button class="assistant-close" onclick="toggleAssistant()">×</button>
+      <h3>Asistente de ${state.vista==='pedidos'?'Adquisiciones':'Inventario'}</h3>
+      <p>Responde según los datos de esta vista.</p>
+    </div>
+    <div class="quick-prompts">${quickPrompts}</div>
+    <div class="chat-log" id="chat-log">
+      ${chatContent}
+      ${state.assistantLoading ? '<div class="chat-typing">Pensando…</div>' : ''}
+    </div>
+    <div class="assistant-input-row">
+      <input type="text" id="assistant-input" placeholder="Escribe tu pregunta…" onkeydown="if(event.key==='Enter'){handleAskAssistant();}">
+      <button class="btn btn-primary btn-sm" ${state.assistantLoading?'disabled':''} onclick="handleAskAssistant()">Preguntar</button>
+    </div>
+  </div>`;
+}
 
-  document.getElementById('app').innerHTML = `
+/* ============================================================
+   MODALES
+   ============================================================ */
+function pedidoModalHTML(){
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) closePedidoModal()">
+    <div class="modal">
+      <button class="modal-close" onclick="closePedidoModal()">×</button>
+      <h2 class="modal-title">Nuevo pedido</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0;">Registra el pedido manualmente o pega el correo de confirmación para que la IA complete los datos.</p>
+      <div class="modal-tabs">
+        <button class="tab-btn active" id="tabbtn-manual" onclick="showTab('manual')">Datos manuales</button>
+        <button class="tab-btn" id="tabbtn-pegar" onclick="showTab('pegar')">Pegar correo / mensaje</button>
+      </div>
+      <div id="tab-pegar" style="display:none;">
+        <div class="form-field full">
+          <label>Texto del correo o WhatsApp de confirmación de envío</label>
+          <textarea id="f-pegado" placeholder="Pega aquí el texto completo del mensaje…" onpaste="handlePasteImagen(event)"></textarea>
+        </div>
+        <div class="form-field full" style="margin-top:4px;">
+          <label>O una captura de pantalla del correo — pega la imagen con Ctrl+V en el cuadro de arriba, o sube un archivo</label>
+          <input type="file" id="f-imagen-correo" accept="image/*" onchange="handleImagenSeleccionada(event)">
+          <div id="imagen-preview-container" style="margin-top:6px;"></div>
+        </div>
+        <button class="btn btn-primary" id="btn-extract" onclick="handleExtract()" type="button" style="margin-top:10px;">Extraer datos con IA</button>
+        <div class="extract-status" id="extract-status"></div>
+      </div>
+      <div id="tab-manual" class="form-grid">
+        <div class="field-note" id="extract-note" style="display:none;grid-column:1 / -1;">Datos completados automáticamente por IA — revisa antes de guardar.</div>
+        <div class="field-note" id="form-error" style="display:none;grid-column:1 / -1;background:var(--st-atrasado-bg);color:var(--st-atrasado);">No se puede guardar: completa todos los campos.</div>
+        <div class="form-field full">
+          <label>Proveedor *</label>
+          <input type="text" id="f-proveedor" placeholder="Ej: Guangzhou Tools Co." oninput="validatePedidoForm()">
+        </div>
+        <div class="form-field full">
+          <label>Monto del pedido *</label>
+          <div style="display:flex; gap:8px;">
+            <select id="f-moneda" style="flex:0 0 110px;">
+              <option value="CLP">CLP ($)</option>
+              <option value="USD">USD (US$)</option>
+              <option value="EUR">EUR (€)</option>
+            </select>
+            <input type="number" id="f-monto" placeholder="0" step="0.01" style="flex:1;" oninput="validatePedidoForm()">
+          </div>
+        </div>
+        <div class="form-field">
+          <label>N° de seguimiento *</label>
+          <input type="text" id="f-tracking" placeholder="Ej: 1Z999AA1012345678" oninput="validatePedidoForm()">
+        </div>
+        <div class="form-field">
+          <label>Empresa transportista *</label>
+          <select id="f-courier" onchange="validatePedidoForm()">
+            <option value="" disabled selected>Selecciona…</option>
+            ${COURIERS.map(c=>`<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Destino *</label>
+          <select id="f-destino" onchange="validatePedidoForm()">
+            <option value="" disabled selected>Selecciona…</option>
+            ${DESTINOS.map(d=>`<option value="${d}">${d}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Fecha estimada de llegada *</label>
+          <input type="date" id="f-fecha" onchange="validatePedidoForm()">
+        </div>
+        <div class="form-field">
+          <label>Fecha de la orden / pago</label>
+          <input type="date" id="f-fecha-orden">
+        </div>
+        <div class="form-field">
+          <label>Área / centro de costo</label>
+          <input type="text" id="f-area" list="areas-list" placeholder="Ej: Bodega, Logística">
+          <datalist id="areas-list">${AREAS_SUGERIDAS.map(a=>`<option value="${a}">`).join('')}</datalist>
+        </div>
+        <div class="form-field">
+          <label>Solicitado por</label>
+          <input type="text" id="f-solicitante" placeholder="Nombre de la persona">
+        </div>
+        <div class="form-field full" style="flex-direction:row;align-items:center;gap:8px;">
+          <input type="checkbox" id="f-internacional" style="width:auto;">
+          <label style="margin:0;">Es una compra internacional</label>
+        </div>
+        <div class="form-field full" style="flex-direction:row;align-items:center;gap:8px;">
+          <input type="checkbox" id="f-agente-aduanero" style="width:auto;">
+          <label style="margin:0;">Requiere agente aduanero</label>
+        </div>
+        <div class="dias-label" id="form-hint" style="grid-column:1 / -1;">Completa todos los campos marcados con * para poder guardar.</div>
+        <div class="form-actions" style="grid-column:1 / -1;">
+          <button type="button" class="btn btn-ghost" onclick="closePedidoModal()">Cancelar</button>
+          <button type="button" id="btn-guardar" class="btn btn-primary" onclick="handleGuardar()" disabled>Guardar pedido</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function agenteModalHTML(){
+  const m = state.agenteSummaryModal;
+  if(!m) return '';
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeAgenteModal()">
+    <div class="modal" style="max-width:480px;">
+      <button class="modal-close" onclick="closeAgenteModal()">×</button>
+      <h2 class="modal-title">Resumen para agente aduanero</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0 0 14px;">Generado por IA a partir de los datos del pedido. Revísalo antes de enviarlo.</p>
+      ${m.loading
+        ? `<div style="padding:24px 0;color:var(--ink-muted);">Generando resumen…</div>`
+        : `<div style="white-space:pre-wrap;background:var(--surface-alt);border-radius:4px;padding:14px;font-size:13.5px;">${escapeHTML(m.text)}</div>
+           <div class="form-actions" style="align-items:center;">
+             <span id="copy-feedback" style="font-size:12px;color:var(--ink-muted);flex:1;"></span>
+             <button class="btn btn-ghost" onclick="closeAgenteModal()">Cerrar</button>
+             <button class="btn btn-primary" onclick="copyAgenteText()">Copiar texto</button>
+           </div>`
+      }
+    </div>
+  </div>`;
+}
+function actualizarEstadoModalHTML(){
+  const m = state.actualizarEstadoModal;
+  if(!m) return '';
+  const p = state.pedidos.find(x=>x.id===m.pedidoId);
+  const url = p ? trackingUrl(p) : null;
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeActualizarEstadoModal()">
+    <div class="modal" style="max-width:${m.modo==='manual'?'560px':'520px'};">
+      <button class="modal-close" onclick="closeActualizarEstadoModal()">×</button>
+      <h2 class="modal-title">Actualizar estado</h2>
+      <div class="modal-tabs">
+        <button class="tab-btn ${m.modo==='ia'?'active':''}" onclick="cambiarModoEstadoModal('ia')">Con IA</button>
+        <button class="tab-btn ${m.modo==='manual'?'active':''}" onclick="cambiarModoEstadoModal('manual')">Manual</button>
+      </div>
+      ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(m.error)}</div>` : ''}
+      ${m.modo === 'manual' ? `
+        <p style="color:var(--ink-muted);font-size:13px;margin:0 0 10px;">Corrige o completa cualquier dato del pedido, incluido el estado.</p>
+        <div class="form-grid" style="margin-top:0;">
+          <div class="form-field full">
+            <label>Proveedor</label>
+            <input type="text" id="em-proveedor">
+          </div>
+          <div class="form-field">
+            <label>Monto</label>
+            <div style="display:flex; gap:8px;">
+              <select id="em-moneda" style="flex:0 0 90px;">
+                <option value="CLP">CLP ($)</option>
+                <option value="USD">USD (US$)</option>
+                <option value="EUR">EUR (€)</option>
+              </select>
+              <input type="number" id="em-monto" step="0.01" style="flex:1;">
+            </div>
+          </div>
+          <div class="form-field">
+            <label>Estado</label>
+            <select id="em-estado">
+              ${ESTADOS.map(e=>`<option value="${e}">${e}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field">
+            <label>N° de seguimiento</label>
+            <input type="text" id="em-tracking">
+          </div>
+          <div class="form-field">
+            <label>Empresa transportista</label>
+            <select id="em-courier">
+              ${COURIERS.map(c=>`<option value="${c}">${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Destino</label>
+            <select id="em-destino">
+              ${DESTINOS.map(d=>`<option value="${d}">${d}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Fecha estimada de llegada</label>
+            <input type="date" id="em-fecha">
+          </div>
+          <div class="form-field">
+            <label>Fecha de la orden / pago</label>
+            <input type="date" id="em-fecha-orden">
+          </div>
+          <div class="form-field">
+            <label>Área / centro de costo</label>
+            <input type="text" id="em-area" list="areas-list">
+          </div>
+          <div class="form-field">
+            <label>Solicitado por</label>
+            <input type="text" id="em-solicitante">
+          </div>
+          <div class="form-field full" style="flex-direction:row;align-items:center;gap:8px;">
+            <input type="checkbox" id="em-internacional" style="width:auto;">
+            <label style="margin:0;">Es una compra internacional</label>
+          </div>
+          <div class="form-field full" style="flex-direction:row;align-items:center;gap:8px;">
+            <input type="checkbox" id="em-agente-aduanero" style="width:auto;">
+            <label style="margin:0;">Requiere agente aduanero</label>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-ghost" onclick="closeActualizarEstadoModal()">Cancelar</button>
+          <button class="btn btn-primary" id="em-btn-guardar" onclick="handleGuardarEdicionEstado()">Guardar cambios</button>
+        </div>
+      ` : `
+        <p style="color:var(--ink-muted);font-size:13px;margin:0 0 14px;">
+          ${url ? `Abre la página de seguimiento, copia el texto que muestra el estado, y pégalo aquí. <a href="${url}" target="_blank" rel="noopener" class="tracking-link">Ver en ${escapeHTML(p.courier)} ↗</a>` : `Copia el texto que ves en la página de seguimiento de este pedido y pégalo aquí.`}
+        </p>
+        <div class="form-field full">
+          <textarea id="estado-pegado" placeholder="Pega aquí el texto de la página de seguimiento…" onpaste="handlePasteImagenEstado(event)" ${m.loading?'disabled':''}>${escapeHTML(m.texto||'')}</textarea>
+        </div>
+        <div class="form-field full" style="margin-top:4px;">
+          <label>O una captura de pantalla — pega la imagen con Ctrl+V arriba, o sube un archivo</label>
+          <input type="file" id="f-imagen-estado" accept="image/*" onchange="handleImagenEstadoSeleccionada(event)" ${m.loading?'disabled':''}>
+          <div id="imagen-estado-preview" style="margin-top:6px;"></div>
+        </div>
+        ${m.resultado ? `
+          <div class="field-note" style="background:var(--st-recibido-bg);color:var(--st-recibido);margin-top:10px;">
+            La IA sugiere: <strong>${escapeHTML(m.resultado.estado_sugerido)}</strong><br>
+            <span style="font-weight:400;">${escapeHTML(m.resultado.razon||'')}</span>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-ghost" onclick="closeActualizarEstadoModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="aplicarEstadoSugerido()">Aplicar este estado</button>
+          </div>
+        ` : `
+          <div class="form-actions">
+            <button class="btn btn-ghost" onclick="closeActualizarEstadoModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="handleAnalizarEstado()" ${m.loading?'disabled':''}>${m.loading?'Analizando…':'Analizar'}</button>
+          </div>
+        `}
+      `}
+    </div>
+  </div>`;
+}
+function historialModalHTML(){
+  const m = state.historialModal;
+  if(!m) return '';
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) cerrarHistorialModal()">
+    <div class="modal" style="max-width:480px;">
+      <button class="modal-close" onclick="cerrarHistorialModal()">×</button>
+      <h2 class="modal-title">Historial — ${escapeHTML(m.nombre)}</h2>
+      ${m.loading ? `<div style="padding:20px 0;color:var(--ink-muted);">Cargando…</div>` :
+        m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(m.error)}</div>` :
+        m.items.length===0 ? `<div class="empty-state" style="padding:24px 0;">Sin cambios registrados todavía.</div>` :
+        `<div style="max-height:360px;overflow-y:auto;">${m.items.map(h=>`
+          <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+            <div style="font-size:13px;">${escapeHTML(h.descripcion)}</div>
+            <div class="dias-label">${escapeHTML(new Date(h.fecha).toLocaleString('es-CL'))}</div>
+          </div>`).join('')}</div>`
+      }
+      <div class="form-actions"><button class="btn btn-ghost" onclick="cerrarHistorialModal()">Cerrar</button></div>
+    </div>
+  </div>`;
+}
+
+/* ---------- Transferencia entre sedes (inventario) ---------- */
+function abrirTransferirModal(id){
+  const item = state.insumos.find(i=>i.id===id);
+  if(!item) return;
+  const destino = UBICACIONES.find(u=>u!==item.ubicacion);
+  state.transferirModal = { insumoId:id, destino, cantidad:'', error:null, loading:false };
+  render();
+}
+function cerrarTransferirModal(){ state.transferirModal = null; render(); }
+async function confirmarTransferencia(){
+  const m = state.transferirModal;
+  const item = state.insumos.find(i=>i.id===m.insumoId);
+  if(!item) return;
+  const cantidad = parseFloat(document.getElementById('f-cantidad-transferir').value);
+  if(isNaN(cantidad) || cantidad <= 0){ m.error = 'Ingresa una cantidad válida, mayor que 0.'; render(); return; }
+  if(cantidad > item.cantidad){ m.error = 'No puedes transferir más de lo que hay disponible (' + item.cantidad + ').'; render(); return; }
+  m.loading = true; m.error = null;
+  render();
+  try{
+    const nuevaCantidadOrigen = item.cantidad - cantidad;
+    await apiUpdateInsumo(item.id, { cantidad: nuevaCantidadOrigen, fecha_ultima_actualizacion: todayISO() });
+    item.cantidad = nuevaCantidadOrigen;
+    item.fecha_ultima_actualizacion = todayISO();
+    registrarHistorial('insumo', item.id, 'Transferencia: salieron ' + cantidad + ' hacia ' + m.destino);
+
+    const existente = state.insumos.find(i=>i.id!==item.id && i.ubicacion===m.destino && (i.nombre||'').trim().toLowerCase() === (item.nombre||'').trim().toLowerCase());
+    if(existente){
+      const nuevaCantidadDestino = (parseFloat(existente.cantidad)||0) + cantidad;
+      await apiUpdateInsumo(existente.id, { cantidad: nuevaCantidadDestino, fecha_ultima_actualizacion: todayISO() });
+      existente.cantidad = nuevaCantidadDestino;
+      existente.fecha_ultima_actualizacion = todayISO();
+      registrarHistorial('insumo', existente.id, 'Transferencia: llegaron ' + cantidad + ' desde ' + item.ubicacion);
+    }else{
+      const nuevo = {
+        id: uidInsumo(), nombre: item.nombre, categoria: item.categoria, ubicacion: m.destino,
+        cantidad: cantidad, unidad: item.unidad, notas: null, stock_minimo: item.stock_minimo,
+        fecha_ultima_actualizacion: todayISO()
+      };
+      await apiCreateInsumo(nuevo);
+      state.insumos.unshift(nuevo);
+      registrarHistorial('insumo', nuevo.id, 'Creado por transferencia: llegaron ' + cantidad + ' desde ' + item.ubicacion);
+    }
+
+    state.transferirModal = null;
+    state.toast = 'Transferencia realizada — ' + cantidad + ' ' + (item.unidad||'unidades') + ' a ' + m.destino;
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 2800);
+  }catch(e){
+    m.loading = false;
+    m.error = 'No se pudo completar la transferencia: ' + (e && e.message ? e.message : 'error desconocido');
+    render();
+  }
+}
+function transferirModalHTML(){
+  const m = state.transferirModal;
+  if(!m) return '';
+  const item = state.insumos.find(i=>i.id===m.insumoId);
+  if(!item) return '';
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) cerrarTransferirModal()">
+    <div class="modal" style="max-width:440px;">
+      <button class="modal-close" onclick="cerrarTransferirModal()">×</button>
+      <h2 class="modal-title">Transferir insumo</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0 0 14px;">
+        ${escapeHTML(item.nombre)} — hay ${item.cantidad} en ${escapeHTML(item.ubicacion)}. Se transferirá a <strong>${escapeHTML(m.destino)}</strong>.
+      </p>
+      ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(m.error)}</div>` : ''}
+      <div class="form-field full">
+        <label>Cantidad a transferir</label>
+        <input type="number" id="f-cantidad-transferir" min="1" max="${item.cantidad}" step="1" placeholder="0" ${m.loading?'disabled':''}>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="cerrarTransferirModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmarTransferencia()" ${m.loading?'disabled':''}>${m.loading?'Transfiriendo…':'Transferir'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------- Adjuntar documento (pedidos) ---------- */
+function abrirAdjuntarModal(pedidoId){
+  state.adjuntarModal = { pedidoId, loading:false, error:null };
+  render();
+}
+function cerrarAdjuntarModal(){ state.adjuntarModal = null; render(); }
+async function handleSubirDocumento(){
+  const m = state.adjuntarModal;
+  const p = state.pedidos.find(x=>x.id===m.pedidoId);
+  if(!p) return;
+  const input = document.getElementById('f-documento');
+  const archivo = input.files && input.files[0];
+  if(!archivo){ m.error = 'Elige primero un archivo.'; render(); return; }
+  m.loading = true; m.error = null;
+  render();
+  try{
+    const ruta = p.id + '/' + Date.now() + '_' + archivo.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const { error: uploadError } = await supabaseClient.storage.from('documentos').upload(ruta, archivo, { upsert: true });
+    if(uploadError) throw uploadError;
+    await apiUpdatePedido(p.id, { documento_path: ruta });
+    p.documento_path = ruta;
+    registrarHistorial('pedido', p.id, 'Documento adjuntado (' + archivo.name + ')');
+    state.adjuntarModal = null;
+    state.toast = 'Documento adjuntado.';
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 2600);
+  }catch(e){
+    m.loading = false;
+    m.error = 'No se pudo subir el archivo: ' + (e && e.message ? e.message : 'error desconocido');
+    render();
+  }
+}
+async function verDocumento(pedidoId){
+  const p = state.pedidos.find(x=>x.id===pedidoId);
+  if(!p || !p.documento_path) return;
+  try{
+    const { data, error } = await supabaseClient.storage.from('documentos').createSignedUrl(p.documento_path, 60);
+    if(error) throw error;
+    window.open(data.signedUrl, '_blank', 'noopener');
+  }catch(e){
+    state.toast = 'No se pudo abrir el documento: ' + (e && e.message ? e.message : 'error desconocido');
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 3200);
+  }
+}
+async function eliminarDocumento(pedidoId){
+  const p = state.pedidos.find(x=>x.id===pedidoId);
+  if(!p || !p.documento_path) return;
+  const ruta = p.documento_path;
+  try{
+    await supabaseClient.storage.from('documentos').remove([ruta]);
+    await apiUpdatePedido(pedidoId, { documento_path: null });
+    p.documento_path = null;
+    registrarHistorial('pedido', pedidoId, 'Documento eliminado');
+    state.toast = 'Documento eliminado.';
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 2600);
+  }catch(e){
+    state.toast = 'No se pudo eliminar el documento: ' + (e && e.message ? e.message : 'error desconocido');
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 3200);
+  }
+}
+function adjuntarModalHTML(){
+  const m = state.adjuntarModal;
+  if(!m) return '';
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) cerrarAdjuntarModal()">
+    <div class="modal" style="max-width:420px;">
+      <button class="modal-close" onclick="cerrarAdjuntarModal()">×</button>
+      <h2 class="modal-title">Adjuntar documento</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0 0 14px;">Sube la factura, orden de compra u otro documento del pedido (PDF o imagen).</p>
+      ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(m.error)}</div>` : ''}
+      <div class="form-field full">
+        <input type="file" id="f-documento" accept=".pdf,.jpg,.jpeg,.png" ${m.loading?'disabled':''}>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="cerrarAdjuntarModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="handleSubirDocumento()" ${m.loading?'disabled':''}>${m.loading?'Subiendo…':'Subir'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function insumoModalHTML(){
+  const editando = !!state.editInsumoId;
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeInsumoModal()">
+    <div class="modal">
+      <button class="modal-close" onclick="closeInsumoModal()">×</button>
+      <h2 class="modal-title">${editando ? 'Editar insumo' : 'Nuevo insumo'}</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0;">Registra herramientas, equipos u otros insumos de bodega, por ubicación.</p>
+      <div class="form-grid">
+        <div class="field-note" id="form-error" style="display:none;grid-column:1 / -1;background:var(--st-atrasado-bg);color:var(--st-atrasado);">No se puede guardar: completa nombre, ubicación y cantidad.</div>
+        <div class="form-field full">
+          <label>Nombre *</label>
+          <input type="text" id="f-nombre" placeholder="Ej: Mochila porta-herramientas" oninput="validateInsumoForm()">
+        </div>
+        <div class="form-field">
+          <label>Categoría</label>
+          <input type="text" id="f-categoria" list="categorias-list" placeholder="Ej: Herramientas">
+          <datalist id="categorias-list">${CATEGORIAS_SUGERIDAS.map(c=>`<option value="${c}">`).join('')}</datalist>
+        </div>
+        <div class="form-field">
+          <label>Ubicación *</label>
+          <select id="f-ubicacion" onchange="validateInsumoForm()">
+            <option value="" disabled selected>Selecciona…</option>
+            ${UBICACIONES.map(u=>`<option value="${u}">${u}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Cantidad *</label>
+          <input type="number" id="f-cantidad" min="0" step="1" placeholder="0" oninput="validateInsumoForm()">
+        </div>
+        <div class="form-field">
+          <label>Unidad</label>
+          <input type="text" id="f-unidad" placeholder="Ej: unidades, cajas">
+        </div>
+        <div class="form-field">
+          <label>Stock mínimo (opcional)</label>
+          <input type="number" id="f-stock-minimo" min="0" step="1" placeholder="Avisar si baja de…">
+        </div>
+        <div class="form-field full">
+          <label>Notas</label>
+          <textarea id="f-notas" placeholder="Detalles opcionales…"></textarea>
+        </div>
+        <div class="dias-label" id="form-hint" style="grid-column:1 / -1;">Completa los campos marcados con * para poder guardar.</div>
+        <div class="form-actions" style="grid-column:1 / -1;">
+          <button type="button" class="btn btn-ghost" onclick="closeInsumoModal()">Cancelar</button>
+          <button type="button" id="btn-guardar-item" class="btn btn-primary" onclick="handleGuardarItem()" disabled>Guardar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   RENDER PRINCIPAL
+   ============================================================ */
+function toggleFiltroRapidoPedidos(valor){
+  state.pedidosFilters.filtroRapido = (state.pedidosFilters.filtroRapido === valor) ? null : valor;
+  render();
+}
+function toggleFiltroRapidoInsumos(valor){
+  state.insumosFilters.filtroRapido = (state.insumosFilters.filtroRapido === valor) ? null : valor;
+  render();
+}
+function switchVista(v){ state.vista = v; render(); }
+
+function escribirExcel(datos, nombreHoja, nombreArchivo){
+  if(datos.length === 0){
+    state.toast = 'No hay datos para exportar con el filtro actual.';
+    render();
+    setTimeout(()=>{ state.toast=null; render(); }, 2600);
+    return;
+  }
+  const ws = XLSX.utils.json_to_sheet(datos);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
+  XLSX.writeFile(wb, nombreArchivo);
+}
+function exportarExcelInsumos(){
+  const datos = getFilteredInsumos().map(i=>({
+    Nombre: i.nombre, Categoría: i.categoria||'', Ubicación: i.ubicacion, Cantidad: i.cantidad,
+    Unidad: i.unidad||'', 'Stock mínimo': i.stock_minimo!=null ? i.stock_minimo : '',
+    Notas: i.notas||'', 'Última actualización': i.fecha_ultima_actualizacion||''
+  }));
+  escribirExcel(datos, 'Inventario', 'inventario_' + todayISO() + '.xlsx');
+}
+function exportarExcelPedidos(desde, hasta){
+  let lista = getFilteredPedidos();
+  if(desde || hasta){
+    lista = lista.filter(p=>{
+      const fecha = p.fecha_orden || p.fecha_registro;
+      if(!fecha) return false;
+      if(desde && fecha < desde) return false;
+      if(hasta && fecha > hasta) return false;
+      return true;
+    });
+  }
+  const datos = lista.map(p=>{
+    const m = pedidoMonto(p);
+    return {
+      Proveedor: p.proveedor, Área: p.area||'', Solicitante: p.solicitante||'',
+      'N° de seguimiento': p.numero_seguimiento||'', Courier: p.courier||'',
+      Destino: p.destino||'', Monto: m.monto, Moneda: m.moneda||'', Estado: p.estado,
+      Internacional: p.internacional ? 'Sí' : 'No', 'Agente aduanero': p.agente_aduanero ? 'Sí' : 'No',
+      'Fecha de la orden': p.fecha_orden||'', 'Fecha registro': p.fecha_registro||'',
+      'Fecha estimada': p.fecha_estimada||'', 'Última actualización': p.fecha_ultima_actualizacion||''
+    };
+  });
+  escribirExcel(datos, 'Pedidos', 'pedidos_' + todayISO() + '.xlsx');
+}
+function abrirExportar(){
+  if(state.vista !== 'pedidos'){ exportarExcelInsumos(); return; }
+  state.exportarModal = { rango:'todo' };
+  render();
+}
+function cerrarExportarModal(){ state.exportarModal = null; render(); }
+function confirmarExportar(){
+  const m = state.exportarModal;
+  let desde = null, hasta = null;
+  if(m.rango === '7d'){ desde = addDaysISO(-7); hasta = todayISO(); }
+  else if(m.rango === '30d'){ desde = addDaysISO(-30); hasta = todayISO(); }
+  else if(m.rango === 'personalizado'){
+    desde = document.getElementById('f-export-desde').value || null;
+    hasta = document.getElementById('f-export-hasta').value || null;
+  }
+  state.exportarModal = null;
+  render();
+  exportarExcelPedidos(desde, hasta);
+}
+function exportarModalHTML(){
+  const m = state.exportarModal;
+  if(!m) return '';
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) cerrarExportarModal()">
+    <div class="modal" style="max-width:400px;">
+      <button class="modal-close" onclick="cerrarExportarModal()">×</button>
+      <h2 class="modal-title">Exportar pedidos</h2>
+      <p style="color:var(--ink-muted);font-size:13px;margin:0 0 14px;">Usa la fecha de la orden (o de registro, si no tiene) para el rango. Se exportan los pedidos que coincidan con los filtros que tengas aplicados en la lista.</p>
+      <div class="form-field full">
+        <label>Rango</label>
+        <select id="f-export-rango" onchange="state.exportarModal.rango=this.value; document.getElementById('export-rango-custom').style.display = this.value==='personalizado' ? 'grid' : 'none';">
+          <option value="todo" ${m.rango==='todo'?'selected':''}>Todo</option>
+          <option value="7d" ${m.rango==='7d'?'selected':''}>Últimos 7 días</option>
+          <option value="30d" ${m.rango==='30d'?'selected':''}>Últimos 30 días</option>
+          <option value="personalizado" ${m.rango==='personalizado'?'selected':''}>Rango personalizado</option>
+        </select>
+      </div>
+      <div id="export-rango-custom" style="display:${m.rango==='personalizado'?'grid':'none'};grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
+        <div class="form-field"><label>Desde</label><input type="date" id="f-export-desde"></div>
+        <div class="form-field"><label>Hasta</label><input type="date" id="f-export-hasta"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="cerrarExportarModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmarExportar()">Exportar</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function render(){
+  if(!state.session){ document.getElementById('app').innerHTML = loginScreenHTML(); return; }
+  if(state.loadError){
+    document.getElementById('app').innerHTML = `
+      <div class="center-loading" style="flex-direction:column;gap:16px;text-align:center;padding:0 24px;">
+        <div>${escapeHTML(state.loadError)}</div>
+        <button class="btn btn-primary" onclick="cargarTodo()">Reintentar</button>
+      </div>`;
+    return;
+  }
+  const esPedidos = state.vista === 'pedidos';
+  const pStats = computePedidoStats();
+  const iStats = computeInsumoStats();
+  const live = esPedidos ? state.realtimeConectado.pedidos : state.realtimeConectado.insumos;
+
+  const fp = state.pedidosFilters.filtroRapido;
+  const fi = state.insumosFilters.filtroRapido;
+  const statsHTML = esPedidos ? `
+    <button type="button" class="stat-chip ${fp==='activos'?'stat-chip-active':''}" onclick="toggleFiltroRapidoPedidos('activos')"><div class="stat-value">${pStats.activos}</div><div class="stat-label">pedidos activos</div></button>
+    <button type="button" class="stat-chip warn ${fp==='atrasados'?'stat-chip-active':''}" onclick="toggleFiltroRapidoPedidos('atrasados')"><div class="stat-value">${pStats.atrasados}</div><div class="stat-label">sin novedades &gt;5 días</div></button>
+    <button type="button" class="stat-chip amber ${fp==='agente'?'stat-chip-active':''}" style="border-left-color:var(--accent-warm)" onclick="toggleFiltroRapidoPedidos('agente')"><div class="stat-value">${pStats.conAgente}</div><div class="stat-label">con agente aduanero</div></button>
+    <button type="button" class="stat-chip ${fp==='revision'?'stat-chip-active':''}" style="border-left-color:var(--st-transito)" onclick="toggleFiltroRapidoPedidos('revision')"><div class="stat-value">${pStats.pendientesRevision}</div><div class="stat-label">pendientes de revisión</div></button>
+    <button type="button" class="stat-chip warn ${fp==='vencidos'?'stat-chip-active':''}" onclick="toggleFiltroRapidoPedidos('vencidos')"><div class="stat-value">${pStats.vencidos}</div><div class="stat-label">vencidos (pasó la fecha)</div></button>
+  ` : `
+    <div class="stat-chip"><div class="stat-value">${iStats.totalInsumos}</div><div class="stat-label">insumos distintos</div></div>
+    <div class="stat-chip"><div class="stat-value">${iStats.unidadesTotales}</div><div class="stat-label">unidades totales</div></div>
+    <button type="button" class="stat-chip warn ${fi==='viejo'?'stat-chip-active':''}" onclick="toggleFiltroRapidoInsumos('viejo')"><div class="stat-value">${iStats.sinActualizar}</div><div class="stat-label">sin actualizar &gt;90 días</div></button>
+    <button type="button" class="stat-chip warn ${fi==='bajo'?'stat-chip-active':''}" onclick="toggleFiltroRapidoInsumos('bajo')"><div class="stat-value">${iStats.bajoStock}</div><div class="stat-label">con stock bajo</div></button>
+  `;
+
+  const controlsHTML = esPedidos ? `
+        <input type="text" placeholder="Buscar por proveedor o N° de seguimiento…" value="${escapeHTML(state.pedidosFilters.search)}"
+               oninput="state.pedidosFilters.search=this.value; renderPedidosList();">
+        <select onchange="state.pedidosFilters.destino=this.value; renderPedidosList();">
+          <option ${state.pedidosFilters.destino==='Todos'?'selected':''}>Todos</option>
+          ${DESTINOS.map(d=>`<option ${state.pedidosFilters.destino===d?'selected':''}>${d}</option>`).join('')}
+        </select>
+        <select onchange="state.pedidosFilters.estado=this.value; renderPedidosList();">
+          <option ${state.pedidosFilters.estado==='Todos'?'selected':''}>Todos</option>
+          ${ESTADOS.map(e=>`<option ${state.pedidosFilters.estado===e?'selected':''}>${e}</option>`).join('')}
+        </select>
+        <div class="spacer"></div>
+        <button class="btn-ghost" onclick="abrirExportar()">Exportar</button>
+        ${puedeEditar() ? `<button class="btn btn-primary" onclick="openPedidoModal()">+ Nuevo pedido</button>` : ''}
+  ` : `
+        <input type="text" placeholder="Buscar por nombre…" value="${escapeHTML(state.insumosFilters.search)}"
+               oninput="state.insumosFilters.search=this.value; renderInsumosList();">
+        <select onchange="state.insumosFilters.ubicacion=this.value; renderInsumosList();">
+          <option ${state.insumosFilters.ubicacion==='Todos'?'selected':''}>Todos</option>
+          ${UBICACIONES.map(u=>`<option ${state.insumosFilters.ubicacion===u?'selected':''}>${u}</option>`).join('')}
+        </select>
+        <select onchange="state.insumosFilters.categoria=this.value; renderInsumosList();">
+          <option ${state.insumosFilters.categoria==='Todas'?'selected':''}>Todas</option>
+          ${categoriasExistentes().map(c=>`<option ${state.insumosFilters.categoria===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+        <div class="spacer"></div>
+        <button class="btn-ghost" onclick="abrirExportar()">Exportar</button>
+        ${puedeEditar() ? `<button class="btn btn-primary" onclick="openInsumoModal()">+ Nuevo insumo</button>` : ''}
+  `;
+
+  const footerHTML = esPedidos ? `
+        ${state.confirmAction === 'reset' ? `
+          <span class="dias-label">Esto agrega pedidos de ejemplo a la base de datos real. ¿Continuar?</span>
+          <button class="link-btn" onclick="handleResetDemo()">Sí, agregar</button>
+          <button class="link-btn" onclick="cancelConfirm()">Cancelar</button>
+        ` : state.confirmAction === 'clear' ? `
+          <span class="dias-label">Esto elimina TODOS los pedidos — no se puede deshacer. ¿Continuar?</span>
+          <button class="link-btn" onclick="handleClearAll()">Sí, borrar todo</button>
+          <button class="link-btn" onclick="cancelConfirm()">Cancelar</button>
+        ` : `
+          <button class="link-btn" onclick="askConfirm('reset')">Agregar datos de ejemplo</button>
+          <button class="link-btn" onclick="askConfirm('clear')">Borrar todos los pedidos</button>
+        `}
+  ` : `<span class="dias-label">Usa los botones − / + en cada fila para ajustar el stock rápido, sin abrir el formulario.</span>`;
+
+  const bannerHTML = '';
+
+  const html = `
     <div class="topbar">
       <div class="topbar-inner">
         <div>
-          <h1 class="page-title">Innovex — Dashboard</h1>
-          <p class="page-sub">Vista general — Adquisiciones e Inventario</p>
+          <h1 class="page-title">${esPedidos ? 'Seguimiento de Pedidos' : 'Inventario'}</h1>
+          <p class="page-sub">Innovex</p>
         </div>
+        <div class="stats-row">${statsHTML}</div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
           <span class="dias-label">${escapeHTML(state.session.user.email)}</span>
-          <div style="display:flex;gap:14px;">
-            <a href="./index.html" class="link-btn" style="text-decoration:none;">← Volver a Pedidos</a>
-            <button class="link-btn" onclick="handleLogout()">Cerrar sesión</button>
-          </div>
+          <button class="btn-ghost btn-sm" onclick="handleLogout()">Cerrar sesión</button>
         </div>
       </div>
+      <div class="tabs-row">
+        <button class="tab-item ${esPedidos?'active':''}" onclick="switchVista('pedidos')">Pedidos</button>
+        <button class="tab-item ${!esPedidos?'active':''}" onclick="switchVista('inventario')">Inventario</button>
+      </div>
     </div>
+
+    <div class="controls"><div class="controls-inner">${controlsHTML}</div></div>
 
     <div class="main">
-      <div class="note-banner">Vista de solo lectura, en construcción. Por ahora cualquier cuenta con acceso al sistema puede verla — todavía no está restringida solo al jefe.</div>
-
-      <div class="kpi-grid">
-        <div class="kpi-card"><p class="kpi-label">Pedidos activos</p><p class="kpi-value">${kpis.activos}</p></div>
-        <div class="kpi-card"><p class="kpi-label">Requieren atención</p><p class="kpi-value ${kpis.requierenAtencion>0?'warn':''}">${kpis.requierenAtencion}</p></div>
-        <div class="kpi-card"><p class="kpi-label">Pendientes de revisión</p><p class="kpi-value ${kpis.pendientesRevision>0?'warn':''}">${kpis.pendientesRevision}</p></div>
-        <div class="kpi-card"><p class="kpi-label">Insumos con stock bajo</p><p class="kpi-value ${kpis.stockBajo>0?'warn':''}">${kpis.stockBajo}</p></div>
-      </div>
-
-      <h2 class="section-title">Pedidos por estado</h2>
-      <div class="chart-box"><canvas id="chartEstados" role="img" aria-label="Pedidos por estado"></canvas></div>
-
-      <h2 class="section-title">Pedidos registrados por mes</h2>
-      <div class="chart-box"><canvas id="chartTendencia" role="img" aria-label="Pedidos registrados por mes"></canvas></div>
-
-      <h2 class="section-title">Gasto este mes</h2>
-      <p style="margin:0 0 20px;">${gastoMonHTML}</p>
-
-      <h2 class="section-title">Gasto por área (histórico, por moneda)</h2>
-      ${areasFilas ? `<table class="table-simple">
-        <tr><th>Área</th><th style="text-align:right;">CLP</th><th style="text-align:right;">USD</th><th style="text-align:right;">EUR</th></tr>
-        ${areasFilas}
-      </table>` : '<p class="dias-label">Aún no hay pedidos con área registrada.</p>'}
+      ${bannerHTML}
+      <div id="list-container">${esPedidos ? pedidosListInnerHTML() : insumosListInnerHTML()}</div>
+      <div class="footer-actions">${footerHTML}</div>
     </div>
-  `;
 
-  renderCharts(estados, tendencia);
+    ${!state.showAssistant ? '<button class="assistant-toggle" onclick="toggleAssistant()">✦ Asistente IA</button>' : ''}
+    ${state.showAssistant ? assistantPanelHTML() : ''}
+    ${state.showPedidoModal ? pedidoModalHTML() : ''}
+    ${state.agenteSummaryModal ? agenteModalHTML() : ''}
+    ${state.actualizarEstadoModal ? actualizarEstadoModalHTML() : ''}
+    ${state.showInsumoModal ? insumoModalHTML() : ''}
+    ${state.historialModal ? historialModalHTML() : ''}
+    ${state.transferirModal ? transferirModalHTML() : ''}
+    ${state.adjuntarModal ? adjuntarModalHTML() : ''}
+    ${state.exportarModal ? exportarModalHTML() : ''}
+    ${state.toast ? `<div class="toast">${escapeHTML(state.toast)}</div>` : ''}
+  `;
+  document.getElementById('app').innerHTML = html;
 }
 
-function renderCharts(estados, tendencia){
-  if(chartEstadosInstance) chartEstadosInstance.destroy();
-  if(chartTendenciaInstance) chartTendenciaInstance.destroy();
-
-  chartEstadosInstance = new Chart(document.getElementById('chartEstados'), {
-    type: 'bar',
-    data: {
-      labels: ESTADOS,
-      datasets: [{ data: estados, backgroundColor: ESTADOS.map(e=>ESTADO_COLOR[e]), borderRadius: 4, maxBarThickness: 40 }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { display:false } },
-        y: { beginAtZero: true, ticks: { precision:0 } }
-      }
-    }
-  });
-
-  chartTendenciaInstance = new Chart(document.getElementById('chartTendencia'), {
-    type: 'line',
-    data: {
-      labels: tendencia.labels,
-      datasets: [{
-        data: tendencia.valores,
-        borderColor: '#1B4B43', backgroundColor: 'rgba(27,75,67,0.1)',
-        fill: true, borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#1B4B43', tension: 0.3
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { display:false } },
-        y: { beginAtZero: true, ticks: { precision:0 } }
-      }
-    }
-  });
+/* ============================================================
+   TIEMPO REAL
+   ============================================================ */
+let realtimeChannelPedidos = null;
+let realtimeChannelInsumos = null;
+function iniciarRealtimePedidos(){
+  if(realtimeChannelPedidos) return;
+  realtimeChannelPedidos = supabaseClient.channel('pedidos-realtime')
+    .on('postgres_changes', { event:'*', schema:'public', table:'pedidos' }, handleRealtimeChangePedidos)
+    .subscribe((status)=>{ state.realtimeConectado.pedidos = (status === 'SUBSCRIBED'); if(!state.showPedidoModal && !state.showInsumoModal) render(); });
+}
+function handleRealtimeChangePedidos(payload){
+  let mensaje = null;
+  if(payload.eventType === 'INSERT'){
+    if(!state.pedidos.find(p=>p.id===payload.new.id)){ state.pedidos.unshift(payload.new); mensaje = 'Nuevo pedido recibido: ' + payload.new.proveedor; }
+  } else if(payload.eventType === 'UPDATE'){
+    const p = state.pedidos.find(x=>x.id===payload.new.id); if(p) Object.assign(p, payload.new);
+  } else if(payload.eventType === 'DELETE'){ state.pedidos = state.pedidos.filter(p=>p.id!==payload.old.id); }
+  if(!state.showPedidoModal && !state.showInsumoModal){
+    if(mensaje) state.toast = mensaje;
+    render();
+    if(mensaje) setTimeout(()=>{ state.toast = null; render(); }, 2600);
+  }
+}
+function iniciarRealtimeInsumos(){
+  if(realtimeChannelInsumos) return;
+  realtimeChannelInsumos = supabaseClient.channel('inventario-realtime')
+    .on('postgres_changes', { event:'*', schema:'public', table:'inventario' }, handleRealtimeChangeInsumos)
+    .subscribe((status)=>{ state.realtimeConectado.insumos = (status === 'SUBSCRIBED'); if(!state.showPedidoModal && !state.showInsumoModal) render(); });
+}
+function handleRealtimeChangeInsumos(payload){
+  let mensaje = null;
+  if(payload.eventType === 'INSERT'){
+    if(!state.insumos.find(i=>i.id===payload.new.id)){ state.insumos.unshift(payload.new); mensaje = 'Insumo agregado: ' + payload.new.nombre; }
+  } else if(payload.eventType === 'UPDATE'){
+    const i = state.insumos.find(x=>x.id===payload.new.id); if(i) Object.assign(i, payload.new);
+  } else if(payload.eventType === 'DELETE'){ state.insumos = state.insumos.filter(i=>i.id!==payload.old.id); }
+  if(!state.showPedidoModal && !state.showInsumoModal){
+    if(mensaje) state.toast = mensaje;
+    render();
+    if(mensaje) setTimeout(()=>{ state.toast = null; render(); }, 2600);
+  }
 }
 
 /* ============================================================
    INICIO
    ============================================================ */
+function puedeEditar(){ return state.rol !== 'lector'; }
+async function cargarRol(){
+  try{
+    const { data, error } = await supabaseClient.from('perfiles').select('rol').eq('id', state.session.user.id).single();
+    if(error || !data) { state.rol = 'editor'; return; }
+    state.rol = data.rol || 'editor';
+  }catch(e){ state.rol = 'editor'; }
+}
 async function cargarTodo(){
   document.getElementById('app').innerHTML = '<div class="center-loading">Conectando con la base de datos…</div>';
   try{
+    await cargarRol();
     state.pedidos = await apiGetPedidos();
     state.insumos = await apiGetInsumos();
     state.loadError = null;
+    iniciarRealtimePedidos();
+    iniciarRealtimeInsumos();
   }catch(e){
     state.loadError = 'No se pudo conectar con la base de datos (' + (e && e.message ? e.message : 'error desconocido') + '). Revisa la conexión e inténtalo de nuevo.';
   }
@@ -386,8 +1965,18 @@ async function init(){
 }
 init();
 supabaseClient.auth.onAuthStateChange((event, session)=>{
-  if(event === 'SIGNED_OUT'){ state.session = null; state.pedidos = []; state.insumos = []; render(); }
+  if(event === 'SIGNED_OUT'){
+    state.session = null; state.pedidos = []; state.insumos = [];
+    if(realtimeChannelPedidos){ supabaseClient.removeChannel(realtimeChannelPedidos); realtimeChannelPedidos = null; }
+    if(realtimeChannelInsumos){ supabaseClient.removeChannel(realtimeChannelInsumos); realtimeChannelInsumos = null; }
+    render();
+  }
 });
+setInterval(async ()=>{
+  if(!state.session || state.showPedidoModal || state.showInsumoModal || state.loadError) return;
+  try{ state.pedidos = await apiGetPedidos(); state.insumos = await apiGetInsumos(); render(); }
+  catch(e){ /* respaldo silencioso */ }
+}, 90000);
 </script>
 </body>
 </html>
