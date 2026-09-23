@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Innovex — Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root{
+    --bg:#F5F4EF; --surface:#FFFFFF; --surface-alt:#EFEEE6; --border:#DEDCD1;
+    --ink:#1B2321; --ink-muted:#5C665F; --accent:#1B4B43; --accent-hover:#143A34;
+    --accent-warm:#A6692E; --accent-warm-bg:#F3E6D6;
+    --st-proceso:#6B7563;  --st-proceso-bg:#EEF0EC;
+    --st-transito:#2E5C8A; --st-transito-bg:#E7EEF5;
+    --st-aduana:#A6761D;   --st-aduana-bg:#F5EEDD;
+    --st-destino:#1B4B43;  --st-destino-bg:#E4EEEC;
+    --st-recibido:#2F6B3A; --st-recibido-bg:#E7F0E8;
+    --st-atrasado:#A6332F; --st-atrasado-bg:#F6E5E4;
+    --font-display: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:var(--font-ui); font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  #app{min-height:100vh;}
+  .center-loading{ display:flex;align-items:center;justify-content:center;height:100vh; color:var(--ink-muted); font-family:var(--font-display); font-size:18px; }
+  .login-box{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:36px 34px; width:100%; max-width:380px; text-align:left; }
+  .form-field label{ font-size:12px; color:var(--ink-muted); display:block; margin-bottom:5px; }
+  .form-field input{ width:100%; font-family:var(--font-ui); font-size:14px; padding:9px 10px; border:1px solid var(--border); border-radius:4px; background:var(--surface); color:var(--ink); outline:none; }
+  .form-field input:focus{ border-color:var(--accent); }
+  .field-note{ font-size:12px; color:var(--accent-warm); background:var(--accent-warm-bg); padding:8px 10px; border-radius:4px; margin-bottom:14px; }
+  .btn{ font-family:var(--font-ui); font-size:13.5px; font-weight:500; cursor:pointer; border-radius:4px; padding:9px 16px; border:1px solid transparent; }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-primary:hover{ background:var(--accent-hover); }
+  .btn:disabled{ opacity:0.55; cursor:default; }
+  .link-btn{ background:none;border:none;color:var(--ink-muted);font-size:12.5px; text-decoration:underline; cursor:pointer; font-family:var(--font-ui); padding:0; }
+  .link-btn:hover{ color:var(--ink); }
+
+  .topbar{ padding:24px 40px 18px; border-bottom:1px solid var(--border); background:var(--surface); }
+  .topbar-inner{ display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap; max-width:1280px; margin:0 auto; }
+  .page-title{ font-family:var(--font-display); font-size:26px; font-weight:600; margin:0 0 4px 0; letter-spacing:-0.01em; }
+  .page-sub{ color:var(--ink-muted); font-size:13px; margin:0; }
+  .dias-label{ font-size:11.5px; color:var(--ink-muted); }
+
+  .main{ max-width:1280px; margin:0 auto; padding:28px 40px 80px; }
+  .note-banner{ background:var(--accent-warm-bg); border:1px solid #E0C9A6; color:#5C4322; border-radius:4px; padding:10px 14px; font-size:13px; margin-bottom:24px; }
+  .error-banner{ background:var(--st-atrasado-bg); border:1px solid #E0B3B0; color:var(--st-atrasado); border-radius:4px; padding:10px 14px; font-size:13px; margin-bottom:24px; }
+
+  .kpi-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(190px,1fr)); gap:14px; margin-bottom:32px; }
+  .kpi-card{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:16px 18px; }
+  .kpi-label{ font-size:12px; color:var(--ink-muted); margin:0 0 6px; }
+  .kpi-value{ font-family:var(--font-display); font-size:27px; font-weight:600; margin:0; }
+  .kpi-value.warn{ color:var(--st-atrasado); }
+
+  .section-title{ font-family:var(--font-display); font-size:17px; margin:0 0 14px; }
+  .chart-box{ position:relative; width:100%; height:240px; margin-bottom:36px; }
+
+  table.table-simple{ width:100%; border-collapse:collapse; font-size:13.5px; margin-bottom:36px; }
+  table.table-simple th{ text-align:left; font-size:11.5px; color:var(--ink-muted); font-weight:600; padding:0 10px 8px; border-bottom:1px solid var(--border); }
+  table.table-simple td{ padding:10px 10px; border-bottom:1px solid var(--border); }
+  table.table-simple td.num{ text-align:right; font-family:var(--font-mono); }
+
+  @media (max-width:760px){
+    .topbar, .main{ padding-left:18px; padding-right:18px; }
+  }
+</style>
+</head>
+<body>
+<div id="app"><div class="center-loading">Cargando…</div></div>
+
+<script>
+/* ============================================================
+   CONFIGURACIÓN COMPARTIDA — misma que app.html
+   ============================================================ */
+const SUPABASE_URL = 'https://wncejgicemnaneptrrsq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_DrQ2zuhGaxF09jQUrssLWQ_lLKtVbnL';
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const ESTADOS = ['En proceso','En tránsito','En aduana','En destino','Recibido'];
+const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const MESES_LARGO = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+// Mismos colores que --st-* en app.html, en hex porque Chart.js (canvas) no puede leer variables CSS.
+const ESTADO_COLOR = {
+  'En proceso':  '#6B7563',
+  'En tránsito': '#2E5C8A',
+  'En aduana':   '#A6761D',
+  'En destino':  '#1B4B43',
+  'Recibido':    '#2F6B3A'
+};
+
+let state = { session:null, loginError:null, loginLoading:false, loadError:null, pedidos:[], insumos:[] };
+let chartEstadosInstance = null, chartTendenciaInstance = null;
+
+/* ============================================================
+   UTILIDADES — copiadas de app.html para mantener consistencia
+   ============================================================ */
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function daysSince(iso){
+  if(!iso) return 0;
+  const d = new Date(iso+'T00:00:00'); const t = new Date(); t.setHours(0,0,0,0);
+  return Math.max(0, Math.round((t-d)/86400000));
+}
+function escapeHTML(str){
+  if(str===null || str===undefined) return '';
+  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function pedidoMonto(p){
+  if(p.monto != null && p.moneda) return { monto: p.monto, moneda: p.moneda };
+  if(p.moneda_ingreso === 'CLP') return { monto: p.monto_clp, moneda: 'CLP' };
+  if(p.monto_usd != null) return { monto: p.monto_usd, moneda: 'USD' };
+  return { monto: null, moneda: null };
+}
+function fmtMonto(moneda, monto){
+  if(monto===null || monto===undefined || monto==='') return '—';
+  const val = Number(monto).toLocaleString('es-CL');
+  if(moneda==='CLP') return '$' + val;
+  if(moneda==='EUR') return '€' + val;
+  return 'US$' + val;
+}
+function estaVencido(p){
+  return p.estado !== 'Recibido' && !!p.fecha_estimada && p.fecha_estimada < todayISO();
+}
+function withTimeout(promise, ms){
+  return Promise.race([ promise, new Promise((_, reject)=> setTimeout(()=> reject(new Error('La operación tardó demasiado')), ms)) ]);
+}
+
+/* ============================================================
+   LOGIN — mismo patrón que app.html (comparte sesión si ya
+   inició sesión ahí, porque Supabase guarda la sesión en el
+   mismo origen)
+   ============================================================ */
+function loginScreenHTML(){
+  return `
+  <div class="center-loading" style="flex-direction:column;">
+    <div class="login-box">
+      <h1 class="page-title" style="margin-bottom:4px;">Innovex</h1>
+      <p class="page-sub" style="margin-bottom:24px;">Dashboard — Vista general</p>
+      ${state.loginError ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-bottom:14px;">${escapeHTML(state.loginError)}</div>` : ''}
+      <div class="form-field" style="margin-bottom:12px;">
+        <label>Correo</label>
+        <input type="email" id="login-email" placeholder="tu@innovex.cl" onkeydown="if(event.key==='Enter') handleLogin()">
+      </div>
+      <div class="form-field" style="margin-bottom:20px;">
+        <label>Contraseña</label>
+        <input type="password" id="login-password" onkeydown="if(event.key==='Enter') handleLogin()">
+      </div>
+      <button class="btn btn-primary" style="width:100%;" id="btn-login" onclick="handleLogin()" ${state.loginLoading?'disabled':''}>${state.loginLoading?'Ingresando…':'Iniciar sesión'}</button>
+    </div>
+  </div>`;
+}
+async function handleLogin(){
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if(!email || !password){ state.loginError = 'Ingresa tu correo y contraseña.'; render(); return; }
+  state.loginLoading = true; state.loginError = null;
+  render();
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  state.loginLoading = false;
+  if(error){ state.loginError = 'No se pudo iniciar sesión: ' + error.message; render(); return; }
+  state.session = data.session;
+  await cargarTodo();
+}
+async function handleLogout(){
+  await supabaseClient.auth.signOut();
+  state.session = null; state.pedidos = []; state.insumos = [];
+  render();
+}
+
+/* ============================================================
+   DATOS — solo lectura
+   ============================================================ */
+async function apiGetPedidos(){
+  const { data, error } = await withTimeout(supabaseClient.from('pedidos').select('*'), 10000);
+  if(error) throw new Error('Error al leer los pedidos: ' + error.message);
+  return data;
+}
+async function apiGetInsumos(){
+  const { data, error } = await withTimeout(supabaseClient.from('inventario').select('*'), 10000);
+  if(error) throw new Error('Error al leer el inventario: ' + error.message);
+  return data;
+}
+
+/* ============================================================
+   CÁLCULOS — misma lógica de negocio que app.html
+   ============================================================ */
+function computeKPIs(){
+  const activos = state.pedidos.filter(p=>p.estado!=='Recibido').length;
+  const atrasadosIds = new Set(state.pedidos.filter(p=>p.estado!=='Recibido' && daysSince(p.fecha_ultima_actualizacion)>=5).map(p=>p.id));
+  const vencidosIds = new Set(state.pedidos.filter(estaVencido).map(p=>p.id));
+  const requierenAtencion = new Set([...atrasadosIds, ...vencidosIds]).size;
+  const pendientesRevision = state.pedidos.filter(p=>p.pendiente_revision).length;
+  const stockBajo = state.insumos.filter(i=> i.stock_minimo!=null && parseFloat(i.cantidad) < parseFloat(i.stock_minimo)).length;
+  return { activos, requierenAtencion, pendientesRevision, stockBajo };
+}
+function pedidosPorEstado(){
+  return ESTADOS.map(e => state.pedidos.filter(p=>p.estado===e).length);
+}
+function pedidosPorMes(){
+  // Agrupa por mes de fecha_registro. Solo muestra meses que realmente
+  // tienen datos — con pruebas reales recién comenzando, puede ser
+  // solo uno o dos puntos por ahora, y eso es correcto mostrarlo así.
+  const conteo = {};
+  state.pedidos.forEach(p=>{
+    if(!p.fecha_registro) return;
+    const ym = p.fecha_registro.slice(0,7);
+    conteo[ym] = (conteo[ym]||0) + 1;
+  });
+  const meses = Object.keys(conteo).sort();
+  return {
+    labels: meses.map(ym=>{
+      const [y,m] = ym.split('-');
+      return MESES[parseInt(m,10)-1] + ' ' + y.slice(2);
+    }),
+    valores: meses.map(ym=>conteo[ym])
+  };
+}
+function gastoPorMonedaEsteMes(){
+  const ym = todayISO().slice(0,7);
+  const totales = {};
+  state.pedidos.forEach(p=>{
+    const fecha = p.fecha_orden || p.fecha_registro;
+    if(!fecha || !fecha.startsWith(ym)) return;
+    const m = pedidoMonto(p);
+    if(m.monto==null || !m.moneda) return;
+    totales[m.moneda] = (totales[m.moneda]||0) + Number(m.monto);
+  });
+  return totales;
+}
+function gastoPorArea(){
+  // { area: { CLP: n, USD: n, EUR: n } }
+  const resultado = {};
+  state.pedidos.forEach(p=>{
+    const area = p.area || 'Sin área';
+    const m = pedidoMonto(p);
+    if(m.monto==null || !m.moneda) return;
+    if(!resultado[area]) resultado[area] = { CLP:0, USD:0, EUR:0 };
+    resultado[area][m.moneda] = (resultado[area][m.moneda]||0) + Number(m.monto);
+  });
+  return resultado;
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function render(){
+  if(!state.session){ document.getElementById('app').innerHTML = loginScreenHTML(); return; }
+
+  if(state.loadError){
+    document.getElementById('app').innerHTML = `
+      <div class="topbar"><div class="topbar-inner"><h1 class="page-title">Innovex — Dashboard</h1></div></div>
+      <div class="main"><div class="error-banner">${escapeHTML(state.loadError)}</div>
+      <button class="btn btn-primary" onclick="cargarTodo()">Reintentar</button></div>`;
+    return;
+  }
+
+  const kpis = computeKPIs();
+  const gastoMon = gastoPorMonedaEsteMes();
+  const gastoArea = gastoPorArea();
+  const estados = pedidosPorEstado();
+  const tendencia = pedidosPorMes();
+
+  const gastoMonHTML = ['CLP','USD','EUR']
+    .filter(mon => gastoMon[mon])
+    .map(mon => fmtMonto(mon, gastoMon[mon]))
+    .join(' · ') || 'Sin pedidos con monto registrados este mes';
+
+  const areasFilas = Object.keys(gastoArea).sort().map(area=>{
+    const g = gastoArea[area];
+    return `<tr>
+      <td>${escapeHTML(area)}</td>
+      <td class="num">${g.CLP ? fmtMonto('CLP', g.CLP) : '—'}</td>
+      <td class="num">${g.USD ? fmtMonto('USD', g.USD) : '—'}</td>
+      <td class="num">${g.EUR ? fmtMonto('EUR', g.EUR) : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('app').innerHTML = `
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div>
+          <h1 class="page-title">Innovex — Dashboard</h1>
+          <p class="page-sub">Vista general — Adquisiciones e Inventario</p>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <span class="dias-label">${escapeHTML(state.session.user.email)}</span>
+          <div style="display:flex;gap:14px;">
+            <a href="./index.html" class="link-btn" style="text-decoration:none;">← Volver a Pedidos</a>
+            <button class="link-btn" onclick="handleLogout()">Cerrar sesión</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="note-banner">Vista de solo lectura, en construcción. Por ahora cualquier cuenta con acceso al sistema puede verla — todavía no está restringida solo al jefe.</div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card"><p class="kpi-label">Pedidos activos</p><p class="kpi-value">${kpis.activos}</p></div>
+        <div class="kpi-card"><p class="kpi-label">Requieren atención</p><p class="kpi-value ${kpis.requierenAtencion>0?'warn':''}">${kpis.requierenAtencion}</p></div>
+        <div class="kpi-card"><p class="kpi-label">Pendientes de revisión</p><p class="kpi-value ${kpis.pendientesRevision>0?'warn':''}">${kpis.pendientesRevision}</p></div>
+        <div class="kpi-card"><p class="kpi-label">Insumos con stock bajo</p><p class="kpi-value ${kpis.stockBajo>0?'warn':''}">${kpis.stockBajo}</p></div>
+      </div>
+
+      <h2 class="section-title">Pedidos por estado</h2>
+      <div class="chart-box"><canvas id="chartEstados" role="img" aria-label="Pedidos por estado"></canvas></div>
+
+      <h2 class="section-title">Pedidos registrados por mes</h2>
+      <div class="chart-box"><canvas id="chartTendencia" role="img" aria-label="Pedidos registrados por mes"></canvas></div>
+
+      <h2 class="section-title">Gasto este mes</h2>
+      <p style="margin:0 0 20px;">${gastoMonHTML}</p>
+
+      <h2 class="section-title">Gasto por área (histórico, por moneda)</h2>
+      ${areasFilas ? `<table class="table-simple">
+        <tr><th>Área</th><th style="text-align:right;">CLP</th><th style="text-align:right;">USD</th><th style="text-align:right;">EUR</th></tr>
+        ${areasFilas}
+      </table>` : '<p class="dias-label">Aún no hay pedidos con área registrada.</p>'}
+    </div>
+  `;
+
+  renderCharts(estados, tendencia);
+}
+
+function renderCharts(estados, tendencia){
+  if(chartEstadosInstance) chartEstadosInstance.destroy();
+  if(chartTendenciaInstance) chartTendenciaInstance.destroy();
+
+  chartEstadosInstance = new Chart(document.getElementById('chartEstados'), {
+    type: 'bar',
+    data: {
+      labels: ESTADOS,
+      datasets: [{ data: estados, backgroundColor: ESTADOS.map(e=>ESTADO_COLOR[e]), borderRadius: 4, maxBarThickness: 40 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display:false } },
+        y: { beginAtZero: true, ticks: { precision:0 } }
+      }
+    }
+  });
+
+  chartTendenciaInstance = new Chart(document.getElementById('chartTendencia'), {
+    type: 'line',
+    data: {
+      labels: tendencia.labels,
+      datasets: [{
+        data: tendencia.valores,
+        borderColor: '#1B4B43', backgroundColor: 'rgba(27,75,67,0.1)',
+        fill: true, borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#1B4B43', tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display:false } },
+        y: { beginAtZero: true, ticks: { precision:0 } }
+      }
+    }
+  });
+}
+
+/* ============================================================
+   INICIO
+   ============================================================ */
+async function cargarTodo(){
+  document.getElementById('app').innerHTML = '<div class="center-loading">Conectando con la base de datos…</div>';
+  try{
+    state.pedidos = await apiGetPedidos();
+    state.insumos = await apiGetInsumos();
+    state.loadError = null;
+  }catch(e){
+    state.loadError = 'No se pudo conectar con la base de datos (' + (e && e.message ? e.message : 'error desconocido') + '). Revisa la conexión e inténtalo de nuevo.';
+  }
+  render();
+}
+async function init(){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  state.session = session;
+  if(session){ await cargarTodo(); } else { render(); }
+}
+init();
+supabaseClient.auth.onAuthStateChange((event, session)=>{
+  if(event === 'SIGNED_OUT'){ state.session = null; state.pedidos = []; state.insumos = []; render(); }
+});
+</script>
+</body>
+</html>
