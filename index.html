@@ -184,6 +184,14 @@ const AREAS_SUGERIDAS = ['Adquisiciones','Bodega','Logística','Mantenimiento','
 const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const DEFAULT_TC = 930;
 
+// Destinos posibles de la pantalla selectora. Se agregan acá cuando
+// exista una página real para Subcontrataciones / Seguridad Ocupacional.
+// url:null significa "quedarse en esta misma página" (Adquisiciones).
+const TODOS_LOS_DESTINOS = [
+  { area:'adquisiciones', nombre:'Adquisiciones', descripcion:'Pedidos e Inventario', url:null },
+  { area:'dashboard', nombre:'Dashboard', descripcion:'Vista general para dirección', url:'./dashboard.html' }
+];
+
 const STATUS_META = {
   'En proceso':  {color:'var(--st-proceso)'},
   'En tránsito': {color:'var(--st-transito)'},
@@ -198,6 +206,11 @@ let state = {
   toast: null, loadError: null,
   showAssistant: false, chatHistory: [], assistantLoading: false,
   realtimeConectado: { pedidos:false, insumos:false },
+
+  // ---- Accesos / destinos ----
+  accesoCompleto: false,
+  destinosDisponibles: null, // null = aún no calculado
+  destinoElegido: null,
 
   // ---- Pedidos ----
   pedidos: [],
@@ -434,9 +447,71 @@ async function handleLogin(){
 async function handleLogout(){
   await supabaseClient.auth.signOut();
   state.session = null; state.pedidos = []; state.insumos = [];
+  state.destinoElegido = null; state.destinosDisponibles = null; state.accesoCompleto = false;
   if(realtimeChannelPedidos){ supabaseClient.removeChannel(realtimeChannelPedidos); realtimeChannelPedidos = null; }
   if(realtimeChannelInsumos){ supabaseClient.removeChannel(realtimeChannelInsumos); realtimeChannelInsumos = null; }
   render();
+}
+
+/* ============================================================
+   DESTINOS / SELECTOR DE DEPARTAMENTOS
+   ============================================================ */
+async function cargarDestinos(){
+  let accesoCompleto = false;
+  try{
+    const { data } = await supabaseClient.from('perfiles').select('acceso_completo').eq('id', state.session.user.id).single();
+    accesoCompleto = !!(data && data.acceso_completo);
+  }catch(e){ /* deja accesoCompleto en false */ }
+
+  let areas = [];
+  try{
+    const { data, error } = await supabaseClient.from('perfiles_acceso').select('area').eq('perfil_id', state.session.user.id);
+    if(error) throw error;
+    areas = (data || []).map(a=>a.area);
+  }catch(e){
+    // Si perfiles_acceso todavía no existe o falla la consulta, no
+    // bloqueamos a nadie: se asume acceso a Adquisiciones, tal como
+    // funcionaba el sistema antes de este cambio.
+    areas = ['adquisiciones'];
+  }
+
+  state.accesoCompleto = accesoCompleto;
+  state.destinosDisponibles = accesoCompleto
+    ? TODOS_LOS_DESTINOS
+    : TODOS_LOS_DESTINOS.filter(d => areas.includes(d.area));
+}
+function elegirDestino(area){
+  const destino = state.destinosDisponibles.find(d=>d.area===area);
+  if(!destino) return;
+  if(destino.url){ window.location.href = destino.url; return; }
+  state.destinoElegido = area;
+  cargarTodo();
+}
+function destinoSelectorHTML(){
+  return `
+  <div class="center-loading" style="flex-direction:column;gap:18px;">
+    <div style="text-align:center;">
+      <h1 class="page-title" style="margin-bottom:4px;">Innovex</h1>
+      <p class="page-sub">¿A dónde quieres entrar?</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:340px;">
+      ${state.destinosDisponibles.map(d=>`
+        <button class="btn btn-ghost" style="text-align:left;padding:14px 16px;" onclick="elegirDestino('${d.area}')">
+          <div style="font-weight:600;">${escapeHTML(d.nombre)}</div>
+          <div class="dias-label" style="margin-top:2px;">${escapeHTML(d.descripcion)}</div>
+        </button>
+      `).join('')}
+    </div>
+    <button class="link-btn" onclick="handleLogout()">Cerrar sesión</button>
+  </div>`;
+}
+function sinAccesoHTML(){
+  return `
+  <div class="center-loading" style="flex-direction:column;gap:12px;">
+    <p style="font-family:var(--font-display);font-size:20px;margin:0;">Sin acceso</p>
+    <p class="page-sub" style="max-width:320px;text-align:center;">Tu cuenta no tiene ningún área asignada todavía. Contacta a quien administra el sistema.</p>
+    <button class="link-btn" onclick="handleLogout()">Cerrar sesión</button>
+  </div>`;
 }
 
 /* ============================================================
@@ -1772,6 +1847,14 @@ function exportarModalHTML(){
 
 function render(){
   if(!state.session){ document.getElementById('app').innerHTML = loginScreenHTML(); return; }
+  if(state.destinosDisponibles && state.destinosDisponibles.length > 1 && !state.destinoElegido){
+    document.getElementById('app').innerHTML = destinoSelectorHTML();
+    return;
+  }
+  if(state.destinosDisponibles && state.destinosDisponibles.length === 0){
+    document.getElementById('app').innerHTML = sinAccesoHTML();
+    return;
+  }
   if(state.loadError){
     document.getElementById('app').innerHTML = `
       <div class="center-loading" style="flex-direction:column;gap:16px;text-align:center;padding:0 24px;">
@@ -1858,6 +1941,7 @@ function render(){
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
                  <span class="dias-label">${escapeHTML(state.session.user.email)}</span>
           <div style="display:flex;gap:14px;">
+            ${state.destinosDisponibles && state.destinosDisponibles.length > 1 ? `<button class="link-btn" onclick="state.destinoElegido=null; render();">Cambiar de área</button>` : ''}
             <a href="./dashboard.html" class="link-btn" style="text-decoration:none;">Dashboard →</a>
             <button class="btn-ghost btn-sm" onclick="handleLogout()">Cerrar sesión</button>
           </div>
@@ -1951,6 +2035,24 @@ async function cargarTodo(){
   document.getElementById('app').innerHTML = '<div class="center-loading">Conectando con la base de datos…</div>';
   try{
     await cargarRol();
+    await cargarDestinos();
+
+    if(state.destinosDisponibles.length > 1 && !state.destinoElegido){
+      render();
+      return;
+    }
+    if(state.destinosDisponibles.length === 0){
+      render();
+      return;
+    }
+
+    const destinoActual = state.destinoElegido || state.destinosDisponibles[0].area;
+    const infoDestino = state.destinosDisponibles.find(d=>d.area===destinoActual);
+    if(infoDestino && infoDestino.url){
+      window.location.href = infoDestino.url;
+      return;
+    }
+
     state.pedidos = await apiGetPedidos();
     state.insumos = await apiGetInsumos();
     state.loadError = null;
@@ -1970,6 +2072,7 @@ init();
 supabaseClient.auth.onAuthStateChange((event, session)=>{
   if(event === 'SIGNED_OUT'){
     state.session = null; state.pedidos = []; state.insumos = [];
+    state.destinoElegido = null; state.destinosDisponibles = null; state.accesoCompleto = false;
     if(realtimeChannelPedidos){ supabaseClient.removeChannel(realtimeChannelPedidos); realtimeChannelPedidos = null; }
     if(realtimeChannelInsumos){ supabaseClient.removeChannel(realtimeChannelInsumos); realtimeChannelInsumos = null; }
     render();
