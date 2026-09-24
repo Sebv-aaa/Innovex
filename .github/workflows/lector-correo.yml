@@ -2,7 +2,24 @@ name: Lector de correo
 
 on:
   schedule:
-    - cron: '*/30 * * * *'   # cada 30 minutos
+    # Todos los horarios están en UTC. Chile está en UTC-3 (horario de
+    # verano) desde el 6 de septiembre de 2026 hasta abril de 2027 —
+    # hay que revisar y ajustar este cronograma cuando Chile vuelva a UTC-4.
+
+    # Lunes a jueves, jornada 8:15–17:30 Chile: chequeo cada ~30 min
+    - cron: '15,45 11-19 * * 1-4'
+    - cron: '15 20 * * 1-4'          # último chequeo cerca del cierre (~17:15 Chile)
+
+    # Viernes, jornada corta 8:15–13:15 Chile: chequeo cada ~30 min
+    - cron: '15,45 11-15 * * 5'
+    - cron: '15 16 * * 5'            # último chequeo, cierre de la semana (13:15 Chile)
+
+    # Una revisión nocturna, lunes a viernes (~21:00 Chile)
+    - cron: '0 0 * * 2-6'
+
+    # Una revisión durante el fin de semana (sábado ~12:00 Chile)
+    - cron: '0 15 * * 6'
+
   workflow_dispatch: {}       # permite correrlo manualmente desde la pestaña "Actions"
 
 jobs:
@@ -22,6 +39,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          IONOS_EMAIL: ${{ secrets.IONOS_EMAIL }}
-          IONOS_PASSWORD: ${{ secrets.IONOS_PASSWORD }}
+          IONOS_EMAIL_1: ${{ secrets.IONOS_EMAIL_1 }}
+          IONOS_PASSWORD_1: ${{ secrets.IONOS_PASSWORD_1 }}
+          IONOS_EMAIL_2: ${{ secrets.IONOS_EMAIL_2 }}
+          IONOS_PASSWORD_2: ${{ secrets.IONOS_PASSWORD_2 }}
           IMAP_HOST: ${{ secrets.IMAP_HOST }}
