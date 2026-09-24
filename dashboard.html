@@ -91,7 +91,7 @@ const ESTADO_COLOR = {
   'Recibido':    '#2F6B3A'
 };
 
-let state = { session:null, loginError:null, loginLoading:false, loadError:null, pedidos:[], insumos:[], esJefe:false };
+let state = { session:null, loginError:null, loginLoading:false, loadError:null, pedidos:[], insumos:[], accesoCompleto:false };
 let chartEstadosInstance = null, chartTendenciaInstance = null;
 
 /* ============================================================
@@ -172,12 +172,12 @@ async function handleLogout(){
 /* ============================================================
    DATOS — solo lectura
    ============================================================ */
-async function cargarEsJefe(){
+async function cargarAccesoCompleto(){
   try{
-    const { data, error } = await supabaseClient.from('perfiles').select('es_jefe').eq('id', state.session.user.id).single();
-    if(error || !data) { state.esJefe = false; return; }
-    state.esJefe = !!data.es_jefe;
-  }catch(e){ state.esJefe = false; }
+    const { data, error } = await supabaseClient.from('perfiles').select('acceso_completo').eq('id', state.session.user.id).single();
+    if(error || !data) { state.accesoCompleto = false; return; }
+    state.accesoCompleto = !!data.acceso_completo;
+  }catch(e){ state.accesoCompleto = false; }
 }
 async function apiGetPedidos(){
   const { data, error } = await withTimeout(supabaseClient.from('pedidos').select('*'), 10000);
@@ -255,7 +255,7 @@ function gastoPorArea(){
 function render(){
   if(!state.session){ document.getElementById('app').innerHTML = loginScreenHTML(); return; }
 
-  if(!state.esJefe){
+  if(!state.accesoCompleto){
     document.getElementById('app').innerHTML = `
       <div class="center-loading" style="flex-direction:column;gap:12px;">
         <p style="font-family:var(--font-display);font-size:20px;margin:0;">Acceso restringido</p>
@@ -388,8 +388,8 @@ function renderCharts(estados, tendencia){
    ============================================================ */
 async function cargarTodo(){
   document.getElementById('app').innerHTML = '<div class="center-loading">Conectando con la base de datos…</div>';
-  await cargarEsJefe();
-  if(!state.esJefe){ render(); return; }
+    await cargarAccesoCompleto();
+  if(!state.accesoCompleto){ render(); return; }
   try{
     state.pedidos = await apiGetPedidos();
     state.insumos = await apiGetInsumos();
