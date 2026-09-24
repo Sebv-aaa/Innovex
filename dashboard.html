@@ -91,7 +91,7 @@ const ESTADO_COLOR = {
   'Recibido':    '#2F6B3A'
 };
 
-let state = { session:null, loginError:null, loginLoading:false, loadError:null, pedidos:[], insumos:[] };
+let state = { session:null, loginError:null, loginLoading:false, loadError:null, pedidos:[], insumos:[], esJefe:false };
 let chartEstadosInstance = null, chartTendenciaInstance = null;
 
 /* ============================================================
@@ -172,6 +172,13 @@ async function handleLogout(){
 /* ============================================================
    DATOS — solo lectura
    ============================================================ */
+async function cargarEsJefe(){
+  try{
+    const { data, error } = await supabaseClient.from('perfiles').select('es_jefe').eq('id', state.session.user.id).single();
+    if(error || !data) { state.esJefe = false; return; }
+    state.esJefe = !!data.es_jefe;
+  }catch(e){ state.esJefe = false; }
+}
 async function apiGetPedidos(){
   const { data, error } = await withTimeout(supabaseClient.from('pedidos').select('*'), 10000);
   if(error) throw new Error('Error al leer los pedidos: ' + error.message);
@@ -248,6 +255,19 @@ function gastoPorArea(){
 function render(){
   if(!state.session){ document.getElementById('app').innerHTML = loginScreenHTML(); return; }
 
+  if(!state.esJefe){
+    document.getElementById('app').innerHTML = `
+      <div class="center-loading" style="flex-direction:column;gap:12px;">
+        <p style="font-family:var(--font-display);font-size:20px;margin:0;">Acceso restringido</p>
+        <p class="page-sub" style="max-width:340px;text-align:center;">Esta vista está disponible solo para la dirección de la empresa.</p>
+        <div style="display:flex;gap:14px;margin-top:8px;">
+          <a href="./index.html" class="link-btn" style="text-decoration:none;">← Volver a Pedidos</a>
+          <button class="link-btn" onclick="handleLogout()">Cerrar sesión</button>
+        </div>
+      </div>`;
+    return;
+  }
+
   if(state.loadError){
     document.getElementById('app').innerHTML = `
       <div class="topbar"><div class="topbar-inner"><h1 class="page-title">Innovex — Dashboard</h1></div></div>
@@ -295,8 +315,6 @@ function render(){
     </div>
 
     <div class="main">
-      <div class="note-banner">Vista de solo lectura, en construcción. Por ahora cualquier cuenta con acceso al sistema puede verla — todavía no está restringida solo al jefe.</div>
-
       <div class="kpi-grid">
         <div class="kpi-card"><p class="kpi-label">Pedidos activos</p><p class="kpi-value">${kpis.activos}</p></div>
         <div class="kpi-card"><p class="kpi-label">Requieren atención</p><p class="kpi-value ${kpis.requierenAtencion>0?'warn':''}">${kpis.requierenAtencion}</p></div>
@@ -370,6 +388,8 @@ function renderCharts(estados, tendencia){
    ============================================================ */
 async function cargarTodo(){
   document.getElementById('app').innerHTML = '<div class="center-loading">Conectando con la base de datos…</div>';
+  await cargarEsJefe();
+  if(!state.esJefe){ render(); return; }
   try{
     state.pedidos = await apiGetPedidos();
     state.insumos = await apiGetInsumos();
