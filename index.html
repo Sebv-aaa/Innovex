@@ -1942,7 +1942,7 @@ function render(){
                  <span class="dias-label">${escapeHTML(state.session.user.email)}</span>
           <div style="display:flex;gap:14px;">
             ${state.destinosDisponibles && state.destinosDisponibles.length > 1 ? `<button class="link-btn" onclick="state.destinoElegido=null; render();">Cambiar de área</button>` : ''}
-            <a href="./dashboard.html" class="link-btn" style="text-decoration:none;">Dashboard →</a>
+            ${state.destinosDisponibles && state.destinosDisponibles.some(d=>d.area==='dashboard') ? `<a href="./dashboard.html" class="link-btn" style="text-decoration:none;">Dashboard →</a>` : ''}
             <button class="btn-ghost btn-sm" onclick="handleLogout()">Cerrar sesión</button>
           </div>
         </div>
