@@ -1856,8 +1856,11 @@ function render(){
         </div>
         <div class="stats-row">${statsHTML}</div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-          <span class="dias-label">${escapeHTML(state.session.user.email)}</span>
-          <button class="btn-ghost btn-sm" onclick="handleLogout()">Cerrar sesión</button>
+                 <span class="dias-label">${escapeHTML(state.session.user.email)}</span>
+          <div style="display:flex;gap:14px;">
+            <a href="./dashboard.html" class="link-btn" style="text-decoration:none;">Dashboard →</a>
+            <button class="btn-ghost btn-sm" onclick="handleLogout()">Cerrar sesión</button>
+          </div>
         </div>
       </div>
       <div class="tabs-row">
