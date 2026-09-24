@@ -1,18 +1,18 @@
 // ============================================================
 // Innovex — Adquisiciones
-// Lee los correos nuevos de la casilla (IONOS), le pregunta a la
+// Lee los correos nuevos de DOS casillas (IONOS), le pregunta a la
 // IA si tienen que ver con un pedido, y actualiza/crea registros
 // en Supabase. Nunca marca correos como leídos ni los mueve —
-// lleva su propio registro de qué ya revisó (tabla correo_estado).
+// lleva su propio registro de qué ya revisó, por casilla, en la
+// tabla correo_estado (una fila por casilla, identificada por
+// "casilla": 'principal' o 'secundaria').
 //
 // Variables de entorno necesarias:
-//   SUPABASE_URL      -> igual que en el resto del sistema
-//   SUPABASE_SERVICE_KEY -> la clave "service_role" (secreta) de Supabase — NO la publishable
-//   ANTHROPIC_API_KEY            -> clave de console.anthropic.com
-//   IONOS_EMAIL, IONOS_PASSWORD  -> la casilla y su contraseña de buzón (IMAP)
-//   IMAP_HOST (opcional)         -> servidor IMAP; por defecto imap.ionos.com.
-//                                    Cámbialo para probar con otra casilla (ej. imap.gmail.com).
-//   IMAP_PORT (opcional)         -> por defecto 993.
+//   SUPABASE_URL, SUPABASE_SERVICE_KEY, ANTHROPIC_API_KEY -> igual que siempre
+//   IONOS_EMAIL_1, IONOS_PASSWORD_1 -> primera casilla
+//   IONOS_EMAIL_2, IONOS_PASSWORD_2 -> segunda casilla
+//   IMAP_HOST (opcional) -> servidor IMAP, por defecto imap.ionos.com (aplica a ambas)
+//   IMAP_PORT (opcional) -> por defecto 993
 // ============================================================
 
 import { ImapFlow } from 'imapflow';
@@ -21,12 +21,21 @@ import { simpleParser } from 'mailparser';
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const IONOS_EMAIL = process.env.IONOS_EMAIL;
-const IONOS_PASSWORD = process.env.IONOS_PASSWORD;
 
-for (const [nombre, valor] of Object.entries({ SUPABASE_URL, SUPABASE_SERVICE_KEY, ANTHROPIC_API_KEY, IONOS_EMAIL, IONOS_PASSWORD })) {
+const CASILLAS = [
+  { nombre: 'principal', email: process.env.IONOS_EMAIL_1, password: process.env.IONOS_PASSWORD_1 },
+  { nombre: 'secundaria', email: process.env.IONOS_EMAIL_2, password: process.env.IONOS_PASSWORD_2 },
+];
+
+for (const [nombre, valor] of Object.entries({ SUPABASE_URL, SUPABASE_SERVICE_KEY, ANTHROPIC_API_KEY })) {
   if (!valor) {
     console.error(`Falta la variable de entorno: ${nombre}`);
+    process.exit(1);
+  }
+}
+for (const casilla of CASILLAS) {
+  if (!casilla.email || !casilla.password) {
+    console.error(`Faltan las credenciales de la casilla "${casilla.nombre}" (IONOS_EMAIL_${casilla.nombre === 'principal' ? '1' : '2'} / IONOS_PASSWORD_${casilla.nombre === 'principal' ? '1' : '2'})`);
     process.exit(1);
   }
 }
@@ -112,50 +121,51 @@ async function clasificarCorreo(asunto, texto, pedidosActivos) {
   }
 }
 
-async function main() {
+async function procesarCasilla(casilla, pedidosActivos) {
   const IMAP_HOST = process.env.IMAP_HOST || 'imap.ionos.com';
   const IMAP_PORT = parseInt(process.env.IMAP_PORT || '993', 10);
 
-  const [estado] = await supaGet('correo_estado?id=eq.1&select=ultimo_uid');
+  console.log(`\n=== Casilla: ${casilla.nombre} (${casilla.email}) ===`);
+
+  const [estado] = await supaGet(`correo_estado?casilla=eq.${casilla.nombre}&select=ultimo_uid`);
   const ultimoUid = (estado && estado.ultimo_uid) || 0;
 
   const client = new ImapFlow({
     host: IMAP_HOST,
     port: IMAP_PORT,
     secure: true,
-    auth: { user: IONOS_EMAIL, pass: IONOS_PASSWORD },
+    auth: { user: casilla.email, pass: casilla.password },
     logger: false,
   });
 
   await client.connect();
 
   try {
-    // Primera vez que corre: no queremos procesar todo el historial
-    // de la bandeja de golpe. Solo anotamos desde dónde empezar.
+    // Primera vez que corre esta casilla: no queremos procesar todo el
+    // historial de golpe. Solo anotamos desde dónde empezar.
     if (ultimoUid === 0) {
       const status = await client.status('INBOX', { uidNext: true });
       const uidInicial = Math.max(0, (status.uidNext || 1) - 1);
-      await supaPatch('correo_estado?id=eq.1', { ultimo_uid: uidInicial });
-      console.log(`Primera ejecución: punto de partida establecido en UID ${uidInicial}. No se procesan correos antiguos.`);
+      await supaPatch(`correo_estado?casilla=eq.${casilla.nombre}`, { ultimo_uid: uidInicial });
+      console.log(`Primera ejecución en "${casilla.nombre}": punto de partida establecido en UID ${uidInicial}. No se procesan correos antiguos.`);
       return;
     }
 
     console.log(`Revisando correos con UID mayor a ${ultimoUid}...`);
     let maxUidVisto = ultimoUid;
-    let pedidosActivos = await obtenerPedidosActivos();
 
     const lock = await client.getMailboxLock('INBOX');
     try {
       const mensajes = client.fetch({ uid: `${ultimoUid + 1}:*` }, { uid: true, source: true });
 
       for await (const msg of mensajes) {
-        if (msg.uid <= ultimoUid) continue; // el rango "*" a veces repite el último conocido
+        if (msg.uid <= ultimoUid) continue;
         if (msg.uid > maxUidVisto) maxUidVisto = msg.uid;
 
         const parsed = await simpleParser(msg.source);
         const asunto = parsed.subject || '(sin asunto)';
         const texto = parsed.text || parsed.html || '';
-        console.log(`- Correo UID ${msg.uid}: "${asunto}"`);
+        console.log(`- [${casilla.nombre}] Correo UID ${msg.uid}: "${asunto}"`);
 
         const resultado = await clasificarCorreo(asunto, texto, pedidosActivos);
         if (!resultado.relevante) {
@@ -163,9 +173,6 @@ async function main() {
           continue;
         }
 
-        // Prioridad: la coincidencia que indicó la IA (entiende contexto,
-        // no solo el número exacto). Si no indicó ninguna, como respaldo
-        // se busca por número de seguimiento exacto, por si acaso.
         let pedidoExistente = null;
         if (resultado.pedido_existente_id) {
           pedidoExistente = pedidosActivos.find((p) => p.id === resultado.pedido_existente_id) || null;
@@ -205,14 +212,10 @@ async function main() {
           fecha_registro: todayISO(),
           fecha_estimada: resultado.fecha_estimada || null,
           fecha_ultima_actualizacion: todayISO(),
-          // "Requiere agente aduanero" quedó como campo totalmente manual en el
-          // formulario (sin cálculo automático, por el bug de compras domésticas
-          // grandes) — no se calcula acá a propósito. Queda para revisión manual
-          // junto con el resto de pendiente_revision.
           pendiente_revision: true,
         };
         await supaPost('pedidos', nuevoPedido);
-        pedidosActivos.push(nuevoPedido); // para que correos siguientes en esta misma corrida lo vean
+        pedidosActivos.push(nuevoPedido); // para que la otra casilla, o correos siguientes, no lo dupliquen
         console.log(`  Pedido nuevo creado, pendiente de revisión: ${resultado.proveedor}`);
       }
     } finally {
@@ -220,16 +223,30 @@ async function main() {
     }
 
     if (maxUidVisto > ultimoUid) {
-      await supaPatch('correo_estado?id=eq.1', { ultimo_uid: maxUidVisto });
-      console.log(`Último UID revisado actualizado a ${maxUidVisto}.`);
+      await supaPatch(`correo_estado?casilla=eq.${casilla.nombre}`, { ultimo_uid: maxUidVisto });
+      console.log(`[${casilla.nombre}] Último UID revisado actualizado a ${maxUidVisto}.`);
     } else {
-      console.log('No había correos nuevos.');
+      console.log(`[${casilla.nombre}] No había correos nuevos.`);
     }
   } finally {
     await client.logout();
   }
+}
 
-  console.log('Listo.');
+async function main() {
+  let pedidosActivos = await obtenerPedidosActivos();
+
+  for (const casilla of CASILLAS) {
+    try {
+      await procesarCasilla(casilla, pedidosActivos);
+    } catch (err) {
+      // Si una casilla falla (credenciales, conexión, etc.), seguimos
+      // con la otra en vez de detener todo el proceso.
+      console.error(`Error procesando la casilla "${casilla.nombre}":`, err.message || err);
+    }
+  }
+
+  console.log('\nListo.');
 }
 
 main().catch((err) => {
