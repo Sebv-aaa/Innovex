@@ -31,6 +31,11 @@
   .topbar{ padding:24px 40px 0; border-bottom:1px solid var(--border); background:var(--surface); }
   .topbar-inner{ display:flex; flex-direction:column; gap:16px; max-width:1280px; margin:0 auto; padding-bottom:18px; }
   .topbar-row1{ display:flex; justify-content:space-between; align-items:flex-start; gap:24px; flex-wrap:wrap; }
+  .account-menu-wrap{ position:relative; }
+  .account-menu-btn{ font-size:18px; line-height:1; padding:6px 10px; }
+  .account-menu-dropdown{ position:absolute; top:calc(100% + 6px); right:0; background:var(--surface); border:1px solid var(--border); border-radius:6px; box-shadow:0 8px 20px rgba(0,0,0,0.12); min-width:190px; padding:6px; z-index:30; display:flex; flex-direction:column; }
+  .account-menu-item{ display:block; width:100%; text-align:left; background:none; border:none; padding:9px 12px; font-size:13.5px; color:var(--ink); border-radius:4px; cursor:pointer; font-family:var(--font-ui); text-decoration:none; }
+  .account-menu-item:hover{ background:var(--surface-alt); }
   .page-title{ font-family:var(--font-display); font-size:26px; font-weight:600; margin:0 0 4px 0; letter-spacing:-0.01em; }
   .page-sub{ color:var(--ink-muted); font-size:13px; margin:0; }
   .live-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-left:6px; vertical-align:middle; }
@@ -205,6 +210,7 @@ let state = {
   vista: 'pedidos', // 'pedidos' | 'inventario'
   session: null, loginError: null, loginLoading: false,
   toast: null, loadError: null,
+  showAccountMenu: false,
   showAssistant: false, chatHistory: [], assistantLoading: false,
   realtimeConectado: { pedidos:false, insumos:false },
 
@@ -1199,6 +1205,7 @@ async function confirmDeleteInsumo(id){
 /* ============================================================
    ASISTENTE DE IA — COMPARTIDO (contenido depende de state.vista)
    ============================================================ */
+function toggleAccountMenu(){ state.showAccountMenu = !state.showAccountMenu; render(); }
 function toggleAssistant(){ state.showAssistant = !state.showAssistant; render(); }
 async function handleAskAssistant(preset){
   const input = document.getElementById('assistant-input');
@@ -1940,13 +1947,17 @@ function render(){
             <h1 class="page-title">${esPedidos ? 'Seguimiento de Pedidos' : 'Inventario'}</h1>
             <p class="page-sub">Innovex</p>
           </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-                   <span class="dias-label">${escapeHTML(state.session.user.email)}</span>
-            <div style="display:flex;gap:14px;">
-              ${state.destinosDisponibles && state.destinosDisponibles.length > 1 ? `<button class="link-btn" onclick="state.destinoElegido=null; render();">Cambiar de área</button>` : ''}
-              ${state.destinosDisponibles && state.destinosDisponibles.some(d=>d.area==='dashboard') ? `<a href="./dashboard.html" class="link-btn" style="text-decoration:none;">Dashboard →</a>` : ''}
-              <button class="btn-ghost btn-sm" onclick="handleLogout()">Cerrar sesión</button>
-            </div>
+          <div class="account-menu-wrap">
+            <button class="btn-ghost btn-sm account-menu-btn" onclick="toggleAccountMenu()" aria-label="Menú de cuenta">☰</button>
+            ${state.showAccountMenu ? `
+              <div style="position:fixed;inset:0;z-index:29;" onclick="state.showAccountMenu=false; render();"></div>
+              <div class="account-menu-dropdown">
+                <span class="dias-label" style="padding:6px 12px 8px;border-bottom:1px solid var(--border);margin-bottom:4px;display:block;">${escapeHTML(state.session.user.email)}</span>
+                ${state.destinosDisponibles && state.destinosDisponibles.length > 1 ? `<button class="account-menu-item" onclick="state.showAccountMenu=false; state.destinoElegido=null; render();">Cambiar de área</button>` : ''}
+                ${state.destinosDisponibles && state.destinosDisponibles.some(d=>d.area==='dashboard') ? `<a href="./dashboard.html" class="account-menu-item">Dashboard →</a>` : ''}
+                <button class="account-menu-item" onclick="state.showAccountMenu=false; handleLogout();">Cerrar sesión</button>
+              </div>
+            ` : ''}
           </div>
         </div>
         <div class="stats-row">${statsHTML}</div>
