@@ -2,8 +2,10 @@ name: Notificar alertas
 
 on:
   schedule:
-    - cron: '0 12 * * *'   # una vez al día, ~8-9am hora de Chile (ajusta si hace falta)
-  workflow_dispatch: {}     # permite correrlo manualmente desde la pestaña "Actions"
+    # 8:15 am hora Chile (UTC-3, horario de verano vigente hasta abril
+    # de 2027 — hay que revisar y ajustar este cronograma después de esa fecha)
+    - cron: '15 11 * * 1-5'   # lunes a viernes
+  workflow_dispatch: {}       # permite correrlo manualmente desde la pestaña "Actions"
 
 jobs:
   notificar-alertas:
@@ -21,8 +23,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          IONOS_EMAIL: ${{ secrets.IONOS_EMAIL }}
-          IONOS_PASSWORD: ${{ secrets.IONOS_PASSWORD }}
+          IONOS_EMAIL_1: ${{ secrets.IONOS_EMAIL_1 }}
+          IONOS_PASSWORD_1: ${{ secrets.IONOS_PASSWORD_1 }}
           NOTIFICAR_EMAIL: ${{ secrets.NOTIFICAR_EMAIL }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
