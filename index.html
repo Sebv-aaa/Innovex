@@ -29,13 +29,14 @@
   .login-box{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:36px 34px; width:100%; max-width:380px; text-align:left; }
 
   .topbar{ padding:24px 40px 0; border-bottom:1px solid var(--border); background:var(--surface); }
-  .topbar-inner{ display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap; max-width:1280px; margin:0 auto; padding-bottom:18px; }
+  .topbar-inner{ display:flex; flex-direction:column; gap:16px; max-width:1280px; margin:0 auto; padding-bottom:18px; }
+  .topbar-row1{ display:flex; justify-content:space-between; align-items:flex-start; gap:24px; flex-wrap:wrap; }
   .page-title{ font-family:var(--font-display); font-size:26px; font-weight:600; margin:0 0 4px 0; letter-spacing:-0.01em; }
   .page-sub{ color:var(--ink-muted); font-size:13px; margin:0; }
   .live-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-left:6px; vertical-align:middle; }
   .live-dot.on{ background:var(--st-recibido); }
   .live-dot.off{ background:var(--ink-muted); }
-  .stats-row{ display:flex; gap:22px; flex-wrap:wrap; }
+  .stats-row{ display:flex; gap:22px; flex-wrap:wrap; justify-content:center; }
   .stat-chip{ border-left:3px solid var(--accent); padding-left:10px; min-width:90px; }
   .stat-chip.warn{ border-left-color:var(--st-atrasado); }
   .stat-value{ font-family:var(--font-display); font-size:22px; font-weight:600; line-height:1.1; }
@@ -1934,19 +1935,21 @@ function render(){
   const html = `
     <div class="topbar">
       <div class="topbar-inner">
-        <div>
-          <h1 class="page-title">${esPedidos ? 'Seguimiento de Pedidos' : 'Inventario'}</h1>
-          <p class="page-sub">Innovex</p>
-        </div>
-        <div class="stats-row">${statsHTML}</div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-left:auto;">
-                 <span class="dias-label">${escapeHTML(state.session.user.email)}</span>
-          <div style="display:flex;gap:14px;">
-            ${state.destinosDisponibles && state.destinosDisponibles.length > 1 ? `<button class="link-btn" onclick="state.destinoElegido=null; render();">Cambiar de área</button>` : ''}
-            ${state.destinosDisponibles && state.destinosDisponibles.some(d=>d.area==='dashboard') ? `<a href="./dashboard.html" class="link-btn" style="text-decoration:none;">Dashboard →</a>` : ''}
-            <button class="btn-ghost btn-sm" onclick="handleLogout()">Cerrar sesión</button>
+        <div class="topbar-row1">
+          <div>
+            <h1 class="page-title">${esPedidos ? 'Seguimiento de Pedidos' : 'Inventario'}</h1>
+            <p class="page-sub">Innovex</p>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+                   <span class="dias-label">${escapeHTML(state.session.user.email)}</span>
+            <div style="display:flex;gap:14px;">
+              ${state.destinosDisponibles && state.destinosDisponibles.length > 1 ? `<button class="link-btn" onclick="state.destinoElegido=null; render();">Cambiar de área</button>` : ''}
+              ${state.destinosDisponibles && state.destinosDisponibles.some(d=>d.area==='dashboard') ? `<a href="./dashboard.html" class="link-btn" style="text-decoration:none;">Dashboard →</a>` : ''}
+              <button class="btn-ghost btn-sm" onclick="handleLogout()">Cerrar sesión</button>
+            </div>
           </div>
         </div>
+        <div class="stats-row">${statsHTML}</div>
       </div>
       <div class="tabs-row">
         <button class="tab-item ${esPedidos?'active':''}" onclick="switchVista('pedidos')">Pedidos</button>
