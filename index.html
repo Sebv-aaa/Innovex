@@ -221,7 +221,7 @@ let state = {
 
   // ---- Pedidos ----
   pedidos: [],
-  pedidosFilters: { search:'', destino:'Todos', estado:'Todos', filtroRapido:null },
+  pedidosFilters: { search:'', destino:'Todos', estado:'Todos', filtroRapido:'activos' },
   showPedidoModal: false,
   deletePedidoConfirmId: null,
   agenteSummaryModal: null,
@@ -1899,7 +1899,7 @@ function render(){
           <option ${state.pedidosFilters.destino==='Todos'?'selected':''}>Todos</option>
           ${DESTINOS.map(d=>`<option ${state.pedidosFilters.destino===d?'selected':''}>${d}</option>`).join('')}
         </select>
-        <select onchange="state.pedidosFilters.estado=this.value; renderPedidosList();">
+        <select onchange="state.pedidosFilters.estado=this.value; state.pedidosFilters.filtroRapido=null; renderPedidosList();">
           <option ${state.pedidosFilters.estado==='Todos'?'selected':''}>Todos</option>
           ${ESTADOS.map(e=>`<option ${state.pedidosFilters.estado===e?'selected':''}>${e}</option>`).join('')}
         </select>
@@ -1922,20 +1922,7 @@ function render(){
         ${puedeEditar() ? `<button class="btn btn-primary" onclick="openInsumoModal()">+ Nuevo insumo</button>` : ''}
   `;
 
-  const footerHTML = esPedidos ? `
-        ${state.confirmAction === 'reset' ? `
-          <span class="dias-label">Esto agrega pedidos de ejemplo a la base de datos real. ¿Continuar?</span>
-          <button class="link-btn" onclick="handleResetDemo()">Sí, agregar</button>
-          <button class="link-btn" onclick="cancelConfirm()">Cancelar</button>
-        ` : state.confirmAction === 'clear' ? `
-          <span class="dias-label">Esto elimina TODOS los pedidos — no se puede deshacer. ¿Continuar?</span>
-          <button class="link-btn" onclick="handleClearAll()">Sí, borrar todo</button>
-          <button class="link-btn" onclick="cancelConfirm()">Cancelar</button>
-        ` : `
-          <button class="link-btn" onclick="askConfirm('reset')">Agregar datos de ejemplo</button>
-          <button class="link-btn" onclick="askConfirm('clear')">Borrar todos los pedidos</button>
-        `}
-  ` : `<span class="dias-label">Usa los botones − / + en cada fila para ajustar el stock rápido, sin abrir el formulario.</span>`;
+  const footerHTML = esPedidos ? '' : `<span class="dias-label">Usa los botones − / + en cada fila para ajustar el stock rápido, sin abrir el formulario.</span>`;
 
   const bannerHTML = '';
 
