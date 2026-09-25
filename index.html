@@ -175,7 +175,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const CLAUDE_PROXY_URL = SUPABASE_URL + '/functions/v1/claude-proxy';
 
 const ESTADOS = ['En proceso','En tránsito','En aduana','En destino','Recibido'];
-const COURIERS = ['DHL','UPS','MercadoLibre','Otro'];
+const COURIERS = ['DHL','UPS','FedEx','MercadoLibre','Otro'];
 const MONEDAS = ['CLP','USD','EUR'];
 const DESTINOS = ['Puerto Montt','Valdivia'];
 const UBICACIONES = ['Puerto Montt','Valdivia'];
@@ -370,7 +370,7 @@ Usa exactamente estas claves:
 - monto (número, sin símbolo ni separadores de miles, o null)
 - moneda (uno de "USD", "CLP" o "EUR" según el símbolo o contexto del texto; si no es claro, usa "CLP")
 - numero_seguimiento (string o null)
-- courier (uno de "DHL", "UPS", "MercadoLibre", "Otro", o null si no se identifica con certeza)
+- courier (uno de "DHL", "UPS", "FedEx", "MercadoLibre", "Otro", o null si no se identifica con certeza)
 - fecha_estimada (formato YYYY-MM-DD, o null si no se menciona)
 - destino ("Puerto Montt", "Valdivia" o null si no se menciona)
 Si un dato no aparece explícitamente en el texto, usa null. No inventes información.`;
@@ -522,6 +522,7 @@ function trackingUrl(p){
   const num = encodeURIComponent(p.numero_seguimiento);
   if(p.courier === 'DHL') return `https://www.dhl.com/cl-es/home/rastreo.html?tracking-id=${num}`;
   if(p.courier === 'UPS') return `https://www.ups.com/track?loc=es_CL&tracknum=${num}`;
+  if(p.courier === 'FedEx') return `https://www.fedex.com/fedextrack/?trknbr=${num}`;
   return null;
 }
 function estaVencido(p){
