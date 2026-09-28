@@ -56,7 +56,7 @@ Responde ÚNICAMENTE con un objeto JSON, sin texto adicional, sin backticks. Usa
 - monto (número o null)
 - moneda ("USD", "CLP", "EUR" o null)
 - numero_seguimiento (string o null)
-- courier (uno de "DHL", "UPS", "MercadoLibre", "Otro", o null)
+- courier (uno de "DHL", "UPS", "FedEx", "MercadoLibre", "Otro", o null)
 - destino ("Puerto Montt", "Valdivia" o null)
 - fecha_estimada (YYYY-MM-DD o null)
 - estado_sugerido (uno de "En proceso", "En tránsito", "En aduana", "En destino", "Recibido", o null si no queda claro un cambio de estado)
@@ -242,11 +242,15 @@ async function main() {
     } catch (err) {
       // Si una casilla falla (credenciales, conexión, etc.), seguimos
       // con la otra en vez de detener todo el proceso.
-      console.error(`Error procesando la casilla "${casilla.nombre}":`, err.message || err);
+      console.error(`Error procesando la casilla "${casilla.nombre}":`, err && err.message ? err.message : err);
+      if (err) {
+        try { console.error(JSON.stringify(err, Object.getOwnPropertyNames(err))); } catch (e2) {}
+      }
     }
   }
 
   console.log('\nListo.');
+  process.exit(0); // fuerza el cierre por si una conexión IMAP fallida dejó algo abierto por dentro
 }
 
 main().catch((err) => {
