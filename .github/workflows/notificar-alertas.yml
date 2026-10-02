@@ -23,8 +23,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          IONOS_EMAIL_1: ${{ secrets.IONOS_EMAIL_1 }}
-          IONOS_PASSWORD_1: ${{ secrets.IONOS_PASSWORD_1 }}
+          SMTP_EMAIL: ${{ secrets.SMTP_EMAIL }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           NOTIFICAR_EMAIL: ${{ secrets.NOTIFICAR_EMAIL }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
