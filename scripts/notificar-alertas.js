@@ -4,41 +4,54 @@
 // vencidos, pedidos atrasados e insumos con stock bajo — si no hay
 // nada pendiente, igual manda el correo, avisando que está todo al día.
 //
-// Reutiliza la casilla "principal" (la misma que usa lector-correo.js como
-// primera casilla), pero para ENVIAR en vez de leer.
+// IMPORTANTE: este script envía el correo a través de una cuenta de
+// Gmail dedicada (no de IONOS), porque IONOS rechaza la autenticación
+// SMTP/IMAP desde scripts automatizados para esta cuenta (motivo no
+// confirmado — ver ways-of-working del proyecto). Esa cuenta de Gmail
+// debe tener configurado un reenvío automático (Settings → Forwarding
+// and POP/IMAP, en Gmail) hacia la casilla real de la persona de
+// Adquisiciones, para que el resumen le siga llegando a su bandeja de
+// siempre — este script nunca necesita saber que existe ese reenvío.
 //
 // Se ejecuta automáticamente vía GitHub Actions (ver el archivo
 // .github/workflows/notificar-alertas.yml), pero también puedes
-// correrlo a mano con: node scripts/notificar-alertas.js
+// correrlo a mano con: node notificar-alertas.js
 //
 // Variables de entorno necesarias:
 //   SUPABASE_URL          -> igual que en el resto del sistema
 //   SUPABASE_SERVICE_KEY  -> la clave "service_role" (secreta) de Supabase
-//   IONOS_EMAIL_1, IONOS_PASSWORD_1 -> la casilla "principal" (compartida con lector-correo.js)
-//   NOTIFICAR_EMAIL (opcional) -> a quién se le manda el resumen. Si no
-//                                  se define, se manda a la misma IONOS_EMAIL_1.
-//   SMTP_HOST (opcional)  -> por defecto smtp.ionos.com. Para probar con Gmail: smtp.gmail.com
+//   SMTP_EMAIL, SMTP_PASSWORD -> la cuenta de Gmail dedicada (SMTP_PASSWORD
+//                                es una contraseña de aplicación de Gmail,
+//                                no la contraseña normal de la cuenta)
+//   NOTIFICAR_EMAIL       -> la casilla real a la que debe llegar el resumen
+//                             (normalmente ya no hace falta, porque el reenvío
+//                             automático de Gmail se encarga — pero el script
+//                             igual lo pide, por si el reenvío se cae un día:
+//                             así el correo queda visible al menos en la bandeja
+//                             de Gmail dedicada)
+//   SMTP_HOST (opcional)  -> por defecto smtp.gmail.com
 //   SMTP_PORT (opcional)  -> por defecto 587
 // ============================================================
 
+import 'dotenv/config'; // Carga variables desde un archivo .env local si existe (no hace nada en GitHub Actions, ahí ya vienen de los secrets)
 import nodemailer from 'nodemailer';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-const IONOS_EMAIL = process.env.IONOS_EMAIL_1;
-const IONOS_PASSWORD = process.env.IONOS_PASSWORD_1;
-const NOTIFICAR_EMAIL = process.env.NOTIFICAR_EMAIL || IONOS_EMAIL;
-const SMTP_HOST = process.env.SMTP_HOST || 'smtp.ionos.com';
+const SMTP_EMAIL = process.env.SMTP_EMAIL;
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD;
+const NOTIFICAR_EMAIL = process.env.NOTIFICAR_EMAIL;
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 
-for (const [nombre, valor] of Object.entries({ SUPABASE_URL, SUPABASE_SERVICE_KEY })) {
+for (const [nombre, valor] of Object.entries({ SUPABASE_URL, SUPABASE_SERVICE_KEY, NOTIFICAR_EMAIL })) {
   if (!valor) {
     console.error(`Falta la variable de entorno: ${nombre}`);
     process.exit(1);
   }
 }
-if (!IONOS_EMAIL || !IONOS_PASSWORD) {
-  console.error('Faltan las variables de entorno: IONOS_EMAIL_1 / IONOS_PASSWORD_1');
+if (!SMTP_EMAIL || !SMTP_PASSWORD) {
+  console.error('Faltan las variables de entorno: SMTP_EMAIL / SMTP_PASSWORD');
   process.exit(1);
 }
 
@@ -98,11 +111,12 @@ async function main() {
     host: SMTP_HOST,
     port: SMTP_PORT,
     secure: SMTP_PORT === 465,
-    auth: { user: IONOS_EMAIL, pass: IONOS_PASSWORD },
+    authMethod: 'LOGIN',
+    auth: { user: SMTP_EMAIL, pass: SMTP_PASSWORD },
   });
 
   await transporter.sendMail({
-    from: IONOS_EMAIL,
+    from: SMTP_EMAIL,
     to: NOTIFICAR_EMAIL,
     subject: totalPendientes > 0
       ? `Resumen Innovex — ${totalPendientes} pendientes (${hoy})`
