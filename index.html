@@ -195,6 +195,7 @@ const DEFAULT_TC = 930;
 // url:null significa "quedarse en esta misma página" (Adquisiciones).
 const TODOS_LOS_DESTINOS = [
   { area:'adquisiciones', nombre:'Adquisiciones', descripcion:'Pedidos e Inventario', url:null },
+  { area:'subcontrataciones', nombre:'Subcontrataciones', descripcion:'Trabajadores y documentos', url:'./subcontrataciones.html' },
   { area:'dashboard', nombre:'Dashboard', descripcion:'Vista general para dirección', url:'./dashboard.html' }
 ];
 
@@ -1941,6 +1942,7 @@ function render(){
               <div class="account-menu-dropdown">
                 <span class="dias-label" style="padding:6px 12px 8px;border-bottom:1px solid var(--border);margin-bottom:4px;display:block;">${escapeHTML(state.session.user.email)}</span>
                 ${state.destinosDisponibles && state.destinosDisponibles.length > 1 ? `<button class="account-menu-item" onclick="state.showAccountMenu=false; state.destinoElegido=null; render();">Cambiar de área</button>` : ''}
+                ${state.destinosDisponibles && state.destinosDisponibles.some(d=>d.area==='subcontrataciones') ? `<a href="./subcontrataciones.html" class="account-menu-item">Subcontrataciones →</a>` : ''}
                 ${state.destinosDisponibles && state.destinosDisponibles.some(d=>d.area==='dashboard') ? `<a href="./dashboard.html" class="account-menu-item">Dashboard →</a>` : ''}
                 <button class="account-menu-item" onclick="state.showAccountMenu=false; handleLogout();">Cerrar sesión</button>
               </div>
