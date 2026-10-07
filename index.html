@@ -2030,10 +2030,12 @@ function handleRealtimeChangeInsumos(payload){
 function puedeEditar(){ return state.rol !== 'lector'; }
 async function cargarRol(){
   try{
-    const { data, error } = await supabaseClient.from('perfiles').select('rol').eq('id', state.session.user.id).single();
-    if(error || !data) { state.rol = 'editor'; return; }
-    state.rol = data.rol || 'editor';
-  }catch(e){ state.rol = 'editor'; }
+    // El rol de Adquisiciones vive en perfiles_acceso (una fila por área). Si falla la lectura
+    // o no hay fila, se asume 'lector': es el valor seguro (las políticas de la base mandan igual).
+    const { data, error } = await supabaseClient.from('perfiles_acceso').select('rol').eq('perfil_id', state.session.user.id).eq('area', 'adquisiciones').maybeSingle();
+    if(error || !data) { state.rol = 'lector'; return; }
+    state.rol = data.rol || 'lector';
+  }catch(e){ state.rol = 'lector'; }
 }
 async function cargarTodo(){
   document.getElementById('app').innerHTML = '<div class="center-loading">Conectando con la base de datos…</div>';
