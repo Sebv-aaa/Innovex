@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Innovex — Subcontrataciones</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#F5F4EF; --surface:#FFFFFF; --surface-alt:#EFEEE6; --border:#DEDCD1;
+    --ink:#1B2321; --ink-muted:#5C665F; --accent:#1B4B43; --accent-hover:#143A34;
+    --accent-warm:#A6692E; --accent-warm-bg:#F3E6D6;
+    --st-proceso:#6B7563;  --st-proceso-bg:#EEF0EC;
+    --st-transito:#2E5C8A; --st-transito-bg:#E7EEF5;
+    --st-aduana:#A6761D;   --st-aduana-bg:#F5EEDD;
+    --st-destino:#1B4B43;  --st-destino-bg:#E4EEEC;
+    --st-recibido:#2F6B3A; --st-recibido-bg:#E7F0E8;
+    --st-atrasado:#A6332F; --st-atrasado-bg:#F6E5E4;
+    --font-display: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:var(--font-ui); font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  #app{min-height:100vh;}
+  .center-loading{ display:flex;align-items:center;justify-content:center;height:100vh; color:var(--ink-muted); font-family:var(--font-display); font-size:18px; }
+  .login-box{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:36px 34px; width:100%; max-width:380px; text-align:left; }
+
+  .topbar{ padding:24px 40px 0; border-bottom:1px solid var(--border); background:var(--surface); }
+  .topbar-inner{ display:flex; flex-direction:column; gap:16px; max-width:1280px; margin:0 auto; padding-bottom:18px; }
+  .topbar-row1{ display:flex; justify-content:space-between; align-items:flex-start; gap:24px; flex-wrap:wrap; }
+  .account-menu-wrap{ position:relative; }
+  .account-menu-btn{ font-size:18px; line-height:1; padding:6px 10px; }
+  .account-menu-dropdown{ position:absolute; top:calc(100% + 6px); right:0; background:var(--surface); border:1px solid var(--border); border-radius:6px; box-shadow:0 8px 20px rgba(0,0,0,0.12); min-width:190px; padding:6px; z-index:30; display:flex; flex-direction:column; }
+  .account-menu-item{ display:block; width:100%; text-align:left; background:none; border:none; padding:9px 12px; font-size:13.5px; color:var(--ink); border-radius:4px; cursor:pointer; font-family:var(--font-ui); text-decoration:none; }
+  .account-menu-item:hover{ background:var(--surface-alt); }
+  .page-title{ font-family:var(--font-display); font-size:26px; font-weight:600; margin:0 0 4px 0; letter-spacing:-0.01em; }
+  .page-sub{ color:var(--ink-muted); font-size:13px; margin:0; }
+  .live-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-left:6px; vertical-align:middle; }
+  .live-dot.on{ background:var(--st-recibido); }
+  .live-dot.off{ background:var(--ink-muted); }
+  .stats-row{ display:flex; gap:22px; flex-wrap:wrap; justify-content:center; }
+  .stat-chip{ border-left:3px solid var(--accent); padding-left:10px; min-width:90px; }
+  .stat-chip.warn{ border-left-color:var(--st-atrasado); }
+  .stat-value{ font-family:var(--font-display); font-size:22px; font-weight:600; line-height:1.1; }
+  .stat-label{ font-size:11.5px; color:var(--ink-muted); margin-top:2px; }
+  button.stat-chip{ background:none; font-family:inherit; text-align:left; cursor:pointer; border-radius:4px; padding:4px 10px 4px 8px; margin:-4px -2px -4px -8px; transition:background 0.12s; }
+  button.stat-chip:hover{ background:var(--surface-alt); }
+  .stat-chip-active{ background:var(--accent) !important; }
+  .stat-chip-active .stat-value, .stat-chip-active .stat-label{ color:#fff; }
+
+  .tabs-row{ max-width:1280px; margin:0 auto; display:flex; gap:4px; }
+  .tab-item{ background:none; border:none; padding:10px 4px; margin-right:22px; font-size:14px; font-family:var(--font-ui);
+    color:var(--ink-muted); cursor:pointer; border-bottom:2px solid transparent; }
+  .tab-item.active{ color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+
+  .controls{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:14px 40px; background:var(--surface-alt); border-bottom:1px solid var(--border); }
+  .controls-inner{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; max-width:1280px; margin:0 auto; width:100%; }
+  .controls input[type=text], .controls select{
+    font-family:var(--font-ui); font-size:13.5px; color:var(--ink); background:var(--surface); border:1px solid var(--border);
+    border-radius:4px; padding:8px 10px; outline:none;
+  }
+  .controls input[type=text]:focus, .controls select:focus{ border-color:var(--accent); }
+  .controls input[type=text]{ min-width:200px; flex:1; }
+  .spacer{ flex:1; }
+
+  .btn{ font-family:var(--font-ui); font-size:13.5px; font-weight:500; cursor:pointer; border-radius:4px; padding:9px 16px; border:1px solid transparent; }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-primary:hover{ background:var(--accent-hover); }
+  .btn-ghost{ background:transparent; border-color:var(--border); color:var(--ink); }
+  .btn-ghost:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn-sm{ padding:5px 10px; font-size:12.5px; }
+  .btn:disabled{ opacity:0.55; cursor:default; }
+  .link-btn{ background:none;border:none;color:var(--ink-muted);font-size:12.5px; text-decoration:underline; cursor:pointer; font-family:var(--font-ui); padding:0; }
+  .link-btn:hover{ color:var(--ink); }
+  .qty-btn{ width:26px; height:26px; border-radius:4px; border:1px solid var(--border); background:var(--surface); color:var(--ink); font-size:15px; font-weight:600; cursor:pointer; line-height:1; }
+  .qty-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .tracking-link{ font-size:11.5px; color:var(--accent); text-decoration:none; font-weight:600; }
+  .tracking-link:hover{ text-decoration:underline; }
+
+  .main{ max-width:1280px; margin:0 auto; padding:24px 40px 80px; }
+  .info-banner{ background:var(--accent-warm-bg); border:1px solid #E0C9A6; color:#5C4322; border-radius:4px; padding:10px 14px; font-size:13px; margin-bottom:18px; }
+  .list-header{ display:flex; gap:16px; padding:0 16px 8px; font-size:11.5px; color:var(--ink-muted); border-bottom:1px solid var(--border); }
+  .row-item{ display:flex; gap:16px; align-items:center; padding:14px 16px; border-bottom:1px solid var(--border); border-left:4px solid var(--accent); background:var(--surface); }
+  .col{ min-width:0; }
+  .col-nombre, .col-proveedor{ flex:2.2; }
+  .col-ubicacion, .col-destino{ flex:1; color:var(--ink-muted); }
+  .col-categoria{ flex:1.2; }
+  .col-cantidad{ flex:1.4; }
+  .col-monto{ flex:1.3; }
+  .col-estado{ flex:1.8; }
+  .col-fecha{ flex:1; }
+  .col-acciones{ flex:1.2; text-align:right; }
+  .col-alertas{ flex:0 0 26px; display:flex; flex-direction:column; gap:4px; align-items:center; }
+  .alerta-icono{ font-size:15px; line-height:1; cursor:default; }
+
+  .item-nombre, .proveedor-name{ font-weight:600; margin-bottom:3px; }
+  .item-notas{ font-size:12px; color:var(--ink-muted); }
+  .tracking-line{ display:flex; align-items:center; gap:6px; color:var(--ink-muted); font-size:12.5px; }
+  .courier-badge{ font-size:11px; font-weight:600; padding:1px 6px; border-radius:3px; background:var(--surface-alt); border:1px solid var(--border); color:var(--ink-muted); }
+  .tracking-num{ font-family:var(--font-mono); font-size:12px; }
+  .badge{ display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; background:var(--surface-alt); border:1px solid var(--border); color:var(--ink-muted); }
+  .badge-agente{ background:var(--accent-warm-bg); color:var(--accent-warm); margin-left:8px; border:none; }
+  .badge-revision{ background:var(--st-transito-bg); color:var(--st-transito); margin-left:8px; border:none; }
+  .badge-atrasado{ background:var(--st-atrasado-bg); color:var(--st-atrasado); border:none; }
+  .dias-label{ font-size:11.5px; color:var(--ink-muted); }
+  .estado-select{ font-family:var(--font-ui); font-size:12.5px; font-weight:600; border-radius:20px; padding:4px 22px 4px 10px; border:1px solid var(--border);
+    background-color:var(--surface); color:var(--sel-color, var(--ink)); cursor:pointer; margin-bottom:4px; display:block; }
+
+  .empty-state{ padding:48px 16px; text-align:center; color:var(--ink-muted); font-family:var(--font-display); font-size:16px; }
+  .footer-actions{ margin-top:22px; display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+
+  .modal-backdrop{ position:fixed; inset:0; background:rgba(20,20,18,0.45); z-index:50; display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; overflow-y:auto; }
+  .modal{ background:var(--surface); border-radius:6px; max-width:560px; width:100%; padding:28px 30px 26px; box-shadow:0 12px 32px rgba(0,0,0,0.18); }
+  .modal-title{ font-family:var(--font-display); font-size:20px; margin:0 0 4px; }
+  .modal-close{ float:right; background:none; border:none; font-size:20px; color:var(--ink-muted); cursor:pointer; line-height:1; }
+  .modal-tabs{ display:flex; gap:4px; margin:18px 0 18px; border-bottom:1px solid var(--border); }
+  .tab-btn{ background:none; border:none; padding:9px 4px; margin-right:18px; font-size:13.5px; color:var(--ink-muted); cursor:pointer; border-bottom:2px solid transparent; font-family:var(--font-ui); }
+  .tab-btn.active{ color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+  .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px; }
+  .form-field{ display:flex; flex-direction:column; gap:5px; }
+  .form-field.full{ grid-column:1 / -1; }
+  .form-field label{ font-size:12px; color:var(--ink-muted); }
+  .form-field input, .form-field select, .form-field textarea{
+    font-family:var(--font-ui); font-size:14px; padding:9px 10px; border:1px solid var(--border); border-radius:4px; background:var(--surface); color:var(--ink); outline:none;
+  }
+  .form-field input:focus, .form-field select:focus, .form-field textarea:focus{ border-color:var(--accent); }
+  .form-field textarea{ resize:vertical; min-height:70px; font-family:var(--font-ui); }
+  .form-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:22px; }
+  .extract-status{ font-size:12.5px; color:var(--ink-muted); margin-top:8px; min-height:16px; }
+  .field-note{ font-size:12px; color:var(--accent-warm); background:var(--accent-warm-bg); padding:8px 10px; border-radius:4px; margin-bottom:14px; }
+
+  .assistant-toggle{ position:fixed; bottom:24px; right:24px; z-index:40; background:var(--accent); color:#fff; border:none; border-radius:24px;
+    padding:12px 20px; font-family:var(--font-ui); font-size:13.5px; font-weight:600; cursor:pointer; box-shadow:0 6px 18px rgba(27,75,67,0.35); }
+  .assistant-toggle:hover{ background:var(--accent-hover); }
+  .assistant-panel{ position:fixed; top:0; right:0; height:100vh; width:390px; max-width:92vw; background:var(--surface); border-left:1px solid var(--border);
+    z-index:45; display:flex; flex-direction:column; box-shadow:-8px 0 24px rgba(0,0,0,0.10); }
+  .assistant-header{ padding:20px 20px 14px; border-bottom:1px solid var(--border); }
+  .assistant-header h3{ font-family:var(--font-display); font-size:18px; margin:0 0 2px; }
+  .assistant-header p{ font-size:12px; color:var(--ink-muted); margin:0; }
+  .assistant-close{ float:right; background:none; border:none; font-size:19px; color:var(--ink-muted); cursor:pointer; }
+  .quick-prompts{ display:flex; flex-wrap:wrap; gap:6px; padding:12px 20px; border-bottom:1px solid var(--border); }
+  .quick-prompt-btn{ font-size:11.5px; padding:5px 10px; border-radius:20px; border:1px solid var(--border); background:var(--surface-alt); color:var(--ink); cursor:pointer; font-family:var(--font-ui); }
+  .quick-prompt-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .chat-log{ flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:12px; }
+  .chat-empty{ color:var(--ink-muted); font-size:13px; padding-top:12px; }
+  .chat-msg{ max-width:88%; padding:9px 12px; border-radius:8px; font-size:13.5px; white-space:pre-wrap; }
+  .chat-msg.user{ align-self:flex-end; background:var(--accent); color:#fff; }
+  .chat-msg.assistant{ align-self:flex-start; background:var(--surface-alt); color:var(--ink); }
+  .chat-typing{ align-self:flex-start; color:var(--ink-muted); font-size:12.5px; padding:0 4px; }
+  .assistant-input-row{ display:flex; gap:8px; padding:14px 20px 20px; border-top:1px solid var(--border); }
+  .assistant-input-row input{ flex:1; font-family:var(--font-ui); font-size:13.5px; padding:9px 10px; border:1px solid var(--border); border-radius:4px; outline:none; }
+  .assistant-input-row input:focus{ border-color:var(--accent); }
+
+  .toast{ position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:60; background:var(--ink); color:#fff; padding:11px 22px;
+    border-radius:6px; font-size:13.5px; font-weight:500; box-shadow:0 8px 22px rgba(0,0,0,0.25); }
+
+  @media (max-width:760px){
+    .topbar, .controls, .main{ padding-left:18px; padding-right:18px; }
+    .row-item{ flex-wrap:wrap; }
+    .col-nombre, .col-proveedor{ flex:1 1 100%; }
+    .col-ubicacion, .col-destino, .col-categoria, .col-cantidad, .col-monto, .col-estado, .col-fecha, .col-acciones{ flex:1 1 45%; }
+    .list-header{ display:none; }
+    .form-grid{ grid-template-columns:1fr; }
+    .assistant-panel{ width:100%; max-width:100%; }
+  }
+
+  /* Específico de Subcontrataciones */
+  .col-w-nombre{ flex:2.2; }
+  .col-w-rut{ flex:1.1; }
+  .col-w-rol{ flex:1.4; }
+  .col-w-plat{ flex:1.8; display:flex; flex-wrap:wrap; gap:4px; }
+  .rut-text{ font-family:var(--font-mono); font-size:12.5px; }
+  .row-item.inactivo{ border-left-color:var(--ink-muted); background:var(--surface-alt); color:var(--ink-muted); }
+  .badge-warn{ background:var(--accent-warm-bg); color:var(--accent-warm); border:none; }
+  .badge-plat{ background:var(--st-destino-bg); color:var(--st-destino); border:none; }
+  .badge-off{ background:var(--st-proceso-bg); color:var(--st-proceso); border:none; }
+  .section-card{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:20px 22px; margin-bottom:18px; }
+  .section-card h3{ font-family:var(--font-display); font-size:17px; margin:0 0 4px; }
+  .section-card p.hint{ margin:0 0 14px; font-size:12.5px; color:var(--ink-muted); }
+  .inline-add{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+  .inline-add input[type=text], .inline-add select{ font-family:var(--font-ui); font-size:13.5px; padding:8px 10px; border:1px solid var(--border); border-radius:4px; outline:none; background:var(--surface); color:var(--ink); }
+  .inline-add input[type=text]{ min-width:220px; flex:1; max-width:340px; }
+  .inline-add input[type=text]:focus, .inline-add select:focus{ border-color:var(--accent); }
+  .chip-list{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{ display:inline-flex; align-items:center; gap:6px; font-size:13px; padding:5px 12px; border-radius:20px; background:var(--surface-alt); border:1px solid var(--border); }
+  .check-row{ display:flex; align-items:center; gap:10px; padding:8px 2px; border-bottom:1px solid var(--border); font-size:13.5px; cursor:pointer; }
+  .check-row:last-child{ border-bottom:none; }
+  .check-row input{ width:16px; height:16px; accent-color:var(--accent); }
+  .check-grid{ display:grid; grid-template-columns:1fr 1fr; gap:4px 18px; }
+  .checks-box{ border:1px solid var(--border); border-radius:4px; padding:6px 12px; }
+  .estado-box{ margin-top:18px; padding:12px 14px; border:1px solid var(--border); border-radius:4px; background:var(--surface-alt); font-size:13px; }
+  .btn-danger{ background:var(--st-atrasado); color:#fff; }
+  .btn-danger:hover{ opacity:0.9; }
+  @media (max-width:760px){
+    .col-w-nombre{ flex:1 1 100%; }
+    .col-w-rut, .col-w-rol, .col-w-plat{ flex:1 1 45%; }
+    .check-grid{ grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="app"><div class="center-loading">Cargando sistema…</div></div>
+
+<script>
+/* ============================================================
+   CONFIGURACIÓN COMPARTIDA (misma que index.html)
+   ============================================================ */
+const SUPABASE_URL = 'https://wncejgicemnaneptrrsq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_DrQ2zuhGaxF09jQUrssLWQ_lLKtVbnL';
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const AREA = 'subcontrataciones';
+
+let state = {
+  session: null, loginError: null, loginLoading: false,
+  cargando: true, loadError: null,
+  acceso: false, puedeEscribir: false, accesoCompleto: false,
+  tab: 'trabajadores',
+  roles: [], tipos: [], plataformas: [], requeridos: [], trabajadores: [], tp: [],
+  filtros: { texto: '', estado: 'activos', plataforma: '', rol: '' },
+  modal: null,          // { id: null | número } — trabajador
+  modalError: null, saving: false,
+  reqRolId: null,
+  showAccountMenu: false
+};
+
+/* ============================================================
+   UTILIDADES
+   ============================================================ */
+function escapeHTML(str){
+  if(str===null || str===undefined) return '';
+  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function withTimeout(promise, ms){
+  return Promise.race([ promise, new Promise((_, reject)=> setTimeout(()=> reject(new Error('La operación tardó demasiado')), ms)) ]);
+}
+function val(id){ const el = document.getElementById(id); return el ? el.value : ''; }
+function aviso(msg, ms){
+  let el = document.getElementById('toast');
+  if(!el){ el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; document.body.appendChild(el); }
+  el.textContent = msg; el.style.display = 'block';
+  clearTimeout(aviso._t);
+  aviso._t = setTimeout(()=>{ el.style.display = 'none'; }, ms || 2800);
+}
+function mensajeError(e){
+  if(e && e.code === '23505') return 'Ya existe un registro con ese valor.';
+  if(e && (e.code === '42501' || /row-level security/i.test(e.message || ''))) return 'Tu cuenta no tiene permiso para hacer este cambio.';
+  return (e && e.message) ? e.message : 'error desconocido';
+}
+
+/* RUT: se guarda sin puntos, con guion y K mayúscula (formato que exige la base de datos) */
+function normalizarRut(s){
+  s = String(s || '').replace(/[.\s]/g, '').toUpperCase();
+  if(s.length > 1 && !s.includes('-')) s = s.slice(0, -1) + '-' + s.slice(-1);
+  return s;
+}
+function rutValido(r){
+  const m = /^(\d{7,8})-([0-9K])$/.exec(r);
+  if(!m) return false;
+  let suma = 0, mult = 2;
+  for(let i = m[1].length - 1; i >= 0; i--){
+    suma += parseInt(m[1][i], 10) * mult;
+    mult = mult === 7 ? 2 : mult + 1;
+  }
+  const res = 11 - (suma % 11);
+  const dv = res === 11 ? '0' : (res === 10 ? 'K' : String(res));
+  return dv === m[2];
+}
+function fmtRut(r){
+  const m = /^(\d{7,8})-([0-9K])$/.exec(r || '');
+  if(!m) return r || '';
+  return m[1].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + m[2];
+}
+
+/* ============================================================
+   DATOS
+   ============================================================ */
+async function cargarAcceso(){
+  const uid = state.session.user.id;
+  let completo = false;
+  try{
+    const p = await supabaseClient.from('perfiles').select('acceso_completo').eq('id', uid).single();
+    completo = !!(p.data && p.data.acceso_completo);
+  }catch(e){ /* queda en false */ }
+  const a = await supabaseClient.from('perfiles_acceso').select('area,rol').eq('perfil_id', uid);
+  if(a.error) throw new Error(a.error.message);
+  const fila = (a.data || []).find(x => x.area === AREA);
+  state.accesoCompleto = completo;
+  state.acceso = completo || !!fila;
+  state.puedeEscribir = !!(fila && fila.rol === 'editor');
+}
+async function cargarDatos(){
+  const q = (t, ord) => supabaseClient.from(t).select('*').order(ord);
+  const res = await withTimeout(Promise.all([
+    q('roles_faena', 'nombre'),
+    q('tipos_documento', 'nombre'),
+    q('plataformas_destino', 'nombre'),
+    supabaseClient.from('documentos_requeridos_por_rol').select('*'),
+    q('trabajadores_subcontratados', 'nombre'),
+    supabaseClient.from('trabajador_plataforma').select('*')
+  ]), 15000);
+  for(const r of res){ if(r.error) throw new Error(r.error.message); }
+  state.roles = res[0].data; state.tipos = res[1].data; state.plataformas = res[2].data;
+  state.requeridos = res[3].data; state.trabajadores = res[4].data; state.tp = res[5].data;
+  if(state.reqRolId === null && state.roles.length) state.reqRolId = state.roles[0].id;
+}
+async function recargar(){
+  try{ await cargarDatos(); state.loadError = null; }
+  catch(e){ state.loadError = 'No se pudo cargar la información: ' + mensajeError(e); }
+  render();
+}
+
+function rolNombre(id){ const r = state.roles.find(x => x.id === id); return r ? r.nombre : null; }
+function plataformasActivasDe(trabId){
+  return state.tp.filter(x => x.trabajador_id === trabId && x.activo)
+    .map(x => state.plataformas.find(p => p.id === x.plataforma_id))
+    .filter(Boolean);
+}
+
+/* ============================================================
+   LOGIN / SESIÓN
+   ============================================================ */
+function loginHTML(){
+  return `
+  <div class="center-loading" style="flex-direction:column;">
+    <div class="login-box">
+      <h1 class="page-title" style="margin-bottom:4px;">Innovex</h1>
+      <p class="page-sub" style="margin-bottom:24px;">Subcontrataciones</p>
+      ${state.loginError ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-bottom:14px;">${escapeHTML(state.loginError)}</div>` : ''}
+      <div class="form-field full" style="margin-bottom:12px;">
+        <label>Correo</label>
+        <input type="email" id="login-email" placeholder="tu@innovex.cl" onkeydown="if(event.key==='Enter') handleLogin()">
+      </div>
+      <div class="form-field full" style="margin-bottom:20px;">
+        <label>Contraseña</label>
+        <input type="password" id="login-password" onkeydown="if(event.key==='Enter') handleLogin()">
+      </div>
+      <button type="button" class="btn btn-primary" style="width:100%;" onclick="handleLogin()" ${state.loginLoading ? 'disabled' : ''}>${state.loginLoading ? 'Ingresando…' : 'Iniciar sesión'}</button>
+    </div>
+  </div>`;
+}
+async function handleLogin(){
+  const email = val('login-email').trim();
+  const password = val('login-password');
+  if(!email || !password){ state.loginError = 'Ingresa tu correo y contraseña.'; render(); return; }
+  state.loginLoading = true; state.loginError = null; render();
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  state.loginLoading = false;
+  if(error){ state.loginError = 'No se pudo iniciar sesión: ' + error.message; render(); return; }
+  state.session = data.session;
+  await arrancar();
+}
+async function handleLogout(){
+  await supabaseClient.auth.signOut();
+  limpiarEstado(); render();
+}
+function limpiarEstado(){
+  state.session = null; state.acceso = false; state.puedeEscribir = false; state.accesoCompleto = false;
+  state.roles = []; state.tipos = []; state.plataformas = []; state.requeridos = []; state.trabajadores = []; state.tp = [];
+  state.modal = null; state.showAccountMenu = false; state.reqRolId = null;
+}
+async function arrancar(){
+  state.cargando = true; render();
+  try{
+    await cargarAcceso();
+    if(state.acceso) await cargarDatos();
+    state.loadError = null;
+  }catch(e){
+    state.loadError = 'No se pudo conectar con la base de datos (' + mensajeError(e) + '). Revisa la conexión e inténtalo de nuevo.';
+  }
+  state.cargando = false;
+  render();
+}
+
+/* ============================================================
+   TRABAJADORES
+   ============================================================ */
+function trabajadoresFiltrados(){
+  const f = state.filtros;
+  const t = f.texto.trim().toLowerCase();
+  const tRut = t.replace(/[.\s]/g, '');
+  return state.trabajadores.filter(w => {
+    if(f.estado === 'activos' && !w.activo) return false;
+    if(f.estado === 'inactivos' && w.activo) return false;
+    if(f.rol === '__sin'){ if(w.rol_faena_id != null) return false; }
+    else if(f.rol && String(w.rol_faena_id) !== f.rol) return false;
+    if(f.plataforma && !state.tp.some(x => x.trabajador_id === w.id && String(x.plataforma_id) === f.plataforma && x.activo)) return false;
+    if(t && !(w.nombre.toLowerCase().includes(t) || (tRut && w.rut.toLowerCase().includes(tRut)))) return false;
+    return true;
+  });
+}
+function statsHTML(){
+  const activos = state.trabajadores.filter(w => w.activo);
+  const sinRol = activos.filter(w => w.rol_faena_id == null).length;
+  const sinPlat = activos.filter(w => plataformasActivasDe(w.id).length === 0).length;
+  const chip = (v, l, warn) => `<div class="stat-chip ${warn && v > 0 ? 'warn' : ''}"><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`;
+  return chip(activos.length, 'Trabajadores activos') +
+         chip(state.trabajadores.length - activos.length, 'Inactivos') +
+         chip(sinRol, 'Sin rol asignado', true) +
+         chip(sinPlat, 'Sin plataforma', true);
+}
+function listaTrabajadoresHTML(){
+  const lista = trabajadoresFiltrados();
+  if(state.trabajadores.length === 0){
+    return `<div class="empty-state">Aún no hay trabajadores registrados.${state.puedeEscribir ? '<br><span class="dias-label">Usa «+ Agregar trabajador» para crear el primero.</span>' : ''}</div>`;
+  }
+  if(lista.length === 0) return `<div class="empty-state">Ningún trabajador coincide con los filtros.</div>`;
+  const header = `
+    <div class="list-header">
+      <div class="col col-w-nombre">Nombre</div><div class="col col-w-rut">RUT</div>
+      <div class="col col-w-rol">Rol en faena</div><div class="col col-w-plat">Plataformas</div>
+      <div class="col col-acciones"></div>
+    </div>`;
+  const filas = lista.map(w => {
+    const rol = rolNombre(w.rol_faena_id);
+    const plats = plataformasActivasDe(w.id);
+    return `
+    <div class="row-item ${w.activo ? '' : 'inactivo'}">
+      <div class="col col-w-nombre"><div class="item-nombre">${escapeHTML(w.nombre)}${w.activo ? '' : ' <span class="badge badge-off">Inactivo</span>'}</div></div>
+      <div class="col col-w-rut"><span class="rut-text">${escapeHTML(fmtRut(w.rut))}</span></div>
+      <div class="col col-w-rol">${rol ? escapeHTML(rol) : '<span class="badge badge-warn">Sin rol</span>'}</div>
+      <div class="col col-w-plat">${plats.length ? plats.map(p => `<span class="badge badge-plat">${escapeHTML(p.nombre)}</span>`).join('') : '<span class="dias-label">—</span>'}</div>
+      <div class="col col-acciones">${state.puedeEscribir ? `<button type="button" class="btn btn-ghost btn-sm" onclick="abrirModalTrabajador(${w.id})">Editar</button>` : ''}</div>
+    </div>`;
+  }).join('');
+  return header + filas;
+}
+function actualizarLista(){
+  const c = document.getElementById('list-container');
+  if(c) c.innerHTML = listaTrabajadoresHTML();
+}
+
+function modalTrabajadorHTML(){
+  const esNuevo = state.modal.id == null;
+  const w = esNuevo ? null : state.trabajadores.find(x => x.id === state.modal.id);
+  if(!esNuevo && !w){ return ''; }
+  const inactivo = !esNuevo && !w.activo;
+  const d = state.modal.draft || null;   // lo que la persona ya había escrito (si hubo un error al guardar)
+  const activasIds = d ? d.plats : (esNuevo ? [] : state.tp.filter(x => x.trabajador_id === w.id && x.activo).map(x => x.plataforma_id));
+  const platsHTML = state.plataformas.length
+    ? `<div class="checks-box check-grid">${state.plataformas.map(p => `
+        <label class="check-row"><input type="checkbox" class="chk-plat" value="${p.id}" ${activasIds.includes(p.id) ? 'checked' : ''} ${inactivo ? 'disabled' : ''}> ${escapeHTML(p.nombre)}</label>`).join('')}</div>`
+    : `<div class="dias-label">No hay plataformas creadas todavía (se crean en la pestaña Catálogos).</div>`;
+  const estadoHTML = esNuevo ? '' : (inactivo ? `
+    <div class="estado-box">
+      <b>Este trabajador está inactivo.</b> Se quitó de todas las plataformas al desactivarlo. Al reactivarlo, las plataformas <b>no</b> se restauran solas: guarda la reactivación y luego asígnalas de nuevo.
+      <div style="margin-top:10px;"><button type="button" class="btn btn-ghost btn-sm" onclick="reactivarTrabajador(${w.id})" ${state.saving ? 'disabled' : ''}>Reactivar trabajador</button></div>
+    </div>` : `
+    <div class="estado-box">
+      <div id="desact-paso1"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('desact-paso1').style.display='none';document.getElementById('desact-paso2').style.display='block';">Desactivar trabajador…</button></div>
+      <div id="desact-paso2" style="display:none;">
+        <b>¿Desactivar a este trabajador?</b> Se quitará de todas las plataformas. Sus documentos se conservan (nunca se borran).
+        <div style="margin-top:10px;display:flex;gap:10px;">
+          <button type="button" class="btn btn-danger btn-sm" onclick="desactivarTrabajador(${w.id})" ${state.saving ? 'disabled' : ''}>Sí, desactivar</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('desact-paso2').style.display='none';document.getElementById('desact-paso1').style.display='block';">Cancelar</button>
+        </div>
+      </div>
+    </div>`);
+  return `
+  <div class="modal-backdrop">
+    <div class="modal">
+      <button type="button" class="modal-close" onclick="cerrarModal()" aria-label="Cerrar">×</button>
+      <h2 class="modal-title">${esNuevo ? 'Agregar trabajador' : 'Editar trabajador'}</h2>
+      ${state.modalError ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-top:12px;">${escapeHTML(state.modalError)}</div>` : ''}
+      <div class="form-grid">
+        <div class="form-field full"><label>Nombre completo</label><input type="text" id="w-nombre" value="${escapeHTML(d ? d.nombre : (esNuevo ? '' : w.nombre))}" placeholder="Nombre y apellidos"></div>
+        <div class="form-field"><label>RUT ${esNuevo ? '' : '(no se puede cambiar)'}</label><input type="text" id="w-rut" value="${escapeHTML(esNuevo ? (d ? d.rut : '') : fmtRut(w.rut))}" placeholder="12.345.678-5" ${esNuevo ? '' : 'readonly'}></div>
+        <div class="form-field"><label>Rol en faena</label>
+          <select id="w-rol"><option value="">— Sin rol —</option>${state.roles.map(r => `<option value="${r.id}" ${(d ? String(d.rol) === String(r.id) : (!esNuevo && w.rol_faena_id === r.id)) ? 'selected' : ''}>${escapeHTML(r.nombre)}</option>`).join('')}</select>
+        </div>
+        <div class="form-field full"><label>Plataformas donde trabaja ${inactivo ? '(bloqueado mientras esté inactivo)' : ''}</label>${platsHTML}</div>
+      </div>
+      ${estadoHTML}
+      <div class="form-actions">
+        <button type="button" class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="guardarTrabajador()" ${state.saving ? 'disabled' : ''}>${state.saving ? 'Guardando…' : 'Guardar'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+function abrirModalTrabajador(id){ state.modal = { id: id == null ? null : id }; state.modalError = null; render(); }
+function cerrarModal(){ state.modal = null; state.modalError = null; state.saving = false; render(); }
+
+async function guardarTrabajador(){
+  if(state.saving) return;
+  const esNuevo = state.modal.id == null;
+  const nombre = val('w-nombre').trim().replace(/\s+/g, ' ');
+  const rolId = val('w-rol') ? Number(val('w-rol')) : null;
+  const marcadas = Array.from(document.querySelectorAll('.chk-plat:checked')).map(el => Number(el.value));
+  state.modal.draft = { nombre: val('w-nombre'), rut: val('w-rut'), rol: val('w-rol'), plats: marcadas };
+  if(!nombre){ state.modalError = 'Escribe el nombre del trabajador.'; render(); return; }
+  let rut = null;
+  if(esNuevo){
+    rut = normalizarRut(val('w-rut'));
+    if(!rutValido(rut)){ state.modalError = 'El RUT no es válido. Revisa el número y el dígito verificador (ej.: 12.345.678-5).'; render(); return; }
+  }
+  state.saving = true; state.modalError = null; render();
+  try{
+    let trabId = state.modal.id;
+    if(esNuevo){
+      const r = await withTimeout(supabaseClient.from('trabajadores_subcontratados').insert({ rut, nombre, rol_faena_id: rolId }).select('id').single(), 10000);
+      if(r.error) throw r.error;
+      trabId = r.data.id;
+    }else{
+      const r = await withTimeout(supabaseClient.from('trabajadores_subcontratados').update({ nombre, rol_faena_id: rolId }).eq('id', trabId), 10000);
+      if(r.error) throw r.error;
+    }
+    const w = state.trabajadores.find(x => x.id === trabId);
+    if(esNuevo || (w && w.activo)){
+      for(const p of state.plataformas){
+        const fila = state.tp.find(x => x.trabajador_id === trabId && x.plataforma_id === p.id);
+        const quiere = marcadas.includes(p.id);
+        const tiene = !!(fila && fila.activo);
+        if(quiere === tiene) continue;
+        const r = await withTimeout(supabaseClient.from('trabajador_plataforma').upsert({ trabajador_id: trabId, plataforma_id: p.id, activo: quiere }, { onConflict: 'trabajador_id,plataforma_id' }), 10000);
+        if(r.error) throw r.error;
+      }
+    }
+    state.modal = null; state.saving = false;
+    await recargar();
+    aviso(esNuevo ? 'Trabajador agregado.' : 'Cambios guardados.');
+  }catch(e){
+    state.saving = false;
+    state.modalError = 'No se pudo guardar: ' + mensajeError(e);
+    // Si el trabajador sí se creó antes del error, evitamos un duplicado al reintentar.
+    await recargar();
+    render();
+  }
+}
+async function desactivarTrabajador(id){
+  if(state.saving) return;
+  state.saving = true; render();
+  try{
+    const r = await withTimeout(supabaseClient.from('trabajadores_subcontratados').update({ activo: false }).eq('id', id), 10000);
+    if(r.error) throw r.error;
+    state.modal = null; state.saving = false;
+    await recargar();
+    aviso('Trabajador desactivado y quitado de sus plataformas.');
+  }catch(e){
+    state.saving = false; state.modalError = 'No se pudo desactivar: ' + mensajeError(e); render();
+  }
+}
+async function reactivarTrabajador(id){
+  if(state.saving) return;
+  state.saving = true; render();
+  try{
+    const r = await withTimeout(supabaseClient.from('trabajadores_subcontratados').update({ activo: true }).eq('id', id), 10000);
+    if(r.error) throw r.error;
+    state.saving = false;
+    await recargar();
+    aviso('Trabajador reactivado. Asígnale sus plataformas.');
+  }catch(e){
+    state.saving = false; state.modalError = 'No se pudo reactivar: ' + mensajeError(e); render();
+  }
+}
+
+/* ============================================================
+   CATÁLOGOS
+   ============================================================ */
+async function agregarRol(){
+  const nombre = val('nuevo-rol').trim().replace(/\s+/g, ' ');
+  if(!nombre){ aviso('Escribe el nombre del rol.'); return; }
+  const r = await supabaseClient.from('roles_faena').insert({ nombre });
+  if(r.error){ aviso('No se pudo agregar: ' + mensajeError(r.error), 3600); return; }
+  await recargar(); aviso('Rol agregado.');
+}
+async function agregarTipo(){
+  const nombre = val('nuevo-tipo').trim().replace(/\s+/g, ' ');
+  const vence = !!(document.getElementById('nuevo-tipo-vence') || {}).checked;
+  if(!nombre){ aviso('Escribe el nombre del documento.'); return; }
+  const r = await supabaseClient.from('tipos_documento').insert({ nombre, vence });
+  if(r.error){ aviso('No se pudo agregar: ' + mensajeError(r.error), 3600); return; }
+  await recargar(); aviso('Tipo de documento agregado.');
+}
+async function agregarPlataforma(){
+  const nombre = val('nueva-plataforma').trim().replace(/\s+/g, ' ');
+  if(!nombre){ aviso('Escribe el nombre de la plataforma.'); return; }
+  const r = await supabaseClient.from('plataformas_destino').insert({ nombre });
+  if(r.error){ aviso('No se pudo agregar: ' + mensajeError(r.error), 3600); return; }
+  await recargar(); aviso('Plataforma agregada.');
+}
+function elegirRolReq(v){ state.reqRolId = v ? Number(v) : null; render(); }
+async function toggleRequisito(rolId, tipoId, marcado){
+  try{
+    if(marcado){
+      const r = await supabaseClient.from('documentos_requeridos_por_rol').insert({ rol_faena_id: rolId, tipo_documento_id: tipoId });
+      if(r.error) throw r.error;
+      state.requeridos.push({ rol_faena_id: rolId, tipo_documento_id: tipoId });
+    }else{
+      const r = await supabaseClient.from('documentos_requeridos_por_rol').delete().eq('rol_faena_id', rolId).eq('tipo_documento_id', tipoId);
+      if(r.error) throw r.error;
+      state.requeridos = state.requeridos.filter(x => !(x.rol_faena_id === rolId && x.tipo_documento_id === tipoId));
+    }
+  }catch(e){
+    aviso('No se pudo guardar el cambio: ' + mensajeError(e), 3600);
+    render(); // vuelve a mostrar el estado real
+  }
+}
+function catalogosHTML(){
+  const ed = state.puedeEscribir;
+  const rolSel = state.roles.find(r => r.id === state.reqRolId);
+  return `
+  <div class="section-card">
+    <h3>Roles en faena</h3>
+    <p class="hint">Los cargos que cumplen los trabajadores (ej.: buzo, operador, supervisor). Cada rol exige distintos documentos.</p>
+    ${ed ? `<div class="inline-add"><input type="text" id="nuevo-rol" placeholder="Nuevo rol" onkeydown="if(event.key==='Enter') agregarRol()"><button type="button" class="btn btn-primary btn-sm" onclick="agregarRol()">Agregar</button></div>` : ''}
+    <div class="chip-list">${state.roles.length ? state.roles.map(r => `<span class="chip">${escapeHTML(r.nombre)}</span>`).join('') : '<span class="dias-label">Aún no hay roles.</span>'}</div>
+  </div>
+
+  <div class="section-card">
+    <h3>Tipos de documento</h3>
+    <p class="hint">«Vence» significa que el documento tiene fecha de vencimiento y generará alertas. Los que no vencen (liquidaciones, cotizaciones) solo se controlan por mes de emisión.</p>
+    ${ed ? `<div class="inline-add"><input type="text" id="nuevo-tipo" placeholder="Nuevo tipo de documento" onkeydown="if(event.key==='Enter') agregarTipo()"><label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" id="nuevo-tipo-vence" checked> Vence</label><button type="button" class="btn btn-primary btn-sm" onclick="agregarTipo()">Agregar</button></div>` : ''}
+    <div class="chip-list">${state.tipos.length ? state.tipos.map(t => `<span class="chip">${escapeHTML(t.nombre)} <span class="badge ${t.vence ? 'badge-warn' : 'badge-off'}">${t.vence ? 'Vence' : 'No vence'}</span></span>`).join('') : '<span class="dias-label">Aún no hay tipos.</span>'}</div>
+  </div>
+
+  <div class="section-card">
+    <h3>Plataformas de destino</h3>
+    <p class="hint">Las empresas o instalaciones donde los trabajadores prestan servicio (ej.: Mowi, MultiX). Un trabajador puede estar en varias a la vez.</p>
+    ${ed ? `<div class="inline-add"><input type="text" id="nueva-plataforma" placeholder="Nueva plataforma" onkeydown="if(event.key==='Enter') agregarPlataforma()"><button type="button" class="btn btn-primary btn-sm" onclick="agregarPlataforma()">Agregar</button></div>` : ''}
+    <div class="chip-list">${state.plataformas.length ? state.plataformas.map(p => `<span class="chip">${escapeHTML(p.nombre)}</span>`).join('') : '<span class="dias-label">Aún no hay plataformas.</span>'}</div>
+  </div>
+
+  <div class="section-card">
+    <h3>Documentos que exige cada rol</h3>
+    <p class="hint">Elige un rol y marca los documentos obligatorios. Con esto se calculará más adelante si un trabajador está «incompleto».</p>
+    ${state.roles.length === 0 ? '<span class="dias-label">Crea al menos un rol para definir sus documentos requeridos.</span>' : `
+      <div class="inline-add"><select onchange="elegirRolReq(this.value)">${state.roles.map(r => `<option value="${r.id}" ${r.id === state.reqRolId ? 'selected' : ''}>${escapeHTML(r.nombre)}</option>`).join('')}</select></div>
+      ${(rolSel && state.tipos.length) ? `<div class="checks-box">${state.tipos.map(t => {
+        const marcado = state.requeridos.some(x => x.rol_faena_id === rolSel.id && x.tipo_documento_id === t.id);
+        return `<label class="check-row"><input type="checkbox" ${marcado ? 'checked' : ''} ${ed ? '' : 'disabled'} onchange="toggleRequisito(${rolSel.id}, ${t.id}, this.checked)"> ${escapeHTML(t.nombre)}</label>`;
+      }).join('')}</div>` : '<span class="dias-label">Crea tipos de documento para poder marcarlos.</span>'}
+    `}
+  </div>`;
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function sinAccesoHTML(){
+  return `
+  <div class="center-loading" style="flex-direction:column;gap:12px;">
+    <p style="font-family:var(--font-display);font-size:20px;margin:0;">Sin acceso</p>
+    <p class="page-sub" style="max-width:340px;text-align:center;">Tu cuenta no tiene acceso a Subcontrataciones. Si lo necesitas, pídelo a quien administra el sistema.</p>
+    <a class="link-btn" href="./index.html">Volver al inicio</a>
+    <button type="button" class="link-btn" onclick="handleLogout()">Cerrar sesión</button>
+  </div>`;
+}
+function setTab(t){ state.tab = t; render(); }
+function toggleMenu(){ state.showAccountMenu = !state.showAccountMenu; render(); }
+
+function mainHTML(){
+  const esTrab = state.tab === 'trabajadores';
+  const f = state.filtros;
+  const controles = esTrab ? `
+    <input type="text" placeholder="Buscar por nombre o RUT…" value="${escapeHTML(f.texto)}" oninput="state.filtros.texto=this.value; actualizarLista();">
+    <select onchange="state.filtros.estado=this.value; actualizarLista();">
+      <option value="activos" ${f.estado === 'activos' ? 'selected' : ''}>Activos</option>
+      <option value="inactivos" ${f.estado === 'inactivos' ? 'selected' : ''}>Inactivos</option>
+      <option value="todos" ${f.estado === 'todos' ? 'selected' : ''}>Todos</option>
+    </select>
+    <select onchange="state.filtros.rol=this.value; actualizarLista();">
+      <option value="">Todos los roles</option>
+      <option value="__sin" ${f.rol === '__sin' ? 'selected' : ''}>Sin rol asignado</option>
+      ${state.roles.map(r => `<option value="${r.id}" ${f.rol === String(r.id) ? 'selected' : ''}>${escapeHTML(r.nombre)}</option>`).join('')}
+    </select>
+    <select onchange="state.filtros.plataforma=this.value; actualizarLista();">
+      <option value="">Todas las plataformas</option>
+      ${state.plataformas.map(p => `<option value="${p.id}" ${f.plataforma === String(p.id) ? 'selected' : ''}>${escapeHTML(p.nombre)}</option>`).join('')}
+    </select>
+    <span class="spacer"></span>
+    ${state.puedeEscribir ? `<button type="button" class="btn btn-primary" onclick="abrirModalTrabajador(null)">+ Agregar trabajador</button>` : ''}
+  ` : '';
+  return `
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-row1">
+          <div>
+            <h1 class="page-title">Subcontrataciones</h1>
+            <p class="page-sub">Innovex</p>
+          </div>
+          <div class="account-menu-wrap">
+            <button type="button" class="btn-ghost btn-sm account-menu-btn" onclick="toggleMenu()" aria-label="Menú de cuenta">☰</button>
+            ${state.showAccountMenu ? `
+              <div style="position:fixed;inset:0;z-index:29;" onclick="toggleMenu()"></div>
+              <div class="account-menu-dropdown">
+                <span class="dias-label" style="padding:6px 12px 8px;border-bottom:1px solid var(--border);margin-bottom:4px;display:block;">${escapeHTML(state.session.user.email)}</span>
+                <a href="./index.html" class="account-menu-item">Cambiar de área</a>
+                <button type="button" class="account-menu-item" onclick="state.showAccountMenu=false; handleLogout();">Cerrar sesión</button>
+              </div>` : ''}
+          </div>
+        </div>
+        <div class="stats-row">${statsHTML()}</div>
+      </div>
+      <div class="tabs-row">
+        <button type="button" class="tab-item ${esTrab ? 'active' : ''}" onclick="setTab('trabajadores')">Trabajadores</button>
+        <button type="button" class="tab-item ${!esTrab ? 'active' : ''}" onclick="setTab('catalogos')">Catálogos</button>
+      </div>
+    </div>
+    ${esTrab ? `<div class="controls"><div class="controls-inner">${controles}</div></div>` : ''}
+    <div class="main">
+      ${state.loadError ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(state.loadError)} <button type="button" class="link-btn" onclick="arrancar()">Reintentar</button></div>` : ''}
+      ${!state.puedeEscribir ? `<div class="info-banner">Tienes acceso de solo lectura en esta área. Para modificar datos, pide el permiso de editor.</div>` : ''}
+      ${esTrab ? `<div id="list-container">${listaTrabajadoresHTML()}</div>` : catalogosHTML()}
+    </div>
+    ${state.modal ? modalTrabajadorHTML() : ''}`;
+}
+function render(){
+  const app = document.getElementById('app');
+  if(!app) return;
+  if(!state.session){ app.innerHTML = loginHTML(); return; }
+  if(state.cargando){ app.innerHTML = '<div class="center-loading">Conectando con la base de datos…</div>'; return; }
+  if(state.loadError && !state.acceso){
+    app.innerHTML = `<div class="center-loading" style="flex-direction:column;gap:12px;"><p class="page-sub" style="max-width:380px;text-align:center;">${escapeHTML(state.loadError)}</p><button type="button" class="btn btn-primary" onclick="arrancar()">Reintentar</button></div>`;
+    return;
+  }
+  if(!state.acceso){ app.innerHTML = sinAccesoHTML(); return; }
+  app.innerHTML = mainHTML();
+}
+
+/* ============================================================
+   INICIO
+   ============================================================ */
+async function init(){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  state.session = session;
+  if(session){ await arrancar(); } else { state.cargando = false; render(); }
+}
+init();
+supabaseClient.auth.onAuthStateChange((event)=>{
+  if(event === 'SIGNED_OUT'){ limpiarEstado(); state.cargando = false; render(); }
+});
+</script>
+</body>
+</html>
