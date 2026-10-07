@@ -185,6 +185,8 @@
   .inline-add input[type=text]:focus, .inline-add select:focus{ border-color:var(--accent); }
   .chip-list{ display:flex; flex-wrap:wrap; gap:8px; }
   .chip{ display:inline-flex; align-items:center; gap:6px; font-size:13px; padding:5px 12px; border-radius:20px; background:var(--surface-alt); border:1px solid var(--border); }
+  .chip-btn{ background:none; border:none; cursor:pointer; color:var(--ink-muted); font-size:13px; line-height:1; padding:0 0 0 2px; }
+  .chip-btn:hover{ color:var(--accent); }
   .check-row{ display:flex; align-items:center; gap:10px; padding:8px 2px; border-bottom:1px solid var(--border); font-size:13.5px; cursor:pointer; }
   .check-row:last-child{ border-bottom:none; }
   .check-row input{ width:16px; height:16px; accent-color:var(--accent); }
@@ -221,6 +223,8 @@ let state = {
   filtros: { texto: '', estado: 'activos', plataforma: '', rol: '' },
   modal: null,          // { id: null | número } — trabajador
   modalError: null, saving: false,
+  modalCat: null,       // { tabla:'roles'|'tipos'|'plataformas', id, draft } — editar/eliminar un elemento de catálogo
+  modalCatError: null,
   reqRolId: null,
   showAccountMenu: false
 };
@@ -245,6 +249,7 @@ function aviso(msg, ms){
 }
 function mensajeError(e){
   if(e && e.code === '23505') return 'Ya existe un registro con ese valor.';
+  if(e && e.code === '23503') return 'Está en uso por otros datos y no se puede eliminar.';
   if(e && (e.code === '42501' || /row-level security/i.test(e.message || ''))) return 'Tu cuenta no tiene permiso para hacer este cambio.';
   return (e && e.message) ? e.message : 'error desconocido';
 }
@@ -358,7 +363,7 @@ async function handleLogout(){
 function limpiarEstado(){
   state.session = null; state.acceso = false; state.puedeEscribir = false; state.accesoCompleto = false;
   state.roles = []; state.tipos = []; state.plataformas = []; state.requeridos = []; state.trabajadores = []; state.tp = [];
-  state.modal = null; state.showAccountMenu = false; state.reqRolId = null;
+  state.modal = null; state.modalCat = null; state.showAccountMenu = false; state.reqRolId = null;
 }
 async function arrancar(){
   state.cargando = true; render();
@@ -597,6 +602,133 @@ async function toggleRequisito(rolId, tipoId, marcado){
     render(); // vuelve a mostrar el estado real
   }
 }
+/* --- Editar / eliminar elementos de catálogo --- */
+const CAT = {
+  roles:       { tabla: 'roles_faena',         lista: () => state.roles,       singular: 'rol',               titulo: 'Editar rol' },
+  tipos:       { tabla: 'tipos_documento',     lista: () => state.tipos,       singular: 'tipo de documento', titulo: 'Editar tipo de documento' },
+  plataformas: { tabla: 'plataformas_destino', lista: () => state.plataformas, singular: 'plataforma',        titulo: 'Editar plataforma' }
+};
+function pl(n, uno, varios){ return n + ' ' + (n === 1 ? uno : varios); }
+function chipBtn(tabla, id){
+  if(!state.puedeEscribir) return '';
+  return `<button type="button" class="chip-btn" title="Editar o eliminar" aria-label="Editar o eliminar" onclick="abrirModalCat('${tabla}', ${id})">✎</button>`;
+}
+// Qué depende de este elemento y si eso impide eliminarlo.
+function usoCat(tabla, id){
+  if(tabla === 'roles'){
+    const ws = state.trabajadores.filter(w => w.rol_faena_id === id);
+    const act = ws.filter(w => w.activo).length;
+    const req = state.requeridos.filter(x => x.rol_faena_id === id).length;
+    if(ws.length) return { bloquea: true, detalle: `${pl(ws.length, 'trabajador tiene', 'trabajadores tienen')} este rol (${pl(act, 'activo', 'activos')}). Para eliminarlo, primero reasígnalos a otro rol. Mientras tanto puedes cambiarle el nombre.` };
+    return { bloquea: false, detalle: req ? `Ningún trabajador lo tiene. Al eliminarlo se quitan sus ${pl(req, 'documento requerido', 'documentos requeridos')}.` : 'Ningún trabajador tiene este rol.' };
+  }
+  if(tabla === 'plataformas'){
+    const rows = state.tp.filter(x => x.plataforma_id === id);
+    const act = rows.filter(x => x.activo).length;
+    if(rows.length) return { bloquea: true, detalle: `${pl(act, 'trabajador activo', 'trabajadores activos')} y ${pl(rows.length - act, 'registro histórico', 'registros históricos')} en esta plataforma. El historial se conserva, por eso no se puede eliminar. Puedes cambiarle el nombre.` };
+    return { bloquea: false, detalle: 'Ningún trabajador ha estado en esta plataforma.' };
+  }
+  const req = state.requeridos.filter(x => x.tipo_documento_id === id).length;
+  return { bloquea: false, detalle: req
+    ? `Lo exigen ${pl(req, 'rol', 'roles')}; al eliminarlo se quita de esos requisitos. Si ya hay documentos cargados de este tipo, no se podrá eliminar.`
+    : 'Ningún rol lo exige. Si ya hay documentos cargados de este tipo, no se podrá eliminar.' };
+}
+function modalCatHTML(){
+  const m = state.modalCat, c = CAT[m.tabla];
+  const item = c.lista().find(x => x.id === m.id);
+  if(!item) return '';
+  const d = m.draft || null;
+  const uso = usoCat(m.tabla, m.id);
+  const venceHTML = m.tabla === 'tipos' ? `
+      <div class="form-field full">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);"><input type="checkbox" id="cat-vence" ${(d ? d.vence : item.vence) ? 'checked' : ''}> Tiene fecha de vencimiento</label>
+        <span class="dias-label">Cambiarlo afecta cómo se calculan los estados de este documento.</span>
+      </div>` : '';
+  const eliminarHTML = uso.bloquea ? '' : `
+      <div id="del-paso1" style="margin-top:10px;"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('del-paso1').style.display='none';document.getElementById('del-paso2').style.display='block';">Eliminar ${escapeHTML(c.singular)}…</button></div>
+      <div id="del-paso2" style="display:none;margin-top:10px;">
+        <b>¿Eliminar «${escapeHTML(item.nombre)}»?</b> Esta acción no se puede deshacer.
+        <div style="margin-top:10px;display:flex;gap:10px;">
+          <button type="button" class="btn btn-danger btn-sm" onclick="eliminarCat()" ${state.saving ? 'disabled' : ''}>Sí, eliminar</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('del-paso2').style.display='none';document.getElementById('del-paso1').style.display='block';">Cancelar</button>
+        </div>
+      </div>`;
+  return `
+  <div class="modal-backdrop">
+    <div class="modal" style="max-width:480px;">
+      <button type="button" class="modal-close" onclick="cerrarModalCat()" aria-label="Cerrar">×</button>
+      <h2 class="modal-title">${escapeHTML(c.titulo)}</h2>
+      ${state.modalCatError ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-top:12px;">${escapeHTML(state.modalCatError)}</div>` : ''}
+      <div class="form-grid">
+        <div class="form-field full"><label>Nombre</label><input type="text" id="cat-nombre" value="${escapeHTML(d ? d.nombre : item.nombre)}" onkeydown="if(event.key==='Enter') guardarCat()"></div>
+        ${venceHTML}
+      </div>
+      <div class="estado-box">
+        <div class="dias-label">${escapeHTML(uso.detalle)}</div>
+        ${eliminarHTML}
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-ghost" onclick="cerrarModalCat()">Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="guardarCat()" ${state.saving ? 'disabled' : ''}>${state.saving ? 'Guardando…' : 'Guardar cambios'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+function abrirModalCat(tabla, id){ state.modalCat = { tabla, id, draft: null }; state.modalCatError = null; render(); }
+function cerrarModalCat(){ state.modalCat = null; state.modalCatError = null; state.saving = false; render(); }
+async function guardarCat(){
+  if(state.saving) return;
+  const m = state.modalCat, c = CAT[m.tabla];
+  const nombre = val('cat-nombre').trim().replace(/\s+/g, ' ');
+  const vence = m.tabla === 'tipos' ? !!(document.getElementById('cat-vence') || {}).checked : undefined;
+  m.draft = { nombre: val('cat-nombre'), vence };
+  if(!nombre){ state.modalCatError = 'Escribe un nombre.'; render(); return; }
+  const cambios = { nombre };
+  if(m.tabla === 'tipos') cambios.vence = vence;
+  state.saving = true; state.modalCatError = null; render();
+  try{
+    const r = await withTimeout(supabaseClient.from(c.tabla).update(cambios).eq('id', m.id).select('id'), 10000);
+    if(r.error) throw r.error;
+    if(!r.data || !r.data.length) throw new Error('No se aplicó el cambio (revisa tus permisos).');
+    state.modalCat = null; state.saving = false;
+    await recargar();
+    aviso('Cambios guardados.');
+  }catch(e){
+    state.saving = false; state.modalCatError = 'No se pudo guardar: ' + mensajeError(e); render();
+  }
+}
+async function eliminarCat(){
+  if(state.saving) return;
+  const m = state.modalCat, c = CAT[m.tabla];
+  const uso = usoCat(m.tabla, m.id);
+  if(uso.bloquea){ state.modalCatError = uso.detalle; render(); return; }
+  state.saving = true; state.modalCatError = null; render();
+  try{
+    if(m.tabla === 'tipos'){
+      // Los documentos cargados nunca se borran: si hay alguno de este tipo, no se elimina.
+      const n = await withTimeout(supabaseClient.from('documentos_trabajador').select('id', { count: 'exact', head: true }).eq('tipo_documento_id', m.id), 10000);
+      if(n.error) throw n.error;
+      if(n.count > 0) throw new Error(`ya hay ${pl(n.count, 'documento cargado', 'documentos cargados')} de este tipo. Los documentos nunca se borran, así que el tipo tampoco. Puedes cambiarle el nombre.`);
+    }
+    if(m.tabla === 'roles' || m.tabla === 'tipos'){
+      const col = m.tabla === 'roles' ? 'rol_faena_id' : 'tipo_documento_id';
+      const q = await withTimeout(supabaseClient.from('documentos_requeridos_por_rol').delete().eq(col, m.id), 10000);
+      if(q.error) throw q.error;
+    }
+    const r = await withTimeout(supabaseClient.from(c.tabla).delete().eq('id', m.id).select('id'), 10000);
+    if(r.error) throw r.error;
+    if(!r.data || !r.data.length) throw new Error('No se aplicó el cambio (revisa tus permisos).');
+    if(m.tabla === 'roles'){ if(state.reqRolId === m.id) state.reqRolId = null; if(state.filtros.rol === String(m.id)) state.filtros.rol = ''; }
+    if(m.tabla === 'plataformas' && state.filtros.plataforma === String(m.id)) state.filtros.plataforma = '';
+    state.modalCat = null; state.saving = false;
+    await recargar();
+    aviso('Eliminado.');
+  }catch(e){
+    state.saving = false; state.modalCatError = 'No se pudo eliminar: ' + mensajeError(e);
+    await recargar();
+  }
+}
+
 function catalogosHTML(){
   const ed = state.puedeEscribir;
   const rolSel = state.roles.find(r => r.id === state.reqRolId);
@@ -605,21 +737,21 @@ function catalogosHTML(){
     <h3>Roles en faena</h3>
     <p class="hint">Los cargos que cumplen los trabajadores (ej.: buzo, operador, supervisor). Cada rol exige distintos documentos.</p>
     ${ed ? `<div class="inline-add"><input type="text" id="nuevo-rol" placeholder="Nuevo rol" onkeydown="if(event.key==='Enter') agregarRol()"><button type="button" class="btn btn-primary btn-sm" onclick="agregarRol()">Agregar</button></div>` : ''}
-    <div class="chip-list">${state.roles.length ? state.roles.map(r => `<span class="chip">${escapeHTML(r.nombre)}</span>`).join('') : '<span class="dias-label">Aún no hay roles.</span>'}</div>
+    <div class="chip-list">${state.roles.length ? state.roles.map(r => `<span class="chip">${escapeHTML(r.nombre)}${chipBtn('roles', r.id)}</span>`).join('') : '<span class="dias-label">Aún no hay roles.</span>'}</div>
   </div>
 
   <div class="section-card">
     <h3>Tipos de documento</h3>
     <p class="hint">«Vence» significa que el documento tiene fecha de vencimiento y generará alertas. Los que no vencen (liquidaciones, cotizaciones) solo se controlan por mes de emisión.</p>
     ${ed ? `<div class="inline-add"><input type="text" id="nuevo-tipo" placeholder="Nuevo tipo de documento" onkeydown="if(event.key==='Enter') agregarTipo()"><label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" id="nuevo-tipo-vence" checked> Vence</label><button type="button" class="btn btn-primary btn-sm" onclick="agregarTipo()">Agregar</button></div>` : ''}
-    <div class="chip-list">${state.tipos.length ? state.tipos.map(t => `<span class="chip">${escapeHTML(t.nombre)} <span class="badge ${t.vence ? 'badge-warn' : 'badge-off'}">${t.vence ? 'Vence' : 'No vence'}</span></span>`).join('') : '<span class="dias-label">Aún no hay tipos.</span>'}</div>
+    <div class="chip-list">${state.tipos.length ? state.tipos.map(t => `<span class="chip">${escapeHTML(t.nombre)} <span class="badge ${t.vence ? 'badge-warn' : 'badge-off'}">${t.vence ? 'Vence' : 'No vence'}</span>${chipBtn('tipos', t.id)}</span>`).join('') : '<span class="dias-label">Aún no hay tipos.</span>'}</div>
   </div>
 
   <div class="section-card">
     <h3>Plataformas de destino</h3>
     <p class="hint">Las empresas o instalaciones donde los trabajadores prestan servicio (ej.: Mowi, MultiX). Un trabajador puede estar en varias a la vez.</p>
     ${ed ? `<div class="inline-add"><input type="text" id="nueva-plataforma" placeholder="Nueva plataforma" onkeydown="if(event.key==='Enter') agregarPlataforma()"><button type="button" class="btn btn-primary btn-sm" onclick="agregarPlataforma()">Agregar</button></div>` : ''}
-    <div class="chip-list">${state.plataformas.length ? state.plataformas.map(p => `<span class="chip">${escapeHTML(p.nombre)}</span>`).join('') : '<span class="dias-label">Aún no hay plataformas.</span>'}</div>
+    <div class="chip-list">${state.plataformas.length ? state.plataformas.map(p => `<span class="chip">${escapeHTML(p.nombre)}${chipBtn('plataformas', p.id)}</span>`).join('') : '<span class="dias-label">Aún no hay plataformas.</span>'}</div>
   </div>
 
   <div class="section-card">
@@ -704,7 +836,8 @@ function mainHTML(){
       ${!state.puedeEscribir ? `<div class="info-banner">Tienes acceso de solo lectura en esta área. Para modificar datos, pide el permiso de editor.</div>` : ''}
       ${esTrab ? `<div id="list-container">${listaTrabajadoresHTML()}</div>` : catalogosHTML()}
     </div>
-    ${state.modal ? modalTrabajadorHTML() : ''}`;
+    ${state.modal ? modalTrabajadorHTML() : ''}
+    ${state.modalCat ? modalCatHTML() : ''}`;
 }
 function render(){
   const app = document.getElementById('app');
