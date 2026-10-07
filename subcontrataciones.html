@@ -197,9 +197,19 @@
   .btn-danger:hover{ opacity:0.9; }
   @media (max-width:760px){
     .col-w-nombre{ flex:1 1 100%; }
-    .col-w-rut, .col-w-rol, .col-w-plat{ flex:1 1 45%; }
+    .col-w-rut, .col-w-rol, .col-w-plat, .col-w-doc{ flex:1 1 45%; }
     .check-grid{ grid-template-columns:1fr; }
   }
+  /* Etapa 3: documentos */
+  .col-w-doc{ flex:1; }
+  .badge-ok{ background:var(--st-recibido-bg); color:var(--st-recibido); border:none; }
+  .badge-bad{ background:var(--st-atrasado-bg); color:var(--st-atrasado); border:none; }
+  .doc-sec{ font-family:var(--font-display); font-size:15px; margin:20px 0 8px; }
+  .doc-fila{ display:flex; justify-content:space-between; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid var(--border); font-size:13.5px; }
+  .doc-fila:last-child{ border-bottom:none; }
+  .estado-box input[type=file]{ font-size:13px; max-width:100%; }
+  .estado-box input[type=date]{ font-family:var(--font-ui); font-size:13.5px; padding:8px 10px; border:1px solid var(--border); border-radius:4px; background:var(--surface); color:var(--ink); }
+
 </style>
 </head>
 <body>
@@ -213,18 +223,23 @@ const SUPABASE_URL = 'https://wncejgicemnaneptrrsq.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_DrQ2zuhGaxF09jQUrssLWQ_lLKtVbnL';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const AREA = 'subcontrataciones';
+const BUCKET = 'documentos-trabajadores';
+const DIAS_POR_VENCER = 30;          // un documento que vence en este plazo (o menos) se marca «por vencer»
+const MAX_ARCHIVO_MB = 10;
+const TIPOS_ARCHIVO = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
 let state = {
   session: null, loginError: null, loginLoading: false,
   cargando: true, loadError: null,
   acceso: false, puedeEscribir: false, accesoCompleto: false,
   tab: 'trabajadores',
-  roles: [], tipos: [], plataformas: [], requeridos: [], trabajadores: [], tp: [],
-  filtros: { texto: '', estado: 'activos', plataforma: '', rol: '' },
+  roles: [], tipos: [], plataformas: [], requeridos: [], trabajadores: [], tp: [], docsVig: [],
+  filtros: { texto: '', estado: 'activos', plataforma: '', rol: '', doc: '' },
   modal: null,          // { id: null | número } — trabajador
   modalError: null, saving: false,
   modalCat: null,       // { tabla:'roles'|'tipos'|'plataformas', id, draft } — editar/eliminar un elemento de catálogo
   modalCatError: null,
+  modalDocs: null,      // { id (trabajador), historial: null|[], cargandoHist, error, subiendo, draft }
   reqRolId: null,
   showAccountMenu: false
 };
@@ -303,11 +318,12 @@ async function cargarDatos(){
     q('plataformas_destino', 'nombre'),
     supabaseClient.from('documentos_requeridos_por_rol').select('*'),
     q('trabajadores_subcontratados', 'nombre'),
-    supabaseClient.from('trabajador_plataforma').select('*')
+    supabaseClient.from('trabajador_plataforma').select('*'),
+    supabaseClient.from('documentos_vigentes').select('*')
   ]), 15000);
   for(const r of res){ if(r.error) throw new Error(r.error.message); }
   state.roles = res[0].data; state.tipos = res[1].data; state.plataformas = res[2].data;
-  state.requeridos = res[3].data; state.trabajadores = res[4].data; state.tp = res[5].data;
+  state.requeridos = res[3].data; state.trabajadores = res[4].data; state.tp = res[5].data; state.docsVig = res[6].data;
   if(state.reqRolId === null && state.roles.length) state.reqRolId = state.roles[0].id;
 }
 async function recargar(){
@@ -362,8 +378,8 @@ async function handleLogout(){
 }
 function limpiarEstado(){
   state.session = null; state.acceso = false; state.puedeEscribir = false; state.accesoCompleto = false;
-  state.roles = []; state.tipos = []; state.plataformas = []; state.requeridos = []; state.trabajadores = []; state.tp = [];
-  state.modal = null; state.modalCat = null; state.showAccountMenu = false; state.reqRolId = null;
+  state.roles = []; state.tipos = []; state.plataformas = []; state.requeridos = []; state.trabajadores = []; state.tp = []; state.docsVig = [];
+  state.modalDocs = null; state.modal = null; state.modalCat = null; state.showAccountMenu = false; state.reqRolId = null;
 }
 async function arrancar(){
   state.cargando = true; render();
@@ -379,6 +395,61 @@ async function arrancar(){
 }
 
 /* ============================================================
+   ESTADO DOCUMENTAL (se calcula al leer, no se guarda)
+   ============================================================ */
+function hoyISO(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function diasHasta(iso){
+  const a = iso.split('-').map(Number), b = hoyISO().split('-').map(Number);
+  return Math.round((Date.UTC(a[0], a[1] - 1, a[2]) - Date.UTC(b[0], b[1] - 1, b[2])) / 86400000);
+}
+function fmtFecha(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+  return m ? m[3] + '-' + m[2] + '-' + m[1] : (iso || '');
+}
+function docVigente(trabId, tipoId){
+  return state.docsVig.find(x => x.trabajador_id === trabId && x.tipo_documento_id === tipoId) || null;
+}
+// Estado de UN documento exigido: ok | porvencer | vencido | falta | sinfecha
+function estadoDoc(tipo, doc){
+  if(!doc) return { k: 'falta' };
+  if(!tipo.vence) return { k: 'ok' };
+  if(!doc.fecha_vencimiento) return { k: 'sinfecha' };
+  const d = diasHasta(doc.fecha_vencimiento);
+  if(d < 0) return { k: 'vencido', dias: d };
+  if(d <= DIAS_POR_VENCER) return { k: 'porvencer', dias: d };
+  return { k: 'ok', dias: d };
+}
+// Estado del trabajador según los documentos que exige su rol.
+// Prioridad: vencido > incompleto > por vencer > al día.
+function estadoTrabajador(w){
+  if(!w.activo) return null;
+  if(w.rol_faena_id == null) return { k: 'sinrol', items: [] };
+  const exigidos = state.requeridos.filter(x => x.rol_faena_id === w.rol_faena_id)
+    .map(x => state.tipos.find(t => t.id === x.tipo_documento_id)).filter(Boolean);
+  if(!exigidos.length) return { k: 'sinreq', items: [] };
+  const items = exigidos.map(t => ({ tipo: t, doc: docVigente(w.id, t.id), est: estadoDoc(t, docVigente(w.id, t.id)) }));
+  const tiene = k => items.some(i => i.est.k === k);
+  let k = 'aldia';
+  if(tiene('vencido')) k = 'vencido';
+  else if(tiene('falta') || tiene('sinfecha')) k = 'incompleto';
+  else if(tiene('porvencer')) k = 'porvencer';
+  return { k, items };
+}
+const ETIQ_ESTADO = { aldia: 'Al día', porvencer: 'Por vencer', vencido: 'Vencido', incompleto: 'Incompleto', sinrol: 'Sin rol', sinreq: 'Sin requisitos' };
+const CLASE_ESTADO = { aldia: 'badge-ok', porvencer: 'badge-warn', vencido: 'badge-bad', incompleto: 'badge-bad', sinrol: 'badge-off', sinreq: 'badge-off' };
+function badgeEstado(k){ return `<span class="badge ${CLASE_ESTADO[k]}">${ETIQ_ESTADO[k]}</span>`; }
+function textoEstadoDoc(e){
+  if(e.k === 'falta') return 'Falta subir';
+  if(e.k === 'sinfecha') return 'Sin fecha de vencimiento';
+  if(e.k === 'vencido') return 'Vencido hace ' + pl(-e.dias, 'día', 'días');
+  if(e.k === 'porvencer') return e.dias === 0 ? 'Vence hoy' : 'Vence en ' + pl(e.dias, 'día', 'días');
+  return 'Vigente';
+}
+
+/* ============================================================
    TRABAJADORES
    ============================================================ */
 function trabajadoresFiltrados(){
@@ -391,6 +462,7 @@ function trabajadoresFiltrados(){
     if(f.rol === '__sin'){ if(w.rol_faena_id != null) return false; }
     else if(f.rol && String(w.rol_faena_id) !== f.rol) return false;
     if(f.plataforma && !state.tp.some(x => x.trabajador_id === w.id && String(x.plataforma_id) === f.plataforma && x.activo)) return false;
+    if(f.doc){ const e = estadoTrabajador(w); if(!e || e.k !== f.doc) return false; }
     if(t && !(w.nombre.toLowerCase().includes(t) || (tRut && w.rut.toLowerCase().includes(tRut)))) return false;
     return true;
   });
@@ -399,11 +471,16 @@ function statsHTML(){
   const activos = state.trabajadores.filter(w => w.activo);
   const sinRol = activos.filter(w => w.rol_faena_id == null).length;
   const sinPlat = activos.filter(w => plataformasActivasDe(w.id).length === 0).length;
+  const ests = activos.map(estadoTrabajador);
+  const cuenta = k => ests.filter(e => e && e.k === k).length;
   const chip = (v, l, warn) => `<div class="stat-chip ${warn && v > 0 ? 'warn' : ''}"><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`;
   return chip(activos.length, 'Trabajadores activos') +
          chip(state.trabajadores.length - activos.length, 'Inactivos') +
          chip(sinRol, 'Sin rol asignado', true) +
-         chip(sinPlat, 'Sin plataforma', true);
+         chip(sinPlat, 'Sin plataforma', true) +
+         chip(cuenta('vencido'), 'Con docs vencidos', true) +
+         chip(cuenta('incompleto'), 'Incompletos', true) +
+         chip(cuenta('porvencer'), 'Por vencer (' + DIAS_POR_VENCER + ' días)', true);
 }
 function listaTrabajadoresHTML(){
   const lista = trabajadoresFiltrados();
@@ -415,18 +492,21 @@ function listaTrabajadoresHTML(){
     <div class="list-header">
       <div class="col col-w-nombre">Nombre</div><div class="col col-w-rut">RUT</div>
       <div class="col col-w-rol">Rol en faena</div><div class="col col-w-plat">Plataformas</div>
+      <div class="col col-w-doc">Documentos</div>
       <div class="col col-acciones"></div>
     </div>`;
   const filas = lista.map(w => {
     const rol = rolNombre(w.rol_faena_id);
     const plats = plataformasActivasDe(w.id);
+    const est = estadoTrabajador(w);
     return `
     <div class="row-item ${w.activo ? '' : 'inactivo'}">
       <div class="col col-w-nombre"><div class="item-nombre">${escapeHTML(w.nombre)}${w.activo ? '' : ' <span class="badge badge-off">Inactivo</span>'}</div></div>
       <div class="col col-w-rut"><span class="rut-text">${escapeHTML(fmtRut(w.rut))}</span></div>
       <div class="col col-w-rol">${rol ? escapeHTML(rol) : '<span class="badge badge-warn">Sin rol</span>'}</div>
       <div class="col col-w-plat">${plats.length ? plats.map(p => `<span class="badge badge-plat">${escapeHTML(p.nombre)}</span>`).join('') : '<span class="dias-label">—</span>'}</div>
-      <div class="col col-acciones">${state.puedeEscribir ? `<button type="button" class="btn btn-ghost btn-sm" onclick="abrirModalTrabajador(${w.id})">Editar</button>` : ''}</div>
+      <div class="col col-w-doc">${est ? badgeEstado(est.k) : '<span class="dias-label">—</span>'}</div>
+      <div class="col col-acciones"><button type="button" class="btn btn-ghost btn-sm" onclick="abrirModalDocs(${w.id})">Documentos</button>${state.puedeEscribir ? ` <button type="button" class="btn btn-ghost btn-sm" onclick="abrirModalTrabajador(${w.id})">Editar</button>` : ''}</div>
     </div>`;
   }).join('');
   return header + filas;
@@ -557,6 +637,171 @@ async function reactivarTrabajador(id){
     aviso('Trabajador reactivado. Asígnale sus plataformas.');
   }catch(e){
     state.saving = false; state.modalError = 'No se pudo reactivar: ' + mensajeError(e); render();
+  }
+}
+
+/* ============================================================
+   DOCUMENTOS DEL TRABAJADOR
+   ============================================================ */
+function nombreSeguro(n){
+  const base = String(n || 'archivo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  return (base || 'archivo').slice(-80);
+}
+function uuidCorto(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+function tipoNombre(id){ const t = state.tipos.find(x => x.id === id); return t ? t.nombre : 'Tipo eliminado'; }
+
+async function abrirModalDocs(id){
+  state.modalDocs = { id, historial: null, cargandoHist: true, error: null, subiendo: false, draft: { tipo: '', venc: '' } };
+  render();
+  await cargarHistorial(id);
+}
+function cerrarModalDocs(){ state.modalDocs = null; render(); }
+async function cargarHistorial(id){
+  try{
+    const r = await withTimeout(supabaseClient.from('documentos_trabajador').select('*').eq('trabajador_id', id).order('creado_en', { ascending: false }), 12000);
+    if(r.error) throw r.error;
+    if(!state.modalDocs || state.modalDocs.id !== id) return;
+    state.modalDocs.historial = r.data || [];
+    state.modalDocs.error = null;
+  }catch(e){
+    if(!state.modalDocs || state.modalDocs.id !== id) return;
+    state.modalDocs.historial = state.modalDocs.historial || [];
+    state.modalDocs.error = 'No se pudo cargar el historial: ' + mensajeError(e);
+  }
+  state.modalDocs.cargandoHist = false;
+  render();
+}
+function guardarDraftDocs(){
+  if(!state.modalDocs) return;
+  state.modalDocs.draft = { tipo: val('d-tipo'), venc: val('d-venc') };
+}
+function cambiarTipoDoc(){
+  guardarDraftDocs();
+  const t = state.tipos.find(x => String(x.id) === String(state.modalDocs.draft.tipo));
+  const w = document.getElementById('d-venc-wrap');
+  if(w) w.style.display = (t && t.vence) ? '' : 'none';   // sin re-dibujar, para no perder el archivo ya elegido
+}
+function modalDocsHTML(){
+  const m = state.modalDocs;
+  const w = state.trabajadores.find(x => x.id === m.id);
+  if(!w) return '';
+  const est = estadoTrabajador(w);
+  const rol = rolNombre(w.rol_faena_id);
+  const d = m.draft;
+  const tipoSel = state.tipos.find(t => String(t.id) === String(d.tipo));
+
+  let resumen;
+  if(!w.activo) resumen = '<div class="dias-label">Trabajador inactivo: sus documentos se conservan, pero no se calcula estado.</div>';
+  else if(est.k === 'sinrol') resumen = '<div class="dias-label">Asígnale un rol en faena (botón Editar) para saber qué documentos debe tener.</div>';
+  else if(est.k === 'sinreq') resumen = `<div class="dias-label">El rol «${escapeHTML(rol)}» aún no tiene documentos requeridos (se definen en Catálogos).</div>`;
+  else resumen = est.items.map(i => {
+    const clase = CLASE_ESTADO[({ ok: 'aldia', porvencer: 'porvencer', vencido: 'vencido', falta: 'incompleto', sinfecha: 'incompleto' })[i.est.k]];
+    const extra = i.doc ? ` · subido el ${fmtFecha(i.doc.fecha_carga)}${i.doc.fecha_vencimiento ? ' · vence el ' + fmtFecha(i.doc.fecha_vencimiento) : ''}` : '';
+    return `<div class="doc-fila"><div><b>${escapeHTML(i.tipo.nombre)}</b><div class="dias-label">${escapeHTML(textoEstadoDoc(i.est))}${escapeHTML(extra)}</div></div><div style="display:flex;gap:8px;align-items:center;">${i.doc && state.puedeEscribir ? `<button type="button" class="btn btn-ghost btn-sm" onclick="verDocumento(${i.doc.id}, true)">Ver</button>` : ''}<span class="badge ${clase}">${i.est.k === 'ok' ? 'Vigente' : (i.est.k === 'falta' ? 'Falta' : (i.est.k === 'sinfecha' ? 'Sin fecha' : (i.est.k === 'vencido' ? 'Vencido' : 'Por vencer')))}</span></div></div>`;
+  }).join('');
+
+  const subirHTML = state.puedeEscribir ? `
+    <div class="estado-box" style="margin-top:14px;">
+      <b>Subir un documento</b>
+      <div class="dias-label" style="margin:2px 0 10px;">PDF o imagen (JPG, PNG, WEBP), máximo ${MAX_ARCHIVO_MB} MB. Si ya existe uno de ese tipo, el nuevo pasa a ser el vigente y el anterior queda en el historial.</div>
+      <div class="form-grid">
+        <div class="form-field full"><label>Tipo de documento</label>
+          <select id="d-tipo" onchange="cambiarTipoDoc()" ${m.subiendo ? 'disabled' : ''}><option value="">— Elige —</option>${state.tipos.map(t => `<option value="${t.id}" ${String(d.tipo) === String(t.id) ? 'selected' : ''}>${escapeHTML(t.nombre)}${t.vence ? '' : ' (no vence)'}</option>`).join('')}</select>
+        </div>
+        <div class="form-field" id="d-venc-wrap" style="${tipoSel && tipoSel.vence ? '' : 'display:none;'}"><label>Fecha de vencimiento</label><input type="date" id="d-venc" value="${escapeHTML(d.venc)}" ${m.subiendo ? 'disabled' : ''}></div>
+        <div class="form-field"><label>Archivo</label><input type="file" id="d-archivo" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*" ${m.subiendo ? 'disabled' : ''}></div>
+      </div>
+      <div style="margin-top:12px;"><button type="button" class="btn btn-primary btn-sm" onclick="subirDocumento()" ${m.subiendo ? 'disabled' : ''}>${m.subiendo ? 'Subiendo…' : 'Subir documento'}</button></div>
+    </div>` : '';
+
+  let hist;
+  if(m.cargandoHist && m.historial === null) hist = '<div class="dias-label">Cargando historial…</div>';
+  else if(!m.historial || !m.historial.length) hist = '<div class="dias-label">Aún no hay documentos cargados.</div>';
+  else hist = m.historial.map(h => `
+    <div class="doc-fila"><div><b>${escapeHTML(tipoNombre(h.tipo_documento_id))}</b>
+      <div class="dias-label">${state.puedeEscribir ? escapeHTML(h.nombre_archivo || 'archivo') + ' · ' : ''}subido el ${escapeHTML(fmtFecha(h.fecha_carga))}${h.fecha_vencimiento ? ' · vence el ' + escapeHTML(fmtFecha(h.fecha_vencimiento)) : ''}</div></div>
+      ${state.puedeEscribir ? `<button type="button" class="btn btn-ghost btn-sm" onclick="verDocumento(${h.id}, false)">Ver</button>` : ''}</div>`).join('');
+
+  return `
+  <div class="modal-backdrop">
+    <div class="modal" style="max-width:640px;">
+      <button type="button" class="modal-close" onclick="cerrarModalDocs()" aria-label="Cerrar">×</button>
+      <h2 class="modal-title">Documentos · ${escapeHTML(w.nombre)}</h2>
+      <div class="dias-label" style="margin-top:2px;">${escapeHTML(fmtRut(w.rut))} · ${rol ? escapeHTML(rol) : 'Sin rol'}${est && est.k !== 'sinrol' && est.k !== 'sinreq' ? ' · ' + badgeEstado(est.k) : ''}</div>
+      ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-top:12px;">${escapeHTML(m.error)}</div>` : ''}
+      ${state.puedeEscribir ? '' : '<div class="dias-label" style="margin-top:10px;">Con tu permiso puedes ver el estado y las fechas de cada documento, pero no abrir los archivos (son confidenciales).</div>'}
+      <h4 class="doc-sec">Documentos exigidos</h4>
+      ${resumen}
+      ${subirHTML}
+      <h4 class="doc-sec">Historial de cargas</h4>
+      ${hist}
+    </div>
+  </div>`;
+}
+
+async function subirDocumento(){
+  const m = state.modalDocs;
+  if(!m || m.subiendo || !state.puedeEscribir) return;
+  guardarDraftDocs();
+  const tipo = state.tipos.find(t => String(t.id) === String(m.draft.tipo));
+  const input = document.getElementById('d-archivo');
+  const archivo = input && input.files && input.files[0];
+  const fallo = msg => { m.error = msg; render(); };
+  if(!tipo) return fallo('Elige el tipo de documento.');
+  if(!archivo) return fallo('Elige el archivo a subir.');
+  if(!TIPOS_ARCHIVO.includes(archivo.type)) return fallo('Formato no permitido. Sube un PDF o una imagen (JPG, PNG, WEBP).');
+  if(archivo.size > MAX_ARCHIVO_MB * 1024 * 1024) return fallo('El archivo pesa más de ' + MAX_ARCHIVO_MB + ' MB.');
+  if(archivo.size === 0) return fallo('El archivo está vacío.');
+  let venc = null;
+  if(tipo.vence){
+    venc = m.draft.venc;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(venc || '')) return fallo('Indica la fecha de vencimiento de este documento.');
+  }
+  const trabId = m.id;
+  const path = trabId + '/' + uuidCorto() + '-' + nombreSeguro(archivo.name);
+  m.subiendo = true; m.error = null; render();
+  let subido = false;
+  try{
+    const up = await withTimeout(supabaseClient.storage.from(BUCKET).upload(path, archivo, { contentType: archivo.type, upsert: false }), 60000);
+    if(up.error) throw up.error;
+    subido = true;
+    const ins = await withTimeout(supabaseClient.from('documentos_trabajador').insert({
+      trabajador_id: trabId, tipo_documento_id: tipo.id, archivo_path: path, nombre_archivo: archivo.name, fecha_vencimiento: venc
+    }), 12000);
+    if(ins.error) throw ins.error;
+    if(state.modalDocs !== m) return;      // cerraron el modal mientras subía
+    m.subiendo = false; m.draft = { tipo: '', venc: '' };
+    await recargar();
+    await cargarHistorial(trabId);
+    aviso('Documento subido.');
+  }catch(e){
+    if(state.modalDocs !== m){ aviso('No se pudo subir el documento: ' + mensajeError(e), 3600); return; }
+    m.subiendo = false;
+    m.error = 'No se pudo subir: ' + mensajeError(e) + (subido ? ' (el archivo llegó pero no se registró; vuelve a intentarlo)' : '');
+    render();
+  }
+}
+
+async function verDocumento(id, vigente){
+  if(!state.puedeEscribir){ aviso('Solo los editores pueden abrir los archivos.'); return; }
+  const m = state.modalDocs;
+  let doc = null;
+  if(vigente) doc = state.docsVig.find(x => x.id === id);
+  else if(m && m.historial) doc = m.historial.find(x => x.id === id);
+  if(!doc){ aviso('No se encontró el documento.'); return; }
+  const win = window.open('', '_blank');       // se abre antes de esperar para que el navegador no lo bloquee
+  try{
+    const r = await withTimeout(supabaseClient.storage.from(BUCKET).createSignedUrl(doc.archivo_path, 120), 12000);
+    if(r.error) throw r.error;
+    const url = r.data && (r.data.signedUrl || r.data.signedURL);
+    if(!url) throw new Error('No se obtuvo el enlace del archivo.');
+    if(win) win.location.href = url; else window.location.href = url;
+  }catch(e){
+    if(win) win.close();
+    aviso('No se pudo abrir el documento: ' + mensajeError(e), 3600);
   }
 }
 
@@ -756,7 +1001,7 @@ function catalogosHTML(){
 
   <div class="section-card">
     <h3>Documentos que exige cada rol</h3>
-    <p class="hint">Elige un rol y marca los documentos obligatorios. Con esto se calculará más adelante si un trabajador está «incompleto».</p>
+    <p class="hint">Elige un rol y marca los documentos obligatorios. Con esto se calcula si un trabajador está «incompleto», «vencido» o «por vencer».</p>
     ${state.roles.length === 0 ? '<span class="dias-label">Crea al menos un rol para definir sus documentos requeridos.</span>' : `
       <div class="inline-add"><select onchange="elegirRolReq(this.value)">${state.roles.map(r => `<option value="${r.id}" ${r.id === state.reqRolId ? 'selected' : ''}>${escapeHTML(r.nombre)}</option>`).join('')}</select></div>
       ${(rolSel && state.tipos.length) ? `<div class="checks-box">${state.tipos.map(t => {
@@ -801,6 +1046,10 @@ function mainHTML(){
       <option value="">Todas las plataformas</option>
       ${state.plataformas.map(p => `<option value="${p.id}" ${f.plataforma === String(p.id) ? 'selected' : ''}>${escapeHTML(p.nombre)}</option>`).join('')}
     </select>
+    <select onchange="state.filtros.doc=this.value; actualizarLista();">
+      <option value="">Todos los estados documentales</option>
+      ${['vencido', 'incompleto', 'porvencer', 'aldia'].map(k => `<option value="${k}" ${f.doc === k ? 'selected' : ''}>${ETIQ_ESTADO[k]}</option>`).join('')}
+    </select>
     <span class="spacer"></span>
     ${state.puedeEscribir ? `<button type="button" class="btn btn-primary" onclick="abrirModalTrabajador(null)">+ Agregar trabajador</button>` : ''}
   ` : '';
@@ -837,7 +1086,8 @@ function mainHTML(){
       ${esTrab ? `<div id="list-container">${listaTrabajadoresHTML()}</div>` : catalogosHTML()}
     </div>
     ${state.modal ? modalTrabajadorHTML() : ''}
-    ${state.modalCat ? modalCatHTML() : ''}`;
+    ${state.modalCat ? modalCatHTML() : ''}
+    ${state.modalDocs ? modalDocsHTML() : ''}`;
 }
 function render(){
   const app = document.getElementById('app');
@@ -864,6 +1114,7 @@ init();
 supabaseClient.auth.onAuthStateChange((event)=>{
   if(event === 'SIGNED_OUT'){ limpiarEstado(); state.cargando = false; render(); }
 });
+
 </script>
 </body>
 </html>
