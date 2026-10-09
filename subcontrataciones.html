@@ -240,6 +240,11 @@
     .ms-row{ grid-template-columns:1fr 1fr; }
     .ms-head{ display:none; }
   }
+  /* Trabajadores: columna del mes y filas que se pueden pinchar */
+  .col-w-mes{ flex:1.1; }
+  .row-click{ cursor:pointer; }
+  .row-click:hover{ background:var(--surface-alt); }
+  .controls-inner .mes-nav{ flex:none; }
 
 </style>
 </head>
@@ -276,9 +281,9 @@ let state = {
   tab: 'trabajadores',
   roles: [], tipos: [], plataformas: [], requeridos: [], trabajadores: [], tp: [], docsVig: [],
   // Control mensual
-  mes: periodoMesAnterior(), vistaMes: 'trabajadores',
+  mes: periodoMesAnterior(),
   docsMes: [], cargas: [], docsEmpresa: [], cargandoMes: false, errorMes: null,
-  filtrosMes: { texto: '', plataforma: '', estado: '' },     // estado: '' | 'pend' | 'atras'
+  filtrosMes: { plataforma: '' },       // solo para la pestaña de documentos de la empresa
   modalMes: null,        // { trabId (null = empresa), tipoId, subiendo, error }
   modalBloque: null,     // { plataformaId, tipos: {id:true}, paso, saving, error }
   modalMasiva: null,     // { items, tipoDefault, periodoDefault, subiendo, hecho, error }
@@ -442,6 +447,7 @@ async function arrancar(){
   }
   state.cargando = false;
   render();
+  if(state.acceso && !state.loadError) cargarMes();
 }
 
 /* ============================================================
@@ -513,7 +519,12 @@ function trabajadoresFiltrados(){
     if(f.rol === '__sin'){ if(w.rol_faena_id != null) return false; }
     else if(f.rol && String(w.rol_faena_id) !== f.rol) return false;
     if(f.plataforma && !state.tp.some(x => x.trabajador_id === w.id && String(x.plataforma_id) === f.plataforma && x.activo)) return false;
-    if(f.doc){ const e = estadoTrabajador(w); if(!e || e.k !== f.doc) return false; }
+    if(f.doc === 'm_pend' || f.doc === 'm_atras'){
+      if(!w.activo) return false;
+      const r = resumenTrabajadorMes(w);
+      if(f.doc === 'm_pend' && !(r.faltan || r.porCargar)) return false;
+      if(f.doc === 'm_atras' && !r.atrasados) return false;
+    }else if(f.doc){ const e = estadoTrabajador(w); if(!e || e.k !== f.doc) return false; }
     if(t && !(w.nombre.toLowerCase().includes(t) || (tRut && w.rut.toLowerCase().includes(tRut)))) return false;
     return true;
   });
@@ -525,13 +536,16 @@ function statsHTML(){
   const ests = activos.map(estadoTrabajador);
   const cuenta = k => ests.filter(e => e && e.k === k).length;
   const chip = (v, l, warn) => `<div class="stat-chip ${warn && v > 0 ? 'warn' : ''}"><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`;
+  const mt = totalesMesTrabajadores();
   return chip(activos.length, 'Trabajadores activos') +
          chip(state.trabajadores.length - activos.length, 'Inactivos') +
          chip(sinRol, 'Sin rol asignado', true) +
          chip(sinPlat, 'Sin plataforma', true) +
          chip(cuenta('vencido'), 'Con docs vencidos', true) +
          chip(cuenta('incompleto'), 'Incompletos', true) +
-         chip(cuenta('porvencer'), 'Por vencer (' + DIAS_POR_VENCER + ' días)', true);
+         chip(cuenta('porvencer'), 'Por vencer (' + DIAS_POR_VENCER + ' días)', true) +
+         chip(mt.faltan, 'Docs. del mes por recibir', true) +
+         chip(mt.atrasados, 'Cargas con plazo vencido', true);
 }
 function listaTrabajadoresHTML(){
   const lista = trabajadoresFiltrados();
@@ -544,6 +558,7 @@ function listaTrabajadoresHTML(){
       <div class="col col-w-nombre">Nombre</div><div class="col col-w-rut">RUT</div>
       <div class="col col-w-rol">Rol en faena</div><div class="col col-w-plat">Plataformas</div>
       <div class="col col-w-doc">Documentos</div>
+      <div class="col col-w-mes">${escapeHTML(fmtPeriodo(state.mes))}</div>
       <div class="col col-acciones"></div>
     </div>`;
   const filas = lista.map(w => {
@@ -551,13 +566,14 @@ function listaTrabajadoresHTML(){
     const plats = plataformasActivasDe(w.id);
     const est = estadoTrabajador(w);
     return `
-    <div class="row-item ${w.activo ? '' : 'inactivo'}">
+    <div class="row-item row-click ${w.activo ? '' : 'inactivo'}" onclick="abrirModalDocs(${w.id})" title="Ver documentos">
       <div class="col col-w-nombre"><div class="item-nombre">${escapeHTML(w.nombre)}${w.activo ? '' : ' <span class="badge badge-off">Inactivo</span>'}</div></div>
       <div class="col col-w-rut"><span class="rut-text">${escapeHTML(fmtRut(w.rut))}</span></div>
       <div class="col col-w-rol">${rol ? escapeHTML(rol) : '<span class="badge badge-warn">Sin rol</span>'}</div>
       <div class="col col-w-plat">${plats.length ? plats.map(p => `<span class="badge badge-plat">${escapeHTML(p.nombre)}</span>`).join('') : '<span class="dias-label">—</span>'}</div>
       <div class="col col-w-doc">${est ? badgeEstado(est.k) : '<span class="dias-label">—</span>'}</div>
-      <div class="col col-acciones"><button type="button" class="btn btn-ghost btn-sm" onclick="abrirModalDocs(${w.id})">Documentos</button>${state.puedeEscribir ? ` <button type="button" class="btn btn-ghost btn-sm" onclick="abrirModalTrabajador(${w.id})">Editar</button>` : ''}</div>
+      <div class="col col-w-mes">${resumenMesBadge(w)}</div>
+      <div class="col col-acciones"><button type="button" class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); abrirModalDocs(${w.id})">Documentos</button>${state.puedeEscribir ? ` <button type="button" class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); abrirModalTrabajador(${w.id})">Editar</button>` : ''}</div>
     </div>`;
   }).join('');
   return header + filas;
@@ -772,11 +788,11 @@ function modalDocsHTML(){
 
   const subirHTML = state.puedeEscribir ? `
     <div class="estado-box" style="margin-top:14px;">
-      <b>Subir un documento</b>
+      <b>Subir un documento de ingreso o con vencimiento</b>
       <div class="dias-label" style="margin:2px 0 10px;">PDF o imagen (JPG, PNG, WEBP), máximo ${MAX_ARCHIVO_MB} MB. Si ya existe uno de ese tipo, el nuevo pasa a ser el vigente y el anterior queda en el historial.</div>
       <div class="form-grid">
         <div class="form-field full"><label>Tipo de documento</label>
-          <select id="d-tipo" onchange="cambiarTipoDoc()" ${m.subiendo ? 'disabled' : ''}><option value="">— Elige —</option>${state.tipos.filter(t => t.ambito === 'trabajador').map(t => `<option value="${t.id}" ${String(d.tipo) === String(t.id) ? 'selected' : ''}>${escapeHTML(t.nombre)} (${escapeHTML(ETIQ_FREC[t.frecuencia] || '')})</option>`).join('')}</select>
+          <select id="d-tipo" onchange="cambiarTipoDoc()" ${m.subiendo ? 'disabled' : ''}><option value="">— Elige —</option>${state.tipos.filter(t => t.ambito === 'trabajador' && t.frecuencia !== 'mensual').map(t => `<option value="${t.id}" ${String(d.tipo) === String(t.id) ? 'selected' : ''}>${escapeHTML(t.nombre)} (${escapeHTML(ETIQ_FREC[t.frecuencia] || '')})</option>`).join('')}</select>
         </div>
         <div class="form-field" id="d-periodo-wrap" style="${tipoSel && tipoSel.frecuencia === 'mensual' ? '' : 'display:none;'}"><label>Mes al que corresponde</label><select id="d-periodo" onchange="guardarDraftDocs()" ${m.subiendo ? 'disabled' : ''}>${opcionesPeriodo(d.periodo || state.mes)}</select></div>
         <div class="form-field" id="d-venc-wrap" style="${tipoSel && tipoSel.vence ? '' : 'display:none;'}"><label>Fecha de vencimiento</label><input type="date" id="d-venc" value="${escapeHTML(d.venc)}" ${m.subiendo ? 'disabled' : ''}></div>
@@ -801,7 +817,8 @@ function modalDocsHTML(){
       <div class="dias-label" style="margin-top:2px;">${escapeHTML(fmtRut(w.rut))} · ${rol ? escapeHTML(rol) : 'Sin rol'}${est && est.k !== 'sinrol' && est.k !== 'sinreq' ? ' · ' + badgeEstado(est.k) : ''}</div>
       ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-top:12px;">${escapeHTML(m.error)}</div>` : ''}
       ${state.puedeEscribir ? '' : '<div class="dias-label" style="margin-top:10px;">Con tu permiso puedes ver el estado y las fechas de cada documento, pero no abrir los archivos (son confidenciales).</div>'}
-      <h4 class="doc-sec">Documentos exigidos</h4>
+      ${w.activo ? seccionMesHTML(w) : ''}
+      <h4 class="doc-sec">Documentos exigidos (ingreso y con vencimiento)</h4>
       ${resumen}
       ${subirHTML}
       <h4 class="doc-sec">Historial de cargas</h4>
@@ -933,7 +950,7 @@ function plataformasConTrabajadores(){
 }
 function platsVisibles(w){
   const ps = plataformasActivasDe(w.id);
-  return state.filtrosMes.plataforma ? ps.filter(p => String(p.id) === state.filtrosMes.plataforma) : ps;
+  return state.filtros.plataforma ? ps.filter(p => String(p.id) === state.filtros.plataforma) : ps;
 }
 function platsEmpresaVisibles(){
   const ps = plataformasConTrabajadores();
@@ -952,28 +969,17 @@ function resumenTrabajadorMes(w){
   }
   return { faltan, porCargar, atrasados, porVencer };
 }
-function trabajadoresMes(){
-  const f = state.filtrosMes;
-  const t = f.texto.trim().toLowerCase();
-  const tRut = t.replace(/[.\s]/g, '');
-  return state.trabajadores.filter(w => {
-    if(!w.activo) return false;
-    if(f.plataforma && !state.tp.some(x => x.trabajador_id === w.id && String(x.plataforma_id) === f.plataforma && x.activo)) return false;
-    if(t && !(w.nombre.toLowerCase().includes(t) || (tRut && w.rut.toLowerCase().includes(tRut)))) return false;
-    if(f.estado){
-      const r = resumenTrabajadorMes(w);
-      if(f.estado === 'pend' && !(r.faltan || r.porCargar)) return false;
-      if(f.estado === 'atras' && !r.atrasados) return false;
-    }
-    return true;
-  });
-}
-function statsMesHTML(){
-  let faltan = 0, porCargar = 0, atrasados = 0, porVencer = 0;
+// Totales del mes sobre los trabajadores activos (respeta el filtro de plataforma de la lista)
+function totalesMesTrabajadores(){
+  const t = { faltan: 0, porCargar: 0, atrasados: 0, porVencer: 0 };
   for(const w of state.trabajadores.filter(x => x.activo)){
     const r = resumenTrabajadorMes(w);
-    faltan += r.faltan; porCargar += r.porCargar; atrasados += r.atrasados; porVencer += r.porVencer;
+    t.faltan += r.faltan; t.porCargar += r.porCargar; t.atrasados += r.atrasados; t.porVencer += r.porVencer;
   }
+  return t;
+}
+function statsEmpresaHTML(){
+  let faltan = 0, porCargar = 0, atrasados = 0, porVencer = 0;
   const ps = platsEmpresaVisibles();
   for(const t of tiposMensuales('empresa')){
     if(!docEmpresaMes(t.id)) faltan++;
@@ -990,41 +996,65 @@ function statsMesHTML(){
          chip(atrasados, 'Con plazo vencido', true) +
          chip(porVencer, 'Por vencer (≤ ' + AVISO_DIAS + ' días)', true);
 }
-
-function celdaMesHTML(w, t){
-  const doc = docMes(w.id, t.id);
-  const ed = state.puedeEscribir;
-  const ps = platsVisibles(w);
-  const chips = ps.length ? ps.map(p => chipCargaHTML(w.id, t.id, p)).join('') : '<span class="dias-label">Sin plataforma asignada</span>';
-  return `
-    <div class="mx-cell">
-      <div class="mx-doc">
-        ${doc ? '<span class="badge badge-ok">Recibido</span>' : '<span class="badge badge-bad">Falta</span>'}
-        ${doc && ed ? `<button type="button" class="mini-btn" onclick="verDocMes(${doc.id}, false)">Ver</button>` : ''}
-        ${ed ? `<button type="button" class="mini-btn" onclick="abrirSubirMes(${w.id}, ${t.id})">${doc ? 'Reemplazar' : 'Subir'}</button>` : ''}
-      </div>
-      <div class="mx-chips">${chips}</div>
-    </div>`;
+// Resumen del mes de UN trabajador, para la columna de la lista
+function resumenMesBadge(w){
+  if(!w.activo) return '<span class="dias-label">—</span>';
+  const tipos = tiposMensuales('trabajador');
+  if(!tipos.length) return '<span class="dias-label">—</span>';
+  if(state.cargandoMes) return '<span class="dias-label">Cargando…</span>';
+  const r = resumenTrabajadorMes(w);
+  const recibidos = tipos.length - r.faltan;
+  let clase, texto;
+  if(r.atrasados){ clase = 'badge-bad'; texto = 'Plazo vencido'; }
+  else if(r.faltan){ clase = 'badge-bad'; texto = 'Falta recibir'; }
+  else if(r.porVencer){ clase = 'badge-warn'; texto = 'Por vencer'; }
+  else if(r.porCargar){ clase = 'badge-off'; texto = 'Por cargar'; }
+  else { clase = 'badge-ok'; texto = 'Al día'; }
+  return `<span class="badge ${clase}">${texto}</span><div class="dias-label">${recibidos}/${tipos.length} recibidos</div>`;
 }
+// Redibuja lo que depende de los datos del mes (lista, ficha abierta, pestaña de empresa)
+function refrescarVistas(){
+  actualizarMes();
+  if(state.tab === 'trabajadores'){
+    actualizarLista();
+    const s = document.getElementById('stats-row');
+    if(s) s.innerHTML = statsHTML();
+    if(state.modalDocs) render();
+  }
+}
+
 function chipCargaHTML(trabId, tipoId, p){
   const est = estadoCarga(state.mes, p, !!cargaMes(trabId, tipoId, p.id));
   const ico = est.k === 'ok' ? '✓ ' : (est.k === 'atrasado' ? '! ' : '');
   const clic = state.puedeEscribir ? `onclick="toggleCarga(${trabId === null ? 'null' : trabId}, ${tipoId}, ${p.id})"` : 'disabled';
   return `<button type="button" class="pchip pchip-${est.k}" title="${escapeHTML(textoCarga(state.mes, p, est))}" ${clic}>${ico}${escapeHTML(p.nombre)}</button>`;
 }
-function matrizTrabajadoresHTML(){
+// Documentos del mes de UN trabajador (se muestra dentro de su ficha)
+function seccionMesHTML(w){
   const tipos = tiposMensuales('trabajador');
-  if(!tipos.length) return `<div class="empty-state">No hay documentos mensuales de trabajador. Créalos en Catálogos con frecuencia «Mensual».</div>`;
-  if(!state.trabajadores.some(w => w.activo)) return `<div class="empty-state">Aún no hay trabajadores activos.</div>`;
-  const lista = trabajadoresMes();
-  if(!lista.length) return `<div class="empty-state">Ningún trabajador coincide con los filtros.</div>`;
-  const cols = `grid-template-columns:minmax(190px,1.2fr) repeat(${tipos.length}, minmax(240px,2fr));`;
-  const head = `<div class="mx-row mx-head" style="${cols}"><div>Trabajador</div>${tipos.map(t => `<div>${escapeHTML(t.nombre)}</div>`).join('')}</div>`;
-  const filas = lista.map(w => {
-    const rol = rolNombre(w.rol_faena_id);
-    return `<div class="mx-row" style="${cols}"><div class="mx-name"><b>${escapeHTML(w.nombre)}</b><span class="rut-text">${escapeHTML(fmtRut(w.rut))}</span>${rol ? `<span class="dias-label">${escapeHTML(rol)}</span>` : ''}</div>${tipos.map(t => celdaMesHTML(w, t)).join('')}</div>`;
+  const ed = state.puedeEscribir;
+  const ps = plataformasActivasDe(w.id);
+  const nav = navMesHTML();
+  if(!tipos.length) return `<h4 class="doc-sec">Documentos del mes</h4><div class="dias-label">No hay documentos mensuales definidos (se crean en Catálogos con frecuencia «Todos los meses»).</div>`;
+  let cuerpo;
+  if(state.errorMes) cuerpo = `<div class="dias-label" style="color:var(--st-atrasado);">${escapeHTML(state.errorMes)} <button type="button" class="link-btn" onclick="cargarMes()">Reintentar</button></div>`;
+  else if(state.cargandoMes) cuerpo = '<div class="dias-label">Cargando el mes…</div>';
+  else cuerpo = tipos.map(t => {
+    const doc = docMes(w.id, t.id);
+    const chips = ps.length ? ps.map(p => chipCargaHTML(w.id, t.id, p)).join('') : '<span class="dias-label">Sin plataforma asignada</span>';
+    return `
+    <div class="doc-fila" style="align-items:flex-start;">
+      <div><b>${escapeHTML(t.nombre)}</b><div class="mx-chips" style="margin-top:6px;">${chips}</div></div>
+      <div class="mx-doc">
+        ${doc ? '<span class="badge badge-ok">Recibido</span>' : '<span class="badge badge-bad">Falta</span>'}
+        ${doc && ed ? `<button type="button" class="mini-btn" onclick="verDocMes(${doc.id}, false)">Ver</button>` : ''}
+        ${ed ? `<button type="button" class="mini-btn" onclick="abrirSubirMes(${w.id}, ${t.id})">${doc ? 'Reemplazar' : 'Subir'}</button>` : ''}
+      </div>
+    </div>`;
   }).join('');
-  return `<div class="mx">${head}${filas}</div>`;
+  return `<h4 class="doc-sec">Documentos del mes</h4>${nav}
+    <div class="dias-label" style="margin:0 0 6px;">Cada botón de plataforma indica si ya subiste ese documento allá${ed ? ' (clic para marcarlo o desmarcarlo)' : ''}. Gris: pendiente · ámbar: el plazo está cerca · rojo: plazo vencido · verde: cargado.</div>
+    ${cuerpo}`;
 }
 function matrizEmpresaHTML(){
   const tipos = tiposMensuales('empresa');
@@ -1048,17 +1078,17 @@ function matrizEmpresaHTML(){
 function contenidoMesHTML(){
   if(state.errorMes) return `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(state.errorMes)} <button type="button" class="link-btn" onclick="cargarMes()">Reintentar</button></div>`;
   if(state.cargandoMes) return `<div class="empty-state">Cargando ${escapeHTML(fmtPeriodo(state.mes))}…</div>`;
-  return state.vistaMes === 'empresa' ? matrizEmpresaHTML() : matrizTrabajadoresHTML();
+  return matrizEmpresaHTML();
 }
 function actualizarMes(){
   const c = document.getElementById('mes-container');
   if(c) c.innerHTML = contenidoMesHTML();
   const s = document.getElementById('stats-row');
-  if(s && state.tab === 'mensual') s.innerHTML = statsMesHTML();
+  if(s && state.tab === 'empresa') s.innerHTML = statsEmpresaHTML();
 }
 async function cargarMes(){
   const p = state.mes;
-  state.cargandoMes = true; state.errorMes = null; actualizarMes();
+  state.cargandoMes = true; state.errorMes = null; actualizarMes(); actualizarLista();
   try{
     const res = await withTimeout(Promise.all([
       supabaseClient.from('documentos_vigentes').select('*').eq('periodo', p),
@@ -1073,11 +1103,12 @@ async function cargarMes(){
     state.errorMes = 'No se pudo cargar el mes: ' + mensajeError(e);
   }
   state.cargandoMes = false;
-  actualizarMes();
+  refrescarVistas();
 }
 function elegirMes(p){
   if(!/^\d{4}-\d{2}-01$/.test(p || '')) return;
   state.mes = p; state.docsMes = []; state.cargas = []; state.docsEmpresa = [];
+  state.cargandoMes = true; state.errorMes = null;
   render(); cargarMes();
 }
 function cambiarMes(delta){
@@ -1085,31 +1116,23 @@ function cambiarMes(delta){
   if(p > periodoISO(new Date().getFullYear(), new Date().getMonth() + 1)) return;     // no más allá del mes actual
   elegirMes(p);
 }
-function controlesMesHTML(){
-  const f = state.filtrosMes;
-  const ed = state.puedeEscribir;
+function navMesHTML(){
   return `
     <div class="mes-nav">
       <button type="button" class="btn btn-ghost btn-sm" onclick="cambiarMes(-1)" aria-label="Mes anterior">‹</button>
       <select onchange="elegirMes(this.value)" aria-label="Mes">${opcionesPeriodo(state.mes)}</select>
       <button type="button" class="btn btn-ghost btn-sm" onclick="cambiarMes(1)" aria-label="Mes siguiente">›</button>
-    </div>
-    <select onchange="state.vistaMes=this.value; actualizarMes();">
-      <option value="trabajadores" ${state.vistaMes === 'trabajadores' ? 'selected' : ''}>Documentos de trabajadores</option>
-      <option value="empresa" ${state.vistaMes === 'empresa' ? 'selected' : ''}>Documentos de la empresa</option>
-    </select>
-    <input type="text" placeholder="Buscar por nombre o RUT…" value="${escapeHTML(f.texto)}" oninput="state.filtrosMes.texto=this.value; actualizarMes();">
+    </div>`;
+}
+function controlesEmpresaHTML(){
+  const f = state.filtrosMes;
+  return `
+    <span class="dias-label">Documentos de la empresa del mes:</span>
+    ${navMesHTML()}
     <select onchange="state.filtrosMes.plataforma=this.value; actualizarMes();">
       <option value="">Todas las plataformas</option>
-      ${state.plataformas.map(p => `<option value="${p.id}" ${f.plataforma === String(p.id) ? 'selected' : ''}>${escapeHTML(p.nombre)}</option>`).join('')}
-    </select>
-    <select onchange="state.filtrosMes.estado=this.value; actualizarMes();">
-      <option value="">Todos</option>
-      <option value="pend" ${f.estado === 'pend' ? 'selected' : ''}>Con pendientes</option>
-      <option value="atras" ${f.estado === 'atras' ? 'selected' : ''}>Con plazo vencido</option>
-    </select>
-    <span class="spacer"></span>
-    ${ed ? `<button type="button" class="btn btn-ghost" onclick="abrirBloque()">Marcar en bloque</button><button type="button" class="btn btn-primary" onclick="abrirMasiva()">Subir varios archivos</button>` : ''}`;
+      ${plataformasConTrabajadores().map(p => `<option value="${p.id}" ${f.plataforma === String(p.id) ? 'selected' : ''}>${escapeHTML(p.nombre)}</option>`).join('')}
+    </select>`;
 }
 
 /* --- Marcar «cargado en plataforma» --- */
@@ -1135,7 +1158,7 @@ async function toggleCarga(trabId, tipoId, platId){
     if(e && e.code === '23505') await cargarMes();
   }
   delete state.ocupadoCarga[clave];
-  actualizarMes();
+  refrescarVistas();
 }
 
 /* --- Subir un documento de un mes (de un trabajador o de la empresa) --- */
@@ -1193,6 +1216,7 @@ async function subirMes(){
     await guardarDocMes(m.trabId, m.tipoId, state.mes, archivo);
     if(state.modalMes === m){ state.modalMes = null; render(); }
     await cargarMes();
+    if(m.trabId && state.modalDocs && state.modalDocs.id === m.trabId) await cargarHistorial(m.trabId);     // la ficha abierta muestra el documento nuevo en su historial
     aviso('Documento subido.');
   }catch(e){
     if(state.modalMes !== m){ aviso('No se pudo subir el documento: ' + mensajeError(e), 3600); return; }
@@ -1225,7 +1249,7 @@ function verDocMes(id, esEmpresa){
 function abrirBloque(){
   const tipos = {};
   tiposMensuales('trabajador').concat(tiposMensuales('empresa')).forEach(t => { tipos[t.id] = true; });
-  state.modalBloque = { plataformaId: state.filtrosMes.plataforma || '', tipos, paso: 1, saving: false, error: null };
+  state.modalBloque = { plataformaId: state.filtros.plataforma || '', tipos, paso: 1, saving: false, error: null };
   render();
 }
 function cerrarBloque(){ if(state.modalBloque && state.modalBloque.saving) return; state.modalBloque = null; render(); }
@@ -1233,7 +1257,7 @@ function calcularBloque(){
   const b = state.modalBloque, filas = [];
   if(!b || !b.plataformaId) return filas;
   const platId = Number(b.plataformaId);
-  const trabs = trabajadoresMes().filter(w => state.tp.some(x => x.trabajador_id === w.id && x.plataforma_id === platId && x.activo));
+  const trabs = trabajadoresFiltrados().filter(w => w.activo && state.tp.some(x => x.trabajador_id === w.id && x.plataforma_id === platId && x.activo));
   for(const t of tiposMensuales('trabajador')){
     if(!b.tipos[t.id]) continue;
     for(const w of trabs){
@@ -1712,15 +1736,15 @@ function sinAccesoHTML(){
 }
 function setTab(t){
   state.tab = t; render();
-  if(t === 'mensual') cargarMes();
+  if(t === 'trabajadores' || t === 'empresa') cargarMes();
 }
 function toggleMenu(){ state.showAccountMenu = !state.showAccountMenu; render(); }
 
 function mainHTML(){
   const esTrab = state.tab === 'trabajadores';
-  const esMes = state.tab === 'mensual';
+  const esMes = state.tab === 'empresa';
   const f = state.filtros;
-  const controles = esMes ? controlesMesHTML() : esTrab ? `
+  const controles = esMes ? controlesEmpresaHTML() : esTrab ? `
     <input type="text" placeholder="Buscar por nombre o RUT…" value="${escapeHTML(f.texto)}" oninput="state.filtros.texto=this.value; actualizarLista();">
     <select onchange="state.filtros.estado=this.value; actualizarLista();">
       <option value="activos" ${f.estado === 'activos' ? 'selected' : ''}>Activos</option>
@@ -1739,9 +1763,12 @@ function mainHTML(){
     <select onchange="state.filtros.doc=this.value; actualizarLista();">
       <option value="">Todos los estados documentales</option>
       ${['vencido', 'incompleto', 'porvencer', 'aldia'].map(k => `<option value="${k}" ${f.doc === k ? 'selected' : ''}>${ETIQ_ESTADO[k]}</option>`).join('')}
+      <option value="m_pend" ${f.doc === 'm_pend' ? 'selected' : ''}>Del mes: con pendientes</option>
+      <option value="m_atras" ${f.doc === 'm_atras' ? 'selected' : ''}>Del mes: plazo vencido</option>
     </select>
+    <span class="dias-label">Mes:</span>${navMesHTML()}
     <span class="spacer"></span>
-    ${state.puedeEscribir ? `<button type="button" class="btn btn-primary" onclick="abrirModalTrabajador(null)">+ Agregar trabajador</button>` : ''}
+    ${state.puedeEscribir ? `<button type="button" class="btn btn-ghost" onclick="abrirBloque()">Marcar en bloque</button><button type="button" class="btn btn-ghost" onclick="abrirMasiva()">Subir varios archivos</button><button type="button" class="btn btn-primary" onclick="abrirModalTrabajador(null)">+ Agregar trabajador</button>` : ''}
   ` : '';
   return `
     <div class="topbar">
@@ -1762,11 +1789,11 @@ function mainHTML(){
               </div>` : ''}
           </div>
         </div>
-        <div class="stats-row" id="stats-row">${esMes ? statsMesHTML() : statsHTML()}</div>
+        <div class="stats-row" id="stats-row">${esMes ? statsEmpresaHTML() : statsHTML()}</div>
       </div>
       <div class="tabs-row">
         <button type="button" class="tab-item ${esTrab ? 'active' : ''}" onclick="setTab('trabajadores')">Trabajadores</button>
-        <button type="button" class="tab-item ${esMes ? 'active' : ''}" onclick="setTab('mensual')">Control mensual</button>
+        <button type="button" class="tab-item ${esMes ? 'active' : ''}" onclick="setTab('empresa')">Documentos de la empresa</button>
         <button type="button" class="tab-item ${state.tab === 'catalogos' ? 'active' : ''}" onclick="setTab('catalogos')">Catálogos</button>
       </div>
     </div>
