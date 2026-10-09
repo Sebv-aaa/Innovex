@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Innovex — Subcontrataciones</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
   :root{
     --bg:#F5F4EF; --surface:#FFFFFF; --surface-alt:#EFEEE6; --border:#DEDCD1;
@@ -246,6 +247,12 @@
   .row-click:hover{ background:var(--surface-alt); }
   .controls-inner .mes-nav{ flex:none; }
 
+  /* Controles agrupados y contadores en cuadrícula */
+  .ctl-mes{ display:inline-flex; align-items:center; gap:8px; flex:none; }
+  .ctl-acciones{ display:inline-flex; gap:8px; flex-wrap:wrap; margin-left:auto; }
+  .stats-row{ display:grid; grid-template-columns:repeat(auto-fit,minmax(125px,1fr)); gap:14px 18px; justify-content:stretch; }
+  .stat-chip{ min-width:0; }
+
 </style>
 </head>
 <body>
@@ -282,6 +289,7 @@ let state = {
   roles: [], tipos: [], plataformas: [], requeridos: [], trabajadores: [], tp: [], docsVig: [],
   // Control mensual
   mes: periodoMesAnterior(),
+  modalExport: null,
   docsMes: [], cargas: [], docsEmpresa: [], cargandoMes: false, errorMes: null,
   filtrosMes: { plataforma: '' },       // solo para la pestaña de documentos de la empresa
   modalMes: null,        // { trabId (null = empresa), tipoId, subiendo, error }
@@ -294,7 +302,6 @@ let state = {
   modalCat: null,       // { tabla:'roles'|'tipos'|'plataformas', id, draft } — editar/eliminar un elemento de catálogo
   modalCatError: null,
   modalDocs: null,      // { id (trabajador), historial: null|[], cargandoHist, error, subiendo, draft }
-  reqRolId: null,
   showAccountMenu: false
 };
 
@@ -378,7 +385,6 @@ async function cargarDatos(){
   for(const r of res){ if(r.error) throw new Error(r.error.message); }
   state.roles = res[0].data; state.tipos = res[1].data; state.plataformas = res[2].data;
   state.requeridos = res[3].data; state.trabajadores = res[4].data; state.tp = res[5].data; state.docsVig = res[6].data;
-  if(state.reqRolId === null && state.roles.length) state.reqRolId = state.roles[0].id;
 }
 async function recargar(){
   try{ await cargarDatos(); state.loadError = null; }
@@ -433,7 +439,7 @@ async function handleLogout(){
 function limpiarEstado(){
   state.session = null; state.acceso = false; state.puedeEscribir = false; state.accesoCompleto = false;
   state.roles = []; state.tipos = []; state.plataformas = []; state.requeridos = []; state.trabajadores = []; state.tp = []; state.docsVig = [];
-  state.modalDocs = null; state.modal = null; state.modalCat = null; state.showAccountMenu = false; state.reqRolId = null;
+  state.modalDocs = null; state.modal = null; state.modalCat = null; state.showAccountMenu = false;
   state.docsMes = []; state.cargas = []; state.docsEmpresa = []; state.modalMes = null; state.modalBloque = null; state.modalMasiva = null; state.tab = 'trabajadores';
 }
 async function arrancar(){
@@ -480,12 +486,14 @@ function estadoDoc(tipo, doc){
 }
 // Estado del trabajador según los documentos que exige su rol.
 // Prioridad: vencido > incompleto > por vencer > al día.
+// Un tipo es «obligatorio al ingresar» si está marcado en Catálogos (vale para todos los roles).
+function esObligatorio(tipoId){ return state.requeridos.some(x => x.tipo_documento_id === tipoId); }
+function tiposObligatorios(){
+  return state.tipos.filter(t => t.ambito === 'trabajador' && t.frecuencia !== 'mensual' && esObligatorio(t.id));   // los mensuales se controlan por mes
+}
 function estadoTrabajador(w){
   if(!w.activo) return null;
-  if(w.rol_faena_id == null) return { k: 'sinrol', items: [] };
-  const exigidos = state.requeridos.filter(x => x.rol_faena_id === w.rol_faena_id)
-    .map(x => state.tipos.find(t => t.id === x.tipo_documento_id))
-    .filter(t => t && t.frecuencia !== 'mensual');       // los mensuales se controlan en la pestaña «Control mensual»
+  const exigidos = tiposObligatorios();
   if(!exigidos.length) return { k: 'sinreq', items: [] };
   const items = exigidos.map(t => ({ tipo: t, doc: docVigente(w.id, t.id), est: estadoDoc(t, docVigente(w.id, t.id)) }));
   const tiene = k => items.some(i => i.est.k === k);
@@ -778,8 +786,7 @@ function modalDocsHTML(){
 
   let resumen;
   if(!w.activo) resumen = '<div class="dias-label">Trabajador inactivo: sus documentos se conservan, pero no se calcula estado.</div>';
-  else if(est.k === 'sinrol') resumen = '<div class="dias-label">Asígnale un rol en faena (botón Editar) para saber qué documentos debe tener.</div>';
-  else if(est.k === 'sinreq') resumen = `<div class="dias-label">El rol «${escapeHTML(rol)}» aún no tiene documentos requeridos (se definen en Catálogos).</div>`;
+  else if(est.k === 'sinreq') resumen = '<div class="dias-label">Aún no hay documentos marcados como obligatorios al ingresar (se definen en Catálogos).</div>';
   else resumen = est.items.map(i => {
     const clase = CLASE_ESTADO[({ ok: 'aldia', porvencer: 'porvencer', vencido: 'vencido', falta: 'incompleto', sinfecha: 'incompleto' })[i.est.k]];
     const extra = i.doc ? ` · subido el ${fmtFecha(i.doc.fecha_carga)}${i.doc.fecha_vencimiento ? ' · vence el ' + fmtFecha(i.doc.fecha_vencimiento) : ''}` : '';
@@ -814,11 +821,11 @@ function modalDocsHTML(){
     <div class="modal" style="max-width:640px;">
       <button type="button" class="modal-close" onclick="cerrarModalDocs()" aria-label="Cerrar">×</button>
       <h2 class="modal-title">Documentos · ${escapeHTML(w.nombre)}</h2>
-      <div class="dias-label" style="margin-top:2px;">${escapeHTML(fmtRut(w.rut))} · ${rol ? escapeHTML(rol) : 'Sin rol'}${est && est.k !== 'sinrol' && est.k !== 'sinreq' ? ' · ' + badgeEstado(est.k) : ''}</div>
+      <div class="dias-label" style="margin-top:2px;">${escapeHTML(fmtRut(w.rut))} · ${rol ? escapeHTML(rol) : 'Sin rol'}${est && est.k !== 'sinreq' ? ' · ' + badgeEstado(est.k) : ''}</div>
       ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-top:12px;">${escapeHTML(m.error)}</div>` : ''}
       ${state.puedeEscribir ? '' : '<div class="dias-label" style="margin-top:10px;">Con tu permiso puedes ver el estado y las fechas de cada documento, pero no abrir los archivos (son confidenciales).</div>'}
       ${w.activo ? seccionMesHTML(w) : ''}
-      <h4 class="doc-sec">Documentos exigidos (ingreso y con vencimiento)</h4>
+      <h4 class="doc-sec">Documentos obligatorios (ingreso y con vencimiento)</h4>
       ${resumen}
       ${subirHTML}
       <h4 class="doc-sec">Historial de cargas</h4>
@@ -1245,6 +1252,113 @@ function verDocMes(id, esEmpresa){
   abrirArchivo(doc.archivo_path);
 }
 
+
+/* --- Exportar documentos del mes (ZIP, una carpeta por trabajador) --- */
+function nombreCarpeta(n){ return String(n || 'Sin nombre').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+function nombreCortoTipo(t){
+  const n = normTxt(t.nombre);
+  if(n.startsWith('liquidaci')) return 'Liquidación';
+  if(n.startsWith('cotizaci')) return 'Cotizaciones';
+  return t.nombre;
+}
+function extArchivo(doc){
+  const m = /\.([A-Za-z0-9]{2,5})$/.exec(doc.nombre_archivo || '') || /\.([A-Za-z0-9]{2,5})$/.exec(doc.archivo_path || '');
+  return m ? m[1].toLowerCase() : 'pdf';
+}
+function planExportacion(){
+  const tipos = tiposMensuales('trabajador');
+  const usadas = {};
+  const archivos = [], faltan = [];
+  trabajadoresFiltrados().filter(w => w.activo).forEach(w => {
+    let carpeta = nombreCarpeta(w.nombre);
+    if(usadas[carpeta]) carpeta += ' (' + fmtRut(w.rut) + ')';
+    usadas[carpeta] = true;
+    const sin = [];
+    tipos.forEach(t => {
+      const d = docMes(w.id, t.id);
+      if(d) archivos.push({ ruta: carpeta + '/' + nombreCortoTipo(t) + ' - ' + fmtPeriodo(state.mes) + '.' + extArchivo(d), path: d.archivo_path });
+      else sin.push(nombreCortoTipo(t));
+    });
+    if(sin.length) faltan.push({ nombre: w.nombre, sin });
+  });
+  return { archivos, faltan, trabajadores: trabajadoresFiltrados().filter(w => w.activo).length };
+}
+function abrirExportar(){
+  if(!state.puedeEscribir) return;
+  if(state.cargandoMes){ aviso('Espera a que termine de cargar el mes.'); return; }
+  state.modalExport = { plan: planExportacion(), estado: 'listo', hechos: 0, error: null, fallidos: [] };
+  render();
+}
+function cerrarExportar(){ if(state.modalExport && state.modalExport.estado === 'trabajando') return; state.modalExport = null; render(); }
+function actualizarExportar(){ if(state.modalExport) render(); }
+function nombreZip(){
+  const p = state.plataformas.find(x => String(x.id) === state.filtros.plataforma);
+  return nombreCarpeta('Documentos - ' + (p ? p.nombre : 'Todas las plataformas') + ' - ' + fmtPeriodo(state.mes)) + '.zip';
+}
+async function descargarExportar(){
+  const m = state.modalExport;
+  if(!m || m.estado === 'trabajando' || !m.plan.archivos.length) return;
+  if(typeof JSZip === 'undefined'){ m.error = 'No se pudo cargar el componente que arma el ZIP. Revisa tu conexión y recarga la página.'; render(); return; }
+  m.estado = 'trabajando'; m.hechos = 0; m.error = null; m.fallidos = []; render();
+  try{
+    const zip = new JSZip();
+    const cola = m.plan.archivos.slice();
+    const trabajar = async () => {
+      while(cola.length){
+        const a = cola.shift();
+        try{
+          const r = await withTimeout(supabaseClient.storage.from(BUCKET).createSignedUrl(a.path, 300), 15000);
+          if(r.error) throw r.error;
+          const url = r.data && (r.data.signedUrl || r.data.signedURL);
+          const resp = await withTimeout(fetch(url), 60000);
+          if(!resp.ok) throw new Error('HTTP ' + resp.status);
+          zip.file(a.ruta, await resp.blob());
+        }catch(e){ m.fallidos.push(a.ruta); }
+        m.hechos++;
+        const el = document.getElementById('exp-avance');
+        if(el) el.textContent = m.hechos + ' de ' + m.plan.archivos.length;
+      }
+    };
+    await Promise.all([trabajar(), trabajar(), trabajar(), trabajar()]);
+    if(m.fallidos.length === m.plan.archivos.length) throw new Error('No se pudo descargar ningún archivo.');
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nombreZip();
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    m.estado = 'listo-descargado';
+  }catch(e){
+    m.estado = 'listo'; m.error = 'No se pudo armar el ZIP: ' + mensajeError(e);
+  }
+  if(state.modalExport === m) render();
+}
+function modalExportHTML(){
+  const m = state.modalExport, pl_ = m.plan;
+  const p = state.plataformas.find(x => String(x.id) === state.filtros.plataforma);
+  const trabajando = m.estado === 'trabajando';
+  return `
+  <div class="modal-backdrop">
+    <div class="modal" style="max-width:560px;">
+      <button type="button" class="modal-close" onclick="cerrarExportar()" aria-label="Cerrar" ${trabajando ? 'disabled' : ''}>×</button>
+      <h2 class="modal-title">Exportar documentos</h2>
+      <div class="dias-label" style="margin-top:2px;">${escapeHTML(fmtPeriodo(state.mes))} · ${p ? escapeHTML(p.nombre) : 'Todas las plataformas'} · ${pl(pl_.trabajadores, 'trabajador activo', 'trabajadores activos')} según tus filtros</div>
+      ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-top:12px;">${escapeHTML(m.error)}</div>` : ''}
+      <div class="estado-box" style="margin-top:14px;">
+        <b>${pl_.archivos.length ? pl(pl_.archivos.length, 'archivo', 'archivos') + ' en el ZIP' : 'No hay archivos para exportar'}</b>
+        <div class="dias-label" style="margin-top:4px;">Liquidación y cotizaciones del mes, en una carpeta por trabajador.</div>
+      </div>
+      ${pl_.faltan.length ? `<div class="estado-box" style="margin-top:10px;"><b>Les falta algún documento (${pl_.faltan.length})</b><div class="dias-label" style="margin-top:4px;max-height:140px;overflow:auto;">${pl_.faltan.map(f => escapeHTML(f.nombre) + ': ' + escapeHTML(f.sin.join(', '))).join('<br>')}</div></div>` : ''}
+      ${m.estado === 'listo-descargado' ? `<div class="field-note" style="margin-top:10px;">ZIP descargado.${m.fallidos.length ? ' No se pudieron incluir: ' + escapeHTML(m.fallidos.join(', ')) + '.' : ''}</div>` : ''}
+      <div class="modal-actions" style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;align-items:center;">
+        ${trabajando ? `<span class="dias-label">Descargando… <span id="exp-avance">${m.hechos} de ${pl_.archivos.length}</span></span>` : ''}
+        <button type="button" class="btn btn-ghost" onclick="cerrarExportar()" ${trabajando ? 'disabled' : ''}>Cerrar</button>
+        <button type="button" class="btn btn-primary" onclick="descargarExportar()" ${(trabajando || !pl_.archivos.length) ? 'disabled' : ''}>Descargar ZIP</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 /* --- Marcar en bloque --- */
 function abrirBloque(){
   const tipos = {};
@@ -1522,21 +1636,27 @@ async function agregarPlataforma(){
   if(r.error){ aviso('No se pudo agregar: ' + mensajeError(r.error), 3600); return; }
   await recargar(); aviso('Plataforma agregada.');
 }
-function elegirRolReq(v){ state.reqRolId = v ? Number(v) : null; render(); }
-async function toggleRequisito(rolId, tipoId, marcado){
+async function toggleObligatorio(tipoId, marcado){
+  // Obligatorio para todos los roles: se guarda una fila por rol (así no hace falta cambiar la base de datos).
   try{
+    if(!state.roles.length) throw new Error('Crea al menos un rol antes de marcar documentos obligatorios.');
     if(marcado){
-      const r = await supabaseClient.from('documentos_requeridos_por_rol').insert({ rol_faena_id: rolId, tipo_documento_id: tipoId });
-      if(r.error) throw r.error;
-      state.requeridos.push({ rol_faena_id: rolId, tipo_documento_id: tipoId });
+      const filas = state.roles.filter(r => !state.requeridos.some(x => x.rol_faena_id === r.id && x.tipo_documento_id === tipoId))
+        .map(r => ({ rol_faena_id: r.id, tipo_documento_id: tipoId }));
+      if(filas.length){
+        const r = await supabaseClient.from('documentos_requeridos_por_rol').insert(filas);
+        if(r.error) throw r.error;
+        filas.forEach(f => state.requeridos.push(f));
+      }
     }else{
-      const r = await supabaseClient.from('documentos_requeridos_por_rol').delete().eq('rol_faena_id', rolId).eq('tipo_documento_id', tipoId);
+      const r = await supabaseClient.from('documentos_requeridos_por_rol').delete().eq('tipo_documento_id', tipoId);
       if(r.error) throw r.error;
-      state.requeridos = state.requeridos.filter(x => !(x.rol_faena_id === rolId && x.tipo_documento_id === tipoId));
+      state.requeridos = state.requeridos.filter(x => x.tipo_documento_id !== tipoId);
     }
+    refrescarVistas();
   }catch(e){
     aviso('No se pudo guardar el cambio: ' + mensajeError(e), 3600);
-    render(); // vuelve a mostrar el estado real
+    render();
   }
 }
 /* --- Editar / eliminar elementos de catálogo --- */
@@ -1673,7 +1793,7 @@ async function eliminarCat(){
     const r = await withTimeout(supabaseClient.from(c.tabla).delete().eq('id', m.id).select('id'), 10000);
     if(r.error) throw r.error;
     if(!r.data || !r.data.length) throw new Error('No se aplicó el cambio (revisa tus permisos).');
-    if(m.tabla === 'roles'){ if(state.reqRolId === m.id) state.reqRolId = null; if(state.filtros.rol === String(m.id)) state.filtros.rol = ''; }
+    if(m.tabla === 'roles'){ if(state.filtros.rol === String(m.id)) state.filtros.rol = ''; }
     if(m.tabla === 'plataformas' && state.filtros.plataforma === String(m.id)) state.filtros.plataforma = '';
     state.modalCat = null; state.saving = false;
     await recargar();
@@ -1686,11 +1806,10 @@ async function eliminarCat(){
 
 function catalogosHTML(){
   const ed = state.puedeEscribir;
-  const rolSel = state.roles.find(r => r.id === state.reqRolId);
   return `
   <div class="section-card">
     <h3>Roles en faena</h3>
-    <p class="hint">Los cargos que cumplen los trabajadores (ej.: buzo, operador, supervisor). Cada rol exige distintos documentos.</p>
+    <p class="hint">Los cargos que cumplen los trabajadores (ej.: buzo, operador, supervisor). </p>
     ${ed ? `<div class="inline-add"><input type="text" id="nuevo-rol" placeholder="Nuevo rol" onkeydown="if(event.key==='Enter') agregarRol()"><button type="button" class="btn btn-primary btn-sm" onclick="agregarRol()">Agregar</button></div>` : ''}
     <div class="chip-list">${state.roles.length ? state.roles.map(r => `<span class="chip">${escapeHTML(r.nombre)}${chipBtn('roles', r.id)}</span>`).join('') : '<span class="dias-label">Aún no hay roles.</span>'}</div>
   </div>
@@ -1710,15 +1829,10 @@ function catalogosHTML(){
   </div>
 
   <div class="section-card">
-    <h3>Documentos que exige cada rol</h3>
-    <p class="hint">Elige un rol y marca los documentos obligatorios de ingreso o con vencimiento. Con esto se calcula si un trabajador está «incompleto», «vencido» o «por vencer». Los documentos mensuales no van aquí: se controlan en «Control mensual».</p>
-    ${state.roles.length === 0 ? '<span class="dias-label">Crea al menos un rol para definir sus documentos requeridos.</span>' : `
-      <div class="inline-add"><select onchange="elegirRolReq(this.value)">${state.roles.map(r => `<option value="${r.id}" ${r.id === state.reqRolId ? 'selected' : ''}>${escapeHTML(r.nombre)}</option>`).join('')}</select></div>
-      ${(rolSel && state.tipos.length) ? `<div class="checks-box">${state.tipos.filter(t => t.ambito === 'trabajador' && t.frecuencia !== 'mensual').map(t => {
-        const marcado = state.requeridos.some(x => x.rol_faena_id === rolSel.id && x.tipo_documento_id === t.id);
-        return `<label class="check-row"><input type="checkbox" ${marcado ? 'checked' : ''} ${ed ? '' : 'disabled'} onchange="toggleRequisito(${rolSel.id}, ${t.id}, this.checked)"> ${escapeHTML(t.nombre)}</label>`;
-      }).join('')}</div>` : '<span class="dias-label">Crea tipos de documento para poder marcarlos.</span>'}
-    `}
+    <h3>Obligatorios al ingresar</h3>
+    <p class="hint">Marca los documentos que todo trabajador debe tener (ej.: cédula, contrato). Con esto se calcula si está «incompleto», «vencido» o «por vencer». Valen para todos los roles. Los documentos mensuales no van aquí: se controlan por mes en la lista de trabajadores.</p>
+    ${state.tipos.filter(t => t.ambito === 'trabajador' && t.frecuencia !== 'mensual').length ? `<div class="checks-box">${state.tipos.filter(t => t.ambito === 'trabajador' && t.frecuencia !== 'mensual').map(t =>
+      `<label class="check-row"><input type="checkbox" ${esObligatorio(t.id) ? 'checked' : ''} ${ed ? '' : 'disabled'} onchange="toggleObligatorio(${t.id}, this.checked)"> ${escapeHTML(t.nombre)} <span class="dias-label">(${escapeHTML(ETIQ_FREC[t.frecuencia] || '')})</span></label>`).join('')}</div>` : '<span class="dias-label">Crea tipos de documento para poder marcarlos.</span>'}
   </div>`;
 }
 
@@ -1766,9 +1880,8 @@ function mainHTML(){
       <option value="m_pend" ${f.doc === 'm_pend' ? 'selected' : ''}>Del mes: con pendientes</option>
       <option value="m_atras" ${f.doc === 'm_atras' ? 'selected' : ''}>Del mes: plazo vencido</option>
     </select>
-    <span class="dias-label">Mes:</span>${navMesHTML()}
-    <span class="spacer"></span>
-    ${state.puedeEscribir ? `<button type="button" class="btn btn-ghost" onclick="abrirBloque()">Marcar en bloque</button><button type="button" class="btn btn-ghost" onclick="abrirMasiva()">Subir varios archivos</button><button type="button" class="btn btn-primary" onclick="abrirModalTrabajador(null)">+ Agregar trabajador</button>` : ''}
+    <span class="ctl-mes"><span class="dias-label">Mes:</span>${navMesHTML()}</span>
+    ${state.puedeEscribir ? `<span class="ctl-acciones"><button type="button" class="btn btn-ghost" onclick="abrirExportar()">Exportar</button><button type="button" class="btn btn-ghost" onclick="abrirBloque()">Marcar en bloque</button><button type="button" class="btn btn-ghost" onclick="abrirMasiva()">Subir varios archivos</button><button type="button" class="btn btn-primary" onclick="abrirModalTrabajador(null)">+ Agregar trabajador</button></span>` : ''}
   ` : '';
   return `
     <div class="topbar">
@@ -1808,7 +1921,8 @@ function mainHTML(){
     ${state.modalDocs ? modalDocsHTML() : ''}
     ${state.modalMes ? modalMesHTML() : ''}
     ${state.modalBloque ? modalBloqueHTML() : ''}
-    ${state.modalMasiva ? modalMasivaHTML() : ''}`;
+    ${state.modalMasiva ? modalMasivaHTML() : ''}
+    ${state.modalExport ? modalExportHTML() : ''}`;
 }
 function render(){
   const app = document.getElementById('app');
