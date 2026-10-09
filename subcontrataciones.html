@@ -209,6 +209,37 @@
   .doc-fila:last-child{ border-bottom:none; }
   .estado-box input[type=file]{ font-size:13px; max-width:100%; }
   .estado-box input[type=date]{ font-family:var(--font-ui); font-size:13.5px; padding:8px 10px; border:1px solid var(--border); border-radius:4px; background:var(--surface); color:var(--ink); }
+  /* Control mensual */
+  .mes-nav{ display:flex; align-items:center; gap:6px; }
+  .mes-nav select{ font-weight:600; }
+  .mx{ background:var(--surface); border:1px solid var(--border); border-radius:6px; overflow-x:auto; }
+  .mx-row{ display:grid; gap:14px; padding:12px 16px; border-bottom:1px solid var(--border); align-items:start; min-width:620px; }
+  .mx-row:last-child{ border-bottom:none; }
+  .mx-head{ background:var(--surface-alt); font-size:11.5px; font-weight:600; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.04em; align-items:center; padding-top:9px; padding-bottom:9px; }
+  .mx-name{ display:flex; flex-direction:column; gap:1px; font-size:13.5px; }
+  .mx-cell{ display:flex; flex-direction:column; gap:8px; }
+  .mx-doc{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .mx-chips{ display:flex; flex-wrap:wrap; gap:5px; }
+  .mini-btn{ background:none; border:1px solid var(--border); border-radius:4px; padding:2px 8px; font-size:12px; font-family:var(--font-ui); color:var(--ink-muted); cursor:pointer; }
+  .mini-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .pchip{ font-family:var(--font-ui); font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:20px; border:1px solid transparent; cursor:pointer; line-height:1.3; text-align:left; }
+  .pchip:disabled{ cursor:default; }
+  .pchip-ok{ background:var(--st-recibido-bg); color:var(--st-recibido); }
+  .pchip-pendiente{ background:var(--st-proceso-bg); color:var(--st-proceso); border-color:var(--border); }
+  .pchip-porvencer{ background:var(--accent-warm-bg); color:var(--accent-warm); }
+  .pchip-atrasado{ background:var(--st-atrasado-bg); color:var(--st-atrasado); }
+  .pchip:not(:disabled):hover{ border-color:var(--accent); }
+  .ms-list{ max-height:46vh; overflow-y:auto; border:1px solid var(--border); border-radius:4px; margin-top:4px; }
+  .ms-row{ display:grid; grid-template-columns:minmax(150px,2fr) minmax(150px,1.6fr) minmax(130px,1.2fr) minmax(120px,1fr) 130px; gap:10px; align-items:center; padding:8px 10px; border-bottom:1px solid var(--border); font-size:13px; }
+  .ms-list .ms-row:last-child{ border-bottom:none; }
+  .ms-head{ margin-top:16px; border:none; font-size:11.5px; font-weight:600; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.04em; padding-bottom:4px; }
+  .ms-file{ overflow:hidden; text-overflow:ellipsis; word-break:break-all; }
+  .ms-row select{ font-family:var(--font-ui); font-size:12.5px; padding:6px 8px; border:1px solid var(--border); border-radius:4px; background:var(--surface); color:var(--ink); min-width:0; width:100%; }
+  .ms-estado{ display:flex; align-items:center; gap:6px; justify-content:space-between; }
+  @media (max-width:760px){
+    .ms-row{ grid-template-columns:1fr 1fr; }
+    .ms-head{ display:none; }
+  }
 
 </style>
 </head>
@@ -227,6 +258,16 @@ const BUCKET = 'documentos-trabajadores';
 const DIAS_POR_VENCER = 30;          // un documento que vence en este plazo (o menos) se marca «por vencer»
 const MAX_ARCHIVO_MB = 10;
 const TIPOS_ARCHIVO = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+const AVISO_DIAS = 15;               // una carga a plataforma pendiente se marca «por vencer» cuando faltan estos días (o menos) para su plazo
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+function periodoISO(y, m){ return y + '-' + String(m).padStart(2, '0') + '-01'; }
+function periodoMesAnterior(){
+  const d = new Date();
+  let y = d.getFullYear(), m = d.getMonth();     // getMonth() es 0-11: sirve como «mes anterior» en base 1
+  if(m === 0){ y--; m = 12; }
+  return periodoISO(y, m);
+}
 
 let state = {
   session: null, loginError: null, loginLoading: false,
@@ -234,6 +275,14 @@ let state = {
   acceso: false, puedeEscribir: false, accesoCompleto: false,
   tab: 'trabajadores',
   roles: [], tipos: [], plataformas: [], requeridos: [], trabajadores: [], tp: [], docsVig: [],
+  // Control mensual
+  mes: periodoMesAnterior(), vistaMes: 'trabajadores',
+  docsMes: [], cargas: [], docsEmpresa: [], cargandoMes: false, errorMes: null,
+  filtrosMes: { texto: '', plataforma: '', estado: '' },     // estado: '' | 'pend' | 'atras'
+  modalMes: null,        // { trabId (null = empresa), tipoId, subiendo, error }
+  modalBloque: null,     // { plataformaId, tipos: {id:true}, paso, saving, error }
+  modalMasiva: null,     // { items, tipoDefault, periodoDefault, subiendo, hecho, error }
+  ocupadoCarga: {},
   filtros: { texto: '', estado: 'activos', plataforma: '', rol: '', doc: '' },
   modal: null,          // { id: null | número } — trabajador
   modalError: null, saving: false,
@@ -319,7 +368,7 @@ async function cargarDatos(){
     supabaseClient.from('documentos_requeridos_por_rol').select('*'),
     q('trabajadores_subcontratados', 'nombre'),
     supabaseClient.from('trabajador_plataforma').select('*'),
-    supabaseClient.from('documentos_vigentes').select('*')
+    supabaseClient.from('documentos_vigentes').select('*').is('periodo', null)    // los de ingreso / con vencimiento; los mensuales se cargan por mes
   ]), 15000);
   for(const r of res){ if(r.error) throw new Error(r.error.message); }
   state.roles = res[0].data; state.tipos = res[1].data; state.plataformas = res[2].data;
@@ -380,6 +429,7 @@ function limpiarEstado(){
   state.session = null; state.acceso = false; state.puedeEscribir = false; state.accesoCompleto = false;
   state.roles = []; state.tipos = []; state.plataformas = []; state.requeridos = []; state.trabajadores = []; state.tp = []; state.docsVig = [];
   state.modalDocs = null; state.modal = null; state.modalCat = null; state.showAccountMenu = false; state.reqRolId = null;
+  state.docsMes = []; state.cargas = []; state.docsEmpresa = []; state.modalMes = null; state.modalBloque = null; state.modalMasiva = null; state.tab = 'trabajadores';
 }
 async function arrancar(){
   state.cargando = true; render();
@@ -428,7 +478,8 @@ function estadoTrabajador(w){
   if(!w.activo) return null;
   if(w.rol_faena_id == null) return { k: 'sinrol', items: [] };
   const exigidos = state.requeridos.filter(x => x.rol_faena_id === w.rol_faena_id)
-    .map(x => state.tipos.find(t => t.id === x.tipo_documento_id)).filter(Boolean);
+    .map(x => state.tipos.find(t => t.id === x.tipo_documento_id))
+    .filter(t => t && t.frecuencia !== 'mensual');       // los mensuales se controlan en la pestaña «Control mensual»
   if(!exigidos.length) return { k: 'sinreq', items: [] };
   const items = exigidos.map(t => ({ tipo: t, doc: docVigente(w.id, t.id), est: estadoDoc(t, docVigente(w.id, t.id)) }));
   const tiene = k => items.some(i => i.est.k === k);
@@ -654,7 +705,7 @@ function uuidCorto(){
 function tipoNombre(id){ const t = state.tipos.find(x => x.id === id); return t ? t.nombre : 'Tipo eliminado'; }
 
 async function abrirModalDocs(id){
-  state.modalDocs = { id, historial: null, cargandoHist: true, error: null, subiendo: false, draft: { tipo: '', venc: '' } };
+  state.modalDocs = { id, historial: null, cargandoHist: true, error: null, subiendo: false, draft: { tipo: '', venc: '', periodo: state.mes } };
   render();
   await cargarHistorial(id);
 }
@@ -676,13 +727,29 @@ async function cargarHistorial(id){
 }
 function guardarDraftDocs(){
   if(!state.modalDocs) return;
-  state.modalDocs.draft = { tipo: val('d-tipo'), venc: val('d-venc') };
+  state.modalDocs.draft = { tipo: val('d-tipo'), venc: val('d-venc'), periodo: val('d-periodo') || state.modalDocs.draft.periodo || state.mes };
 }
 function cambiarTipoDoc(){
   guardarDraftDocs();
   const t = state.tipos.find(x => String(x.id) === String(state.modalDocs.draft.tipo));
   const w = document.getElementById('d-venc-wrap');
   if(w) w.style.display = (t && t.vence) ? '' : 'none';   // sin re-dibujar, para no perder el archivo ya elegido
+  const p = document.getElementById('d-periodo-wrap');
+  if(p) p.style.display = (t && t.frecuencia === 'mensual') ? '' : 'none';
+}
+// Últimos 18 meses (para elegir el mes al que corresponde un documento mensual)
+function opcionesPeriodo(sel){
+  const hoy = new Date();
+  let y = hoy.getFullYear(), m = hoy.getMonth() + 1;
+  let html = '', hallado = false;
+  for(let i = 0; i < 18; i++){
+    const p = periodoISO(y, m);
+    if(p === sel) hallado = true;
+    html += `<option value="${p}" ${p === sel ? 'selected' : ''}>${escapeHTML(fmtPeriodo(p))}</option>`;
+    m--; if(m === 0){ m = 12; y--; }
+  }
+  if(sel && !hallado) html += `<option value="${escapeHTML(sel)}" selected>${escapeHTML(fmtPeriodo(sel))}</option>`;     // mes fuera de los últimos 18: se muestra igual
+  return html;
 }
 function modalDocsHTML(){
   const m = state.modalDocs;
@@ -709,8 +776,9 @@ function modalDocsHTML(){
       <div class="dias-label" style="margin:2px 0 10px;">PDF o imagen (JPG, PNG, WEBP), máximo ${MAX_ARCHIVO_MB} MB. Si ya existe uno de ese tipo, el nuevo pasa a ser el vigente y el anterior queda en el historial.</div>
       <div class="form-grid">
         <div class="form-field full"><label>Tipo de documento</label>
-          <select id="d-tipo" onchange="cambiarTipoDoc()" ${m.subiendo ? 'disabled' : ''}><option value="">— Elige —</option>${state.tipos.map(t => `<option value="${t.id}" ${String(d.tipo) === String(t.id) ? 'selected' : ''}>${escapeHTML(t.nombre)}${t.vence ? '' : ' (no vence)'}</option>`).join('')}</select>
+          <select id="d-tipo" onchange="cambiarTipoDoc()" ${m.subiendo ? 'disabled' : ''}><option value="">— Elige —</option>${state.tipos.filter(t => t.ambito === 'trabajador').map(t => `<option value="${t.id}" ${String(d.tipo) === String(t.id) ? 'selected' : ''}>${escapeHTML(t.nombre)} (${escapeHTML(ETIQ_FREC[t.frecuencia] || '')})</option>`).join('')}</select>
         </div>
+        <div class="form-field" id="d-periodo-wrap" style="${tipoSel && tipoSel.frecuencia === 'mensual' ? '' : 'display:none;'}"><label>Mes al que corresponde</label><select id="d-periodo" onchange="guardarDraftDocs()" ${m.subiendo ? 'disabled' : ''}>${opcionesPeriodo(d.periodo || state.mes)}</select></div>
         <div class="form-field" id="d-venc-wrap" style="${tipoSel && tipoSel.vence ? '' : 'display:none;'}"><label>Fecha de vencimiento</label><input type="date" id="d-venc" value="${escapeHTML(d.venc)}" ${m.subiendo ? 'disabled' : ''}></div>
         <div class="form-field"><label>Archivo</label><input type="file" id="d-archivo" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*" ${m.subiendo ? 'disabled' : ''}></div>
       </div>
@@ -721,7 +789,7 @@ function modalDocsHTML(){
   if(m.cargandoHist && m.historial === null) hist = '<div class="dias-label">Cargando historial…</div>';
   else if(!m.historial || !m.historial.length) hist = '<div class="dias-label">Aún no hay documentos cargados.</div>';
   else hist = m.historial.map(h => `
-    <div class="doc-fila"><div><b>${escapeHTML(tipoNombre(h.tipo_documento_id))}</b>
+    <div class="doc-fila"><div><b>${escapeHTML(tipoNombre(h.tipo_documento_id))}${h.periodo ? ' · ' + escapeHTML(fmtPeriodo(h.periodo)) : ''}</b>
       <div class="dias-label">${state.puedeEscribir ? escapeHTML(h.nombre_archivo || 'archivo') + ' · ' : ''}subido el ${escapeHTML(fmtFecha(h.fecha_carga))}${h.fecha_vencimiento ? ' · vence el ' + escapeHTML(fmtFecha(h.fecha_vencimiento)) : ''}</div></div>
       ${state.puedeEscribir ? `<button type="button" class="btn btn-ghost btn-sm" onclick="verDocumento(${h.id}, false)">Ver</button>` : ''}</div>`).join('');
 
@@ -760,6 +828,11 @@ async function subirDocumento(){
     venc = m.draft.venc;
     if(!/^\d{4}-\d{2}-\d{2}$/.test(venc || '')) return fallo('Indica la fecha de vencimiento de este documento.');
   }
+  let periodo = null;
+  if(tipo.frecuencia === 'mensual'){
+    periodo = m.draft.periodo;
+    if(!/^\d{4}-\d{2}-01$/.test(periodo || '')) return fallo('Elige el mes al que corresponde este documento.');
+  }
   const trabId = m.id;
   const path = trabId + '/' + uuidCorto() + '-' + nombreSeguro(archivo.name);
   m.subiendo = true; m.error = null; render();
@@ -769,11 +842,11 @@ async function subirDocumento(){
     if(up.error) throw up.error;
     subido = true;
     const ins = await withTimeout(supabaseClient.from('documentos_trabajador').insert({
-      trabajador_id: trabId, tipo_documento_id: tipo.id, archivo_path: path, nombre_archivo: archivo.name, fecha_vencimiento: venc
+      trabajador_id: trabId, tipo_documento_id: tipo.id, archivo_path: path, nombre_archivo: archivo.name, fecha_vencimiento: venc, periodo
     }), 12000);
     if(ins.error) throw ins.error;
     if(state.modalDocs !== m) return;      // cerraron el modal mientras subía
-    m.subiendo = false; m.draft = { tipo: '', venc: '' };
+    m.subiendo = false; m.draft = { tipo: '', venc: '', periodo: state.mes };
     await recargar();
     await cargarHistorial(trabId);
     aviso('Documento subido.');
@@ -806,6 +879,598 @@ async function verDocumento(id, vigente){
 }
 
 /* ============================================================
+   CONTROL MENSUAL
+   Por cada mes: qué documentos mensuales llegaron (recibido) y cuáles ya se subieron
+   a cada plataforma (cargado). El plazo de cada plataforma es un día del mes siguiente.
+   ============================================================ */
+const ETIQ_FREC = { unica: 'una vez', mensual: 'mensual', vence: 'vence' };
+function fmtPeriodo(p){
+  const m = /^(\d{4})-(\d{2})/.exec(p || '');
+  if(!m) return p || '';
+  const n = MESES[Number(m[2]) - 1] || '';
+  return n.charAt(0).toUpperCase() + n.slice(1) + ' ' + m[1];
+}
+function desplazarPeriodo(p, delta){
+  const a = p.split('-').map(Number);
+  let y = a[0], m = a[1] + delta;
+  while(m > 12){ m -= 12; y++; }
+  while(m < 1){ m += 12; y--; }
+  return periodoISO(y, m);
+}
+// Fecha límite de carga de un mes: el día «plazo_dia» del mes siguiente (ajustado si ese mes es más corto)
+function plazoISO(periodo, plat){
+  const a = periodo.split('-').map(Number);
+  let y = a[0], m = a[1] + 1;
+  if(m > 12){ m = 1; y++; }
+  const ult = new Date(y, m, 0).getDate();
+  const dia = Math.min(plat.plazo_dia || 20, ult);
+  return y + '-' + String(m).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
+}
+// Estado de UNA carga a plataforma: ok | atrasado | porvencer | pendiente
+function estadoCarga(periodo, plat, cargado){
+  if(cargado) return { k: 'ok' };
+  const d = diasHasta(plazoISO(periodo, plat));
+  if(d < 0) return { k: 'atrasado', dias: d };
+  if(d <= AVISO_DIAS) return { k: 'porvencer', dias: d };
+  return { k: 'pendiente', dias: d };
+}
+function textoCarga(periodo, plat, est){
+  const f = fmtFecha(plazoISO(periodo, plat));
+  if(est.k === 'ok') return plat.nombre + ': cargado en la plataforma';
+  if(est.k === 'atrasado') return plat.nombre + ': plazo vencido el ' + f + ' (hace ' + pl(-est.dias, 'día', 'días') + ')';
+  if(est.k === 'porvencer') return plat.nombre + ': vence el ' + f + (est.dias === 0 ? ' (hoy)' : ' (en ' + pl(est.dias, 'día', 'días') + ')');
+  return plat.nombre + ': plazo el ' + f;
+}
+function tiposMensuales(ambito){ return state.tipos.filter(t => t.frecuencia === 'mensual' && t.ambito === ambito); }
+function docMes(trabId, tipoId){ return state.docsMes.find(x => x.trabajador_id === trabId && x.tipo_documento_id === tipoId) || null; }
+function docEmpresaMes(tipoId){ return state.docsEmpresa.find(x => x.tipo_documento_id === tipoId) || null; }   // vienen ordenados: el más reciente primero
+function cargaMes(trabId, tipoId, platId){
+  return state.cargas.find(c => (c.trabajador_id == null ? null : c.trabajador_id) === trabId && c.tipo_documento_id === tipoId && c.plataforma_id === platId) || null;
+}
+function plataformasConTrabajadores(){
+  const ids = new Set(state.tp.filter(x => x.activo).map(x => x.plataforma_id));
+  return state.plataformas.filter(p => ids.has(p.id));
+}
+function platsVisibles(w){
+  const ps = plataformasActivasDe(w.id);
+  return state.filtrosMes.plataforma ? ps.filter(p => String(p.id) === state.filtrosMes.plataforma) : ps;
+}
+function platsEmpresaVisibles(){
+  const ps = plataformasConTrabajadores();
+  return state.filtrosMes.plataforma ? ps.filter(p => String(p.id) === state.filtrosMes.plataforma) : ps;
+}
+function resumenTrabajadorMes(w){
+  let faltan = 0, porCargar = 0, atrasados = 0, porVencer = 0;
+  for(const t of tiposMensuales('trabajador')){
+    if(!docMes(w.id, t.id)) faltan++;
+    for(const p of platsVisibles(w)){
+      const e = estadoCarga(state.mes, p, !!cargaMes(w.id, t.id, p.id));
+      if(e.k !== 'ok') porCargar++;
+      if(e.k === 'atrasado') atrasados++;
+      if(e.k === 'porvencer') porVencer++;
+    }
+  }
+  return { faltan, porCargar, atrasados, porVencer };
+}
+function trabajadoresMes(){
+  const f = state.filtrosMes;
+  const t = f.texto.trim().toLowerCase();
+  const tRut = t.replace(/[.\s]/g, '');
+  return state.trabajadores.filter(w => {
+    if(!w.activo) return false;
+    if(f.plataforma && !state.tp.some(x => x.trabajador_id === w.id && String(x.plataforma_id) === f.plataforma && x.activo)) return false;
+    if(t && !(w.nombre.toLowerCase().includes(t) || (tRut && w.rut.toLowerCase().includes(tRut)))) return false;
+    if(f.estado){
+      const r = resumenTrabajadorMes(w);
+      if(f.estado === 'pend' && !(r.faltan || r.porCargar)) return false;
+      if(f.estado === 'atras' && !r.atrasados) return false;
+    }
+    return true;
+  });
+}
+function statsMesHTML(){
+  let faltan = 0, porCargar = 0, atrasados = 0, porVencer = 0;
+  for(const w of state.trabajadores.filter(x => x.activo)){
+    const r = resumenTrabajadorMes(w);
+    faltan += r.faltan; porCargar += r.porCargar; atrasados += r.atrasados; porVencer += r.porVencer;
+  }
+  const ps = platsEmpresaVisibles();
+  for(const t of tiposMensuales('empresa')){
+    if(!docEmpresaMes(t.id)) faltan++;
+    for(const p of ps){
+      const e = estadoCarga(state.mes, p, !!cargaMes(null, t.id, p.id));
+      if(e.k !== 'ok') porCargar++;
+      if(e.k === 'atrasado') atrasados++;
+      if(e.k === 'porvencer') porVencer++;
+    }
+  }
+  const chip = (v, l, warn) => `<div class="stat-chip ${warn && v > 0 ? 'warn' : ''}"><div class="stat-value">${v}</div><div class="stat-label">${l}</div></div>`;
+  return chip(faltan, 'Documentos por recibir', true) +
+         chip(porCargar, 'Por cargar en plataformas', false) +
+         chip(atrasados, 'Con plazo vencido', true) +
+         chip(porVencer, 'Por vencer (≤ ' + AVISO_DIAS + ' días)', true);
+}
+
+function celdaMesHTML(w, t){
+  const doc = docMes(w.id, t.id);
+  const ed = state.puedeEscribir;
+  const ps = platsVisibles(w);
+  const chips = ps.length ? ps.map(p => chipCargaHTML(w.id, t.id, p)).join('') : '<span class="dias-label">Sin plataforma asignada</span>';
+  return `
+    <div class="mx-cell">
+      <div class="mx-doc">
+        ${doc ? '<span class="badge badge-ok">Recibido</span>' : '<span class="badge badge-bad">Falta</span>'}
+        ${doc && ed ? `<button type="button" class="mini-btn" onclick="verDocMes(${doc.id}, false)">Ver</button>` : ''}
+        ${ed ? `<button type="button" class="mini-btn" onclick="abrirSubirMes(${w.id}, ${t.id})">${doc ? 'Reemplazar' : 'Subir'}</button>` : ''}
+      </div>
+      <div class="mx-chips">${chips}</div>
+    </div>`;
+}
+function chipCargaHTML(trabId, tipoId, p){
+  const est = estadoCarga(state.mes, p, !!cargaMes(trabId, tipoId, p.id));
+  const ico = est.k === 'ok' ? '✓ ' : (est.k === 'atrasado' ? '! ' : '');
+  const clic = state.puedeEscribir ? `onclick="toggleCarga(${trabId === null ? 'null' : trabId}, ${tipoId}, ${p.id})"` : 'disabled';
+  return `<button type="button" class="pchip pchip-${est.k}" title="${escapeHTML(textoCarga(state.mes, p, est))}" ${clic}>${ico}${escapeHTML(p.nombre)}</button>`;
+}
+function matrizTrabajadoresHTML(){
+  const tipos = tiposMensuales('trabajador');
+  if(!tipos.length) return `<div class="empty-state">No hay documentos mensuales de trabajador. Créalos en Catálogos con frecuencia «Mensual».</div>`;
+  if(!state.trabajadores.some(w => w.activo)) return `<div class="empty-state">Aún no hay trabajadores activos.</div>`;
+  const lista = trabajadoresMes();
+  if(!lista.length) return `<div class="empty-state">Ningún trabajador coincide con los filtros.</div>`;
+  const cols = `grid-template-columns:minmax(190px,1.2fr) repeat(${tipos.length}, minmax(240px,2fr));`;
+  const head = `<div class="mx-row mx-head" style="${cols}"><div>Trabajador</div>${tipos.map(t => `<div>${escapeHTML(t.nombre)}</div>`).join('')}</div>`;
+  const filas = lista.map(w => {
+    const rol = rolNombre(w.rol_faena_id);
+    return `<div class="mx-row" style="${cols}"><div class="mx-name"><b>${escapeHTML(w.nombre)}</b><span class="rut-text">${escapeHTML(fmtRut(w.rut))}</span>${rol ? `<span class="dias-label">${escapeHTML(rol)}</span>` : ''}</div>${tipos.map(t => celdaMesHTML(w, t)).join('')}</div>`;
+  }).join('');
+  return `<div class="mx">${head}${filas}</div>`;
+}
+function matrizEmpresaHTML(){
+  const tipos = tiposMensuales('empresa');
+  if(!tipos.length) return `<div class="empty-state">No hay documentos de la empresa. Créalos en Catálogos con ámbito «Empresa» y frecuencia «Mensual».</div>`;
+  const ps = platsEmpresaVisibles();
+  const ed = state.puedeEscribir;
+  const cols = 'grid-template-columns:minmax(190px,1fr) minmax(170px,1fr) minmax(260px,3fr);';
+  const head = `<div class="mx-row mx-head" style="${cols}"><div>Documento de la empresa</div><div>Recibido</div><div>Cargado en cada plataforma</div></div>`;
+  const filas = tipos.map(t => {
+    const doc = docEmpresaMes(t.id);
+    const chips = ps.length ? ps.map(p => chipCargaHTML(null, t.id, p)).join('') : '<span class="dias-label">Aún no hay trabajadores asignados a plataformas.</span>';
+    return `<div class="mx-row" style="${cols}">
+      <div class="mx-name"><b>${escapeHTML(t.nombre)}</b></div>
+      <div class="mx-doc">${doc ? '<span class="badge badge-ok">Recibido</span>' : '<span class="badge badge-bad">Falta</span>'}
+        ${doc && ed ? `<button type="button" class="mini-btn" onclick="verDocMes(${doc.id}, true)">Ver</button>` : ''}
+        ${ed ? `<button type="button" class="mini-btn" onclick="abrirSubirMes(null, ${t.id})">${doc ? 'Reemplazar' : 'Subir'}</button>` : ''}</div>
+      <div class="mx-chips">${chips}</div></div>`;
+  }).join('');
+  return `<div class="mx">${head}${filas}</div>`;
+}
+function contenidoMesHTML(){
+  if(state.errorMes) return `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(state.errorMes)} <button type="button" class="link-btn" onclick="cargarMes()">Reintentar</button></div>`;
+  if(state.cargandoMes) return `<div class="empty-state">Cargando ${escapeHTML(fmtPeriodo(state.mes))}…</div>`;
+  return state.vistaMes === 'empresa' ? matrizEmpresaHTML() : matrizTrabajadoresHTML();
+}
+function actualizarMes(){
+  const c = document.getElementById('mes-container');
+  if(c) c.innerHTML = contenidoMesHTML();
+  const s = document.getElementById('stats-row');
+  if(s && state.tab === 'mensual') s.innerHTML = statsMesHTML();
+}
+async function cargarMes(){
+  const p = state.mes;
+  state.cargandoMes = true; state.errorMes = null; actualizarMes();
+  try{
+    const res = await withTimeout(Promise.all([
+      supabaseClient.from('documentos_vigentes').select('*').eq('periodo', p),
+      supabaseClient.from('cargas_plataforma').select('*').eq('periodo', p),
+      supabaseClient.from('documentos_empresa').select('*').eq('periodo', p).order('creado_en', { ascending: false })
+    ]), 15000);
+    for(const r of res){ if(r.error) throw new Error(r.error.message); }
+    if(state.mes !== p) return;              // cambiaron de mes mientras cargaba: la carga del mes nuevo se encarga
+    state.docsMes = res[0].data || []; state.cargas = res[1].data || []; state.docsEmpresa = res[2].data || [];
+  }catch(e){
+    if(state.mes !== p) return;
+    state.errorMes = 'No se pudo cargar el mes: ' + mensajeError(e);
+  }
+  state.cargandoMes = false;
+  actualizarMes();
+}
+function elegirMes(p){
+  if(!/^\d{4}-\d{2}-01$/.test(p || '')) return;
+  state.mes = p; state.docsMes = []; state.cargas = []; state.docsEmpresa = [];
+  render(); cargarMes();
+}
+function cambiarMes(delta){
+  const p = desplazarPeriodo(state.mes, delta);
+  if(p > periodoISO(new Date().getFullYear(), new Date().getMonth() + 1)) return;     // no más allá del mes actual
+  elegirMes(p);
+}
+function controlesMesHTML(){
+  const f = state.filtrosMes;
+  const ed = state.puedeEscribir;
+  return `
+    <div class="mes-nav">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="cambiarMes(-1)" aria-label="Mes anterior">‹</button>
+      <select onchange="elegirMes(this.value)" aria-label="Mes">${opcionesPeriodo(state.mes)}</select>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="cambiarMes(1)" aria-label="Mes siguiente">›</button>
+    </div>
+    <select onchange="state.vistaMes=this.value; actualizarMes();">
+      <option value="trabajadores" ${state.vistaMes === 'trabajadores' ? 'selected' : ''}>Documentos de trabajadores</option>
+      <option value="empresa" ${state.vistaMes === 'empresa' ? 'selected' : ''}>Documentos de la empresa</option>
+    </select>
+    <input type="text" placeholder="Buscar por nombre o RUT…" value="${escapeHTML(f.texto)}" oninput="state.filtrosMes.texto=this.value; actualizarMes();">
+    <select onchange="state.filtrosMes.plataforma=this.value; actualizarMes();">
+      <option value="">Todas las plataformas</option>
+      ${state.plataformas.map(p => `<option value="${p.id}" ${f.plataforma === String(p.id) ? 'selected' : ''}>${escapeHTML(p.nombre)}</option>`).join('')}
+    </select>
+    <select onchange="state.filtrosMes.estado=this.value; actualizarMes();">
+      <option value="">Todos</option>
+      <option value="pend" ${f.estado === 'pend' ? 'selected' : ''}>Con pendientes</option>
+      <option value="atras" ${f.estado === 'atras' ? 'selected' : ''}>Con plazo vencido</option>
+    </select>
+    <span class="spacer"></span>
+    ${ed ? `<button type="button" class="btn btn-ghost" onclick="abrirBloque()">Marcar en bloque</button><button type="button" class="btn btn-primary" onclick="abrirMasiva()">Subir varios archivos</button>` : ''}`;
+}
+
+/* --- Marcar «cargado en plataforma» --- */
+async function toggleCarga(trabId, tipoId, platId){
+  if(!state.puedeEscribir) return;
+  const clave = trabId + '|' + tipoId + '|' + platId;
+  if(state.ocupadoCarga[clave]) return;
+  state.ocupadoCarga[clave] = true;
+  const existe = cargaMes(trabId, tipoId, platId);
+  try{
+    if(existe){
+      const r = await withTimeout(supabaseClient.from('cargas_plataforma').delete().eq('id', existe.id).select('id'), 10000);
+      if(r.error) throw r.error;
+      if(!r.data || !r.data.length) throw new Error('No se aplicó el cambio (revisa tus permisos).');
+      state.cargas = state.cargas.filter(c => c.id !== existe.id);
+    }else{
+      const r = await withTimeout(supabaseClient.from('cargas_plataforma').insert({ trabajador_id: trabId, tipo_documento_id: tipoId, plataforma_id: platId, periodo: state.mes }).select('*').single(), 10000);
+      if(r.error) throw r.error;
+      state.cargas.push(r.data);
+    }
+  }catch(e){
+    aviso('No se pudo guardar el cambio: ' + mensajeError(e), 3600);
+    if(e && e.code === '23505') await cargarMes();
+  }
+  delete state.ocupadoCarga[clave];
+  actualizarMes();
+}
+
+/* --- Subir un documento de un mes (de un trabajador o de la empresa) --- */
+function validarArchivo(a){
+  if(!a) return 'Elige el archivo a subir.';
+  if(!TIPOS_ARCHIVO.includes(a.type)) return 'Formato no permitido. Sube un PDF o una imagen (JPG, PNG, WEBP).';
+  if(a.size > MAX_ARCHIVO_MB * 1024 * 1024) return 'El archivo pesa más de ' + MAX_ARCHIVO_MB + ' MB.';
+  if(a.size === 0) return 'El archivo está vacío.';
+  return null;
+}
+async function guardarDocMes(trabId, tipoId, periodo, archivo){
+  const path = (trabId ? String(trabId) : 'empresa') + '/' + uuidCorto() + '-' + nombreSeguro(archivo.name);
+  const up = await withTimeout(supabaseClient.storage.from(BUCKET).upload(path, archivo, { contentType: archivo.type, upsert: false }), 60000);
+  if(up.error) throw up.error;
+  const fila = { tipo_documento_id: tipoId, periodo, archivo_path: path, nombre_archivo: archivo.name };
+  const ins = trabId
+    ? await withTimeout(supabaseClient.from('documentos_trabajador').insert(Object.assign({ trabajador_id: trabId, fecha_vencimiento: null }, fila)), 12000)
+    : await withTimeout(supabaseClient.from('documentos_empresa').insert(fila), 12000);
+  if(ins.error){ ins.error.archivoSubido = true; throw ins.error; }
+}
+function abrirSubirMes(trabId, tipoId){ state.modalMes = { trabId, tipoId, subiendo: false, error: null }; render(); }
+function cerrarModalMes(){ if(state.modalMes && state.modalMes.subiendo) return; state.modalMes = null; render(); }
+function modalMesHTML(){
+  const m = state.modalMes;
+  const t = state.tipos.find(x => x.id === m.tipoId);
+  const w = m.trabId ? state.trabajadores.find(x => x.id === m.trabId) : null;
+  if(!t || (m.trabId && !w)) return '';
+  const existe = m.trabId ? docMes(m.trabId, m.tipoId) : docEmpresaMes(m.tipoId);
+  return `
+  <div class="modal-backdrop">
+    <div class="modal" style="max-width:520px;">
+      <button type="button" class="modal-close" onclick="cerrarModalMes()" aria-label="Cerrar">×</button>
+      <h2 class="modal-title">Subir ${escapeHTML(t.nombre)}</h2>
+      <div class="dias-label" style="margin-top:2px;">${w ? escapeHTML(w.nombre) + ' · ' + escapeHTML(fmtRut(w.rut)) : 'Documento de la empresa'} · ${escapeHTML(fmtPeriodo(state.mes))}</div>
+      ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-top:12px;">${escapeHTML(m.error)}</div>` : ''}
+      ${existe ? '<div class="dias-label" style="margin-top:12px;">Ya hay un archivo de este mes. El nuevo pasará a ser el vigente y el anterior queda en el historial (nada se borra).</div>' : ''}
+      <div class="form-field full" style="margin-top:14px;"><label>Archivo (PDF o imagen, máx. ${MAX_ARCHIVO_MB} MB)</label>
+        <input type="file" id="mes-archivo" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*" ${m.subiendo ? 'disabled' : ''}></div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-ghost" onclick="cerrarModalMes()" ${m.subiendo ? 'disabled' : ''}>Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="subirMes()" ${m.subiendo ? 'disabled' : ''}>${m.subiendo ? 'Subiendo…' : 'Subir'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+async function subirMes(){
+  const m = state.modalMes;
+  if(!m || m.subiendo || !state.puedeEscribir) return;
+  const input = document.getElementById('mes-archivo');
+  const archivo = input && input.files && input.files[0];
+  const err = validarArchivo(archivo);
+  if(err){ m.error = err; render(); return; }
+  m.subiendo = true; m.error = null; render();
+  try{
+    await guardarDocMes(m.trabId, m.tipoId, state.mes, archivo);
+    if(state.modalMes === m){ state.modalMes = null; render(); }
+    await cargarMes();
+    aviso('Documento subido.');
+  }catch(e){
+    if(state.modalMes !== m){ aviso('No se pudo subir el documento: ' + mensajeError(e), 3600); return; }
+    m.subiendo = false;
+    m.error = 'No se pudo subir: ' + mensajeError(e) + (e && e.archivoSubido ? ' (el archivo llegó pero no se registró; vuelve a intentarlo)' : '');
+    render();
+  }
+}
+async function abrirArchivo(path){
+  if(!state.puedeEscribir){ aviso('Solo los editores pueden abrir los archivos.'); return; }
+  const win = window.open('', '_blank');       // se abre antes de esperar para que el navegador no lo bloquee
+  try{
+    const r = await withTimeout(supabaseClient.storage.from(BUCKET).createSignedUrl(path, 120), 12000);
+    if(r.error) throw r.error;
+    const url = r.data && (r.data.signedUrl || r.data.signedURL);
+    if(!url) throw new Error('No se obtuvo el enlace del archivo.');
+    if(win) win.location.href = url; else window.location.href = url;
+  }catch(e){
+    if(win) win.close();
+    aviso('No se pudo abrir el documento: ' + mensajeError(e), 3600);
+  }
+}
+function verDocMes(id, esEmpresa){
+  const doc = (esEmpresa ? state.docsEmpresa : state.docsMes).find(x => x.id === id);
+  if(!doc){ aviso('No se encontró el documento.'); return; }
+  abrirArchivo(doc.archivo_path);
+}
+
+/* --- Marcar en bloque --- */
+function abrirBloque(){
+  const tipos = {};
+  tiposMensuales('trabajador').concat(tiposMensuales('empresa')).forEach(t => { tipos[t.id] = true; });
+  state.modalBloque = { plataformaId: state.filtrosMes.plataforma || '', tipos, paso: 1, saving: false, error: null };
+  render();
+}
+function cerrarBloque(){ if(state.modalBloque && state.modalBloque.saving) return; state.modalBloque = null; render(); }
+function calcularBloque(){
+  const b = state.modalBloque, filas = [];
+  if(!b || !b.plataformaId) return filas;
+  const platId = Number(b.plataformaId);
+  const trabs = trabajadoresMes().filter(w => state.tp.some(x => x.trabajador_id === w.id && x.plataforma_id === platId && x.activo));
+  for(const t of tiposMensuales('trabajador')){
+    if(!b.tipos[t.id]) continue;
+    for(const w of trabs){
+      if(cargaMes(w.id, t.id, platId)) continue;
+      filas.push({ trabajador_id: w.id, tipo_documento_id: t.id, plataforma_id: platId, periodo: state.mes });
+    }
+  }
+  for(const t of tiposMensuales('empresa')){
+    if(!b.tipos[t.id] || cargaMes(null, t.id, platId)) continue;
+    filas.push({ trabajador_id: null, tipo_documento_id: t.id, plataforma_id: platId, periodo: state.mes });
+  }
+  return filas;
+}
+function modalBloqueHTML(){
+  const b = state.modalBloque;
+  const plat = state.plataformas.find(p => String(p.id) === String(b.plataformaId));
+  const filas = calcularBloque();
+  const tiposT = tiposMensuales('trabajador'), tiposE = tiposMensuales('empresa');
+  const check = t => `<label class="check-row"><input type="checkbox" ${b.tipos[t.id] ? 'checked' : ''} onchange="state.modalBloque.tipos[${t.id}]=this.checked; state.modalBloque.paso=1; render();"> ${escapeHTML(t.nombre)}</label>`;
+  return `
+  <div class="modal-backdrop">
+    <div class="modal" style="max-width:560px;">
+      <button type="button" class="modal-close" onclick="cerrarBloque()" aria-label="Cerrar">×</button>
+      <h2 class="modal-title">Marcar en bloque como «cargado»</h2>
+      <div class="dias-label" style="margin-top:2px;">${escapeHTML(fmtPeriodo(state.mes))} · para cuando subiste todo un lote a una plataforma</div>
+      ${b.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-top:12px;">${escapeHTML(b.error)}</div>` : ''}
+      <div class="form-grid" style="margin-top:14px;">
+        <div class="form-field full"><label>Plataforma</label>
+          <select onchange="state.modalBloque.plataformaId=this.value; state.modalBloque.paso=1; render();"><option value="">— Elige —</option>${state.plataformas.map(p => `<option value="${p.id}" ${String(p.id) === String(b.plataformaId) ? 'selected' : ''}>${escapeHTML(p.nombre)}</option>`).join('')}</select></div>
+        <div class="form-field full"><label>Documentos</label><div class="checks-box">${tiposT.map(check).join('')}${tiposE.map(t => check(t).replace('</label>', ' <span class="dias-label">(empresa)</span></label>')).join('')}</div></div>
+      </div>
+      <div class="dias-label" style="margin-top:10px;">Solo se incluyen los trabajadores activos de esa plataforma que hoy ves en la lista (respeta los filtros de arriba). Lo que ya estaba marcado no se toca.</div>
+      <div class="estado-box">
+        ${!plat ? 'Elige una plataforma.' : (filas.length === 0 ? 'No hay nada pendiente que marcar con esta selección.' : (b.paso === 1
+          ? `Se marcarán <b>${pl(filas.length, 'documento', 'documentos')}</b> como cargados en <b>${escapeHTML(plat.nombre)}</b>.
+             <div style="margin-top:10px;"><button type="button" class="btn btn-primary btn-sm" onclick="state.modalBloque.paso=2; render();">Continuar…</button></div>`
+          : `<b>¿Confirmas?</b> Marcarás ${pl(filas.length, 'documento', 'documentos')} como cargados en ${escapeHTML(plat.nombre)}. Después puedes desmarcar uno por uno.
+             <div style="margin-top:10px;display:flex;gap:10px;">
+               <button type="button" class="btn btn-primary btn-sm" onclick="confirmarBloque()" ${b.saving ? 'disabled' : ''}>${b.saving ? 'Marcando…' : 'Sí, marcar'}</button>
+               <button type="button" class="btn btn-ghost btn-sm" onclick="state.modalBloque.paso=1; render();" ${b.saving ? 'disabled' : ''}>Volver</button>
+             </div>`))}
+      </div>
+    </div>
+  </div>`;
+}
+async function confirmarBloque(){
+  const b = state.modalBloque;
+  if(!b || b.saving) return;
+  const filas = calcularBloque();
+  if(!filas.length) return;
+  b.saving = true; b.error = null; render();
+  try{
+    for(let i = 0; i < filas.length; i += 200){
+      const r = await withTimeout(supabaseClient.from('cargas_plataforma').insert(filas.slice(i, i + 200)), 20000);
+      if(r.error) throw r.error;
+    }
+    state.modalBloque = null; render();
+    await cargarMes();
+    aviso(pl(filas.length, 'documento marcado', 'documentos marcados') + ' como cargados.');
+  }catch(e){
+    b.saving = false; b.paso = 1;
+    b.error = 'No se pudo marcar: ' + mensajeError(e);
+    render();
+    cargarMes();       // por si una parte alcanzó a guardarse
+  }
+}
+
+/* --- Subir varios archivos: se emparejan por nombre y mes, y se revisa antes de subir --- */
+const PALABRAS_NO_NOMBRE = new Set(['liquidacion', 'liquidaciones', 'sueldo', 'sueldos', 'remuneracion', 'remuneraciones', 'cotizacion', 'cotizaciones', 'previsional', 'previsionales', 'previred', 'transferencia', 'transferencias', 'comprobante', 'pago', 'pagos', 'nomina', 'de', 'del', 'la', 'el', 'y', 'mes', 'ano', 'copia', 'pdf', 'jpg', 'jpeg', 'png', 'webp']);
+function normTxt(s){ return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+function tokensTexto(s){ return normTxt(s).replace(/\.[a-z0-9]{2,4}$/, '').split(/[^a-z0-9]+/).filter(Boolean); }
+function periodoDeNombre(nombre, anioPorDefecto){
+  const base = normTxt(nombre);
+  let m = /(?:^|[^0-9])(\d{1,2})[-_. ](20\d{2})(?:[^0-9]|$)/.exec(base);
+  if(m && Number(m[1]) >= 1 && Number(m[1]) <= 12) return periodoISO(Number(m[2]), Number(m[1]));
+  m = /(?:^|[^0-9])(20\d{2})[-_. ](\d{1,2})(?:[^0-9]|$)/.exec(base);
+  if(m && Number(m[2]) >= 1 && Number(m[2]) <= 12) return periodoISO(Number(m[1]), Number(m[2]));
+  const toks = tokensTexto(nombre);
+  const mes = toks.find(t => MESES.includes(t));
+  if(mes){
+    const y = toks.find(t => /^20\d{2}$/.test(t));
+    return periodoISO(y ? Number(y) : anioPorDefecto, MESES.indexOf(mes) + 1);
+  }
+  return null;
+}
+function tipoDeNombre(toks){
+  const tipos = tiposMensuales('trabajador');
+  if(toks.some(t => /^liquidaci/.test(t) || t === 'sueldo' || t === 'sueldos')) return tipos.find(t => normTxt(t.nombre).includes('liquid')) || null;
+  if(toks.some(t => /^cotizaci/.test(t) || t === 'previred')) return tipos.find(t => normTxt(t.nombre).includes('cotiz')) || null;
+  return null;
+}
+// Trabajadores activos cuyo nombre contiene TODAS las palabras de nombre del archivo (en cualquier orden). Si hay uno idéntico, gana.
+function candidatosPorNombre(palabras){
+  if(palabras.length < 2) return [];
+  const res = [];
+  for(const w of state.trabajadores){
+    if(!w.activo) continue;
+    const tw = new Set(tokensTexto(w.nombre));
+    if(palabras.every(p => tw.has(p))) res.push({ w, exacto: tw.size === palabras.length });
+  }
+  const exactos = res.filter(r => r.exacto);
+  return (exactos.length ? exactos : res).map(r => r.w.id);
+}
+function analizarNombreArchivo(file, m){
+  const toks = tokensTexto(file.name);
+  const palabras = toks.filter(t => !PALABRAS_NO_NOMBRE.has(t) && !MESES.includes(t) && !/^\d+$/.test(t) && t.length >= 2);
+  const cand = candidatosPorNombre(palabras);
+  const tipo = tipoDeNombre(toks);
+  const per = periodoDeNombre(file.name, Number(m.periodo.slice(0, 4)));
+  return {
+    file, errorArchivo: validarArchivo(file),
+    cand, trabId: cand.length === 1 ? cand[0] : null,
+    tipoId: tipo ? tipo.id : (m.tipoId ? Number(m.tipoId) : null), fijoTipo: !!tipo,
+    periodo: per || m.periodo, fijoPeriodo: !!per,
+    res: null, msg: ''
+  };
+}
+function estadoItemMasiva(it){
+  if(it.res) return it.res;                       // subiendo | subido | error
+  if(it.errorArchivo) return 'archivo';
+  if(!it.trabId) return it.cand.length > 1 ? 'ambiguo' : 'sin';
+  if(!it.tipoId) return 'sintipo';
+  return 'listo';
+}
+function abrirMasiva(){
+  const t = tiposMensuales('trabajador');
+  state.modalMasiva = { items: [], tipoId: t.length ? String(t[0].id) : '', periodo: state.mes, subiendo: false, hecho: false, error: null };
+  render();
+}
+function cerrarMasiva(){
+  const m = state.modalMasiva;
+  if(m && m.subiendo) return;
+  const hizo = m && m.hecho;
+  state.modalMasiva = null; render();
+  if(hizo) cargarMes();
+}
+function analizarMasiva(){
+  const m = state.modalMasiva;
+  const input = document.getElementById('masiva-files');
+  if(!m || !input || !input.files) return;
+  const nuevos = Array.from(input.files).map(f => analizarNombreArchivo(f, m));
+  m.items = m.items.concat(nuevos); m.hecho = false; render();
+}
+function cambiarDefectoMasiva(campo, v){
+  const m = state.modalMasiva; if(!m) return;
+  m[campo] = v;
+  for(const it of m.items){
+    if(it.res) continue;
+    if(campo === 'tipoId' && !it.fijoTipo) it.tipoId = v ? Number(v) : null;
+    if(campo === 'periodo' && !it.fijoPeriodo) it.periodo = v;
+  }
+  render();
+}
+function cambiarItemMasiva(i, campo, v){
+  const it = state.modalMasiva.items[i]; if(!it) return;
+  if(campo === 'trabId') it.trabId = v ? Number(v) : null;
+  if(campo === 'tipoId'){ it.tipoId = v ? Number(v) : null; it.fijoTipo = true; }
+  if(campo === 'periodo'){ it.periodo = v; it.fijoPeriodo = true; }
+  render();
+}
+function quitarItemMasiva(i){
+  const m = state.modalMasiva; if(!m || m.subiendo) return;
+  m.items.splice(i, 1); render();
+}
+const ETIQ_ITEM = { listo: ['Listo', 'badge-ok'], sin: ['Sin asignar', 'badge-bad'], ambiguo: ['Varios posibles', 'badge-warn'], sintipo: ['Falta el tipo', 'badge-warn'], archivo: ['Archivo no válido', 'badge-bad'], subiendo: ['Subiendo…', 'badge-off'], subido: ['Subido', 'badge-ok'], error: ['Error', 'badge-bad'] };
+function modalMasivaHTML(){
+  const m = state.modalMasiva;
+  const tipos = tiposMensuales('trabajador');
+  const activos = state.trabajadores.filter(w => w.activo).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const opcTrab = sel => `<option value="">— Elegir trabajador —</option>` + activos.map(w => `<option value="${w.id}" ${sel === w.id ? 'selected' : ''}>${escapeHTML(w.nombre)}</option>`).join('');
+  const opcTipo = sel => `<option value="">— Tipo —</option>` + tipos.map(t => `<option value="${t.id}" ${sel === t.id ? 'selected' : ''}>${escapeHTML(t.nombre)}</option>`).join('');
+  const listos = m.items.filter(it => ['listo', 'error'].includes(estadoItemMasiva(it))).length;    // los que fallaron se pueden reintentar
+  const pendientes = m.items.filter(it => ['sin', 'ambiguo', 'sintipo', 'archivo'].includes(estadoItemMasiva(it))).length;
+  const filas = m.items.map((it, i) => {
+    const e = estadoItemMasiva(it);
+    const bloqueada = m.subiendo || it.res === 'subido';
+    return `
+    <div class="ms-row">
+      <div class="ms-file" title="${escapeHTML(it.file.name)}">${escapeHTML(it.file.name)}${it.errorArchivo ? `<div class="dias-label" style="color:var(--st-atrasado);">${escapeHTML(it.errorArchivo)}</div>` : ''}${it.msg ? `<div class="dias-label" style="color:var(--st-atrasado);">${escapeHTML(it.msg)}</div>` : ''}</div>
+      <select ${bloqueada ? 'disabled' : ''} onchange="cambiarItemMasiva(${i}, 'trabId', this.value)">${opcTrab(it.trabId)}</select>
+      <select ${bloqueada ? 'disabled' : ''} onchange="cambiarItemMasiva(${i}, 'tipoId', this.value)">${opcTipo(it.tipoId)}</select>
+      <select ${bloqueada ? 'disabled' : ''} onchange="cambiarItemMasiva(${i}, 'periodo', this.value)">${opcionesPeriodo(it.periodo)}</select>
+      <div class="ms-estado"><span class="badge ${ETIQ_ITEM[e][1]}">${ETIQ_ITEM[e][0]}</span>${m.subiendo || it.res === 'subido' ? '' : `<button type="button" class="chip-btn" title="Quitar de la lista" aria-label="Quitar de la lista" onclick="quitarItemMasiva(${i})">×</button>`}</div>
+    </div>`;
+  }).join('');
+  return `
+  <div class="modal-backdrop">
+    <div class="modal" style="max-width:980px;">
+      ${m.subiendo ? '' : `<button type="button" class="modal-close" onclick="cerrarMasiva()" aria-label="Cerrar">×</button>`}
+      <h2 class="modal-title">Subir varios archivos</h2>
+      <div class="dias-label" style="margin-top:2px;">Elige los archivos ya renombrados (nombre del trabajador + mes). El sistema los empareja y tú revisas antes de subir. Nada se sube hasta que confirmes.</div>
+      ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);margin-top:12px;">${escapeHTML(m.error)}</div>` : ''}
+      <div class="estado-box" style="margin-top:14px;">
+        <div class="form-grid">
+          <div class="form-field"><label>Tipo por defecto (si el nombre no lo dice)</label><select ${m.subiendo ? 'disabled' : ''} onchange="cambiarDefectoMasiva('tipoId', this.value)">${tipos.map(t => `<option value="${t.id}" ${String(t.id) === String(m.tipoId) ? 'selected' : ''}>${escapeHTML(t.nombre)}</option>`).join('')}</select></div>
+          <div class="form-field"><label>Mes por defecto (si el nombre no lo dice)</label><select ${m.subiendo ? 'disabled' : ''} onchange="cambiarDefectoMasiva('periodo', this.value)">${opcionesPeriodo(m.periodo)}</select></div>
+          <div class="form-field full"><label>Archivos (puedes elegir muchos a la vez, y agregar más después)</label><input type="file" id="masiva-files" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*" ${m.subiendo ? 'disabled' : ''} onchange="analizarMasiva()"></div>
+        </div>
+      </div>
+      ${m.items.length ? `
+      <div class="ms-head ms-row"><div>Archivo</div><div>Trabajador</div><div>Documento</div><div>Mes</div><div>Estado</div></div>
+      <div class="ms-list">${filas}</div>
+      <div class="dias-label" style="margin-top:10px;">${pl(listos, 'archivo listo', 'archivos listos')} para subir${pendientes ? ` · ${pl(pendientes, 'sin asignar o con datos por completar', 'sin asignar o con datos por completar')}: asígnalos con los selectores. Los que no subas aquí siguen en tu computador, no se pierde nada.` : '.'}</div>` : ''}
+      <div class="form-actions">
+        <button type="button" class="btn btn-ghost" onclick="cerrarMasiva()" ${m.subiendo ? 'disabled' : ''}>${m.hecho ? 'Cerrar' : 'Cancelar'}</button>
+        <button type="button" class="btn btn-primary" onclick="subirMasiva()" ${m.subiendo || !listos ? 'disabled' : ''}>${m.subiendo ? 'Subiendo…' : (listos ? 'Subir ' + pl(listos, 'archivo', 'archivos') : 'Subir')}</button>
+      </div>
+    </div>
+  </div>`;
+}
+async function subirMasiva(){
+  const m = state.modalMasiva;
+  if(!m || m.subiendo || !state.puedeEscribir) return;
+  m.items.forEach(it => { if(it.res === 'error') it.res = null; });
+  const lista = m.items.filter(it => estadoItemMasiva(it) === 'listo');
+  if(!lista.length) return;
+  m.subiendo = true; m.error = null; render();
+  let fallos = 0;
+  for(const it of lista){
+    it.res = 'subiendo'; it.msg = '';
+    render();
+    try{
+      await guardarDocMes(it.trabId, it.tipoId, it.periodo, it.file);
+      it.res = 'subido';
+    }catch(e){
+      it.res = 'error'; fallos++;
+      it.msg = mensajeError(e) + (e && e.archivoSubido ? ' (el archivo llegó pero no se registró)' : '');
+    }
+  }
+  m.subiendo = false; m.hecho = true;
+  if(fallos) m.error = pl(fallos, 'archivo no se pudo subir', 'archivos no se pudieron subir') + ': revisa el detalle en cada fila. Los demás sí quedaron guardados.';
+  render();
+  await cargarMes();
+  aviso(fallos ? 'Subida terminada con errores.' : 'Archivos subidos.', 3600);
+}
+
+/* ============================================================
    CATÁLOGOS
    ============================================================ */
 async function agregarRol(){
@@ -817,16 +1482,19 @@ async function agregarRol(){
 }
 async function agregarTipo(){
   const nombre = val('nuevo-tipo').trim().replace(/\s+/g, ' ');
-  const vence = !!(document.getElementById('nuevo-tipo-vence') || {}).checked;
+  const frecuencia = val('nuevo-tipo-frec') || 'unica';
+  const ambito = val('nuevo-tipo-ambito') || 'trabajador';
   if(!nombre){ aviso('Escribe el nombre del documento.'); return; }
-  const r = await supabaseClient.from('tipos_documento').insert({ nombre, vence });
+  const r = await supabaseClient.from('tipos_documento').insert({ nombre, frecuencia, ambito, vence: frecuencia === 'vence' });
   if(r.error){ aviso('No se pudo agregar: ' + mensajeError(r.error), 3600); return; }
   await recargar(); aviso('Tipo de documento agregado.');
 }
 async function agregarPlataforma(){
   const nombre = val('nueva-plataforma').trim().replace(/\s+/g, ' ');
+  const plazo = parseInt(val('nueva-plataforma-plazo'), 10);
   if(!nombre){ aviso('Escribe el nombre de la plataforma.'); return; }
-  const r = await supabaseClient.from('plataformas_destino').insert({ nombre });
+  if(!(plazo >= 1 && plazo <= 31)){ aviso('El día de plazo debe estar entre 1 y 31.'); return; }
+  const r = await supabaseClient.from('plataformas_destino').insert({ nombre, plazo_dia: plazo });
   if(r.error){ aviso('No se pudo agregar: ' + mensajeError(r.error), 3600); return; }
   await recargar(); aviso('Plataforma agregada.');
 }
@@ -884,11 +1552,23 @@ function modalCatHTML(){
   if(!item) return '';
   const d = m.draft || null;
   const uso = usoCat(m.tabla, m.id);
+  const frecSel = d ? d.frecuencia : item.frecuencia, ambSel = d ? d.ambito : item.ambito;
   const venceHTML = m.tabla === 'tipos' ? `
+      <div class="form-field">
+        <label>Frecuencia</label>
+        <select id="cat-frec">${['unica', 'mensual', 'vence'].map(k => `<option value="${k}" ${frecSel === k ? 'selected' : ''}>${({ unica: 'Se sube una sola vez', mensual: 'Se sube todos los meses', vence: 'Tiene fecha de vencimiento' })[k]}</option>`).join('')}</select>
+      </div>
+      <div class="form-field">
+        <label>De quién es</label>
+        <select id="cat-ambito"><option value="trabajador" ${ambSel === 'trabajador' ? 'selected' : ''}>De cada trabajador</option><option value="empresa" ${ambSel === 'empresa' ? 'selected' : ''}>De la empresa</option></select>
+      </div>
+      <div class="form-field full"><span class="dias-label">Cambiarlo afecta cómo se controla este documento. Los ya cargados se conservan.</span></div>` :
+    (m.tabla === 'plataformas' ? `
       <div class="form-field full">
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);"><input type="checkbox" id="cat-vence" ${(d ? d.vence : item.vence) ? 'checked' : ''}> Tiene fecha de vencimiento</label>
-        <span class="dias-label">Cambiarlo afecta cómo se calculan los estados de este documento.</span>
-      </div>` : '';
+        <label>Día límite de carga (del mes siguiente)</label>
+        <input type="number" id="cat-plazo" min="1" max="31" value="${escapeHTML(d ? d.plazo : item.plazo_dia)}">
+        <span class="dias-label">Ej.: 16 significa que lo de septiembre debe estar cargado el 16 de octubre.</span>
+      </div>` : '');
   const eliminarHTML = uso.bloquea ? '' : `
       <div id="del-paso1" style="margin-top:10px;"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('del-paso1').style.display='none';document.getElementById('del-paso2').style.display='block';">Eliminar ${escapeHTML(c.singular)}…</button></div>
       <div id="del-paso2" style="display:none;margin-top:10px;">
@@ -925,11 +1605,17 @@ async function guardarCat(){
   if(state.saving) return;
   const m = state.modalCat, c = CAT[m.tabla];
   const nombre = val('cat-nombre').trim().replace(/\s+/g, ' ');
-  const vence = m.tabla === 'tipos' ? !!(document.getElementById('cat-vence') || {}).checked : undefined;
-  m.draft = { nombre: val('cat-nombre'), vence };
+  m.draft = { nombre: val('cat-nombre'), frecuencia: val('cat-frec'), ambito: val('cat-ambito'), plazo: val('cat-plazo') };
   if(!nombre){ state.modalCatError = 'Escribe un nombre.'; render(); return; }
   const cambios = { nombre };
-  if(m.tabla === 'tipos') cambios.vence = vence;
+  if(m.tabla === 'tipos'){
+    cambios.frecuencia = m.draft.frecuencia; cambios.ambito = m.draft.ambito; cambios.vence = m.draft.frecuencia === 'vence';
+  }
+  if(m.tabla === 'plataformas'){
+    const plazo = parseInt(m.draft.plazo, 10);
+    if(!(plazo >= 1 && plazo <= 31)){ state.modalCatError = 'El día límite debe estar entre 1 y 31.'; render(); return; }
+    cambios.plazo_dia = plazo;
+  }
   state.saving = true; state.modalCatError = null; render();
   try{
     const r = await withTimeout(supabaseClient.from(c.tabla).update(cambios).eq('id', m.id).select('id'), 10000);
@@ -987,24 +1673,24 @@ function catalogosHTML(){
 
   <div class="section-card">
     <h3>Tipos de documento</h3>
-    <p class="hint">«Vence» significa que el documento tiene fecha de vencimiento y generará alertas. Los que no vencen (liquidaciones, cotizaciones) solo se controlan por mes de emisión.</p>
-    ${ed ? `<div class="inline-add"><input type="text" id="nuevo-tipo" placeholder="Nuevo tipo de documento" onkeydown="if(event.key==='Enter') agregarTipo()"><label style="display:flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" id="nuevo-tipo-vence" checked> Vence</label><button type="button" class="btn btn-primary btn-sm" onclick="agregarTipo()">Agregar</button></div>` : ''}
-    <div class="chip-list">${state.tipos.length ? state.tipos.map(t => `<span class="chip">${escapeHTML(t.nombre)} <span class="badge ${t.vence ? 'badge-warn' : 'badge-off'}">${t.vence ? 'Vence' : 'No vence'}</span>${chipBtn('tipos', t.id)}</span>`).join('') : '<span class="dias-label">Aún no hay tipos.</span>'}</div>
+    <p class="hint">Cada documento se sube <b>una sola vez</b> (ej.: contrato), <b>todos los meses</b> (ej.: liquidación; se controla en «Control mensual») o <b>tiene fecha de vencimiento</b> (genera alertas). También puede ser <b>de la empresa</b> (ej.: IVA, F-30) en vez de un trabajador.</p>
+    ${ed ? `<div class="inline-add"><input type="text" id="nuevo-tipo" placeholder="Nuevo tipo de documento" onkeydown="if(event.key==='Enter') agregarTipo()"><select id="nuevo-tipo-frec"><option value="unica">Una sola vez</option><option value="mensual">Todos los meses</option><option value="vence">Con fecha de vencimiento</option></select><select id="nuevo-tipo-ambito"><option value="trabajador">De cada trabajador</option><option value="empresa">De la empresa</option></select><button type="button" class="btn btn-primary btn-sm" onclick="agregarTipo()">Agregar</button></div>` : ''}
+    <div class="chip-list">${state.tipos.length ? state.tipos.map(t => `<span class="chip">${escapeHTML(t.nombre)} <span class="badge ${t.frecuencia === 'vence' ? 'badge-warn' : (t.frecuencia === 'mensual' ? 'badge-plat' : 'badge-off')}">${escapeHTML(ETIQ_FREC[t.frecuencia] || '')}</span>${t.ambito === 'empresa' ? ' <span class="badge badge-ok">Empresa</span>' : ''}${chipBtn('tipos', t.id)}</span>`).join('') : '<span class="dias-label">Aún no hay tipos.</span>'}</div>
   </div>
 
   <div class="section-card">
     <h3>Plataformas de destino</h3>
-    <p class="hint">Las empresas o instalaciones donde los trabajadores prestan servicio (ej.: Mowi, MultiX). Un trabajador puede estar en varias a la vez.</p>
-    ${ed ? `<div class="inline-add"><input type="text" id="nueva-plataforma" placeholder="Nueva plataforma" onkeydown="if(event.key==='Enter') agregarPlataforma()"><button type="button" class="btn btn-primary btn-sm" onclick="agregarPlataforma()">Agregar</button></div>` : ''}
-    <div class="chip-list">${state.plataformas.length ? state.plataformas.map(p => `<span class="chip">${escapeHTML(p.nombre)}${chipBtn('plataformas', p.id)}</span>`).join('') : '<span class="dias-label">Aún no hay plataformas.</span>'}</div>
+    <p class="hint">Las plataformas o empresas donde se cargan los documentos de los trabajadores (ej.: Mowi, MultiX, Cooke en Pronexo). Un trabajador puede estar en varias a la vez. El <b>día límite</b> es el día del mes siguiente hasta el que se puede cargar lo del mes anterior.</p>
+    ${ed ? `<div class="inline-add"><input type="text" id="nueva-plataforma" placeholder="Nueva plataforma" onkeydown="if(event.key==='Enter') agregarPlataforma()"><input type="number" id="nueva-plataforma-plazo" min="1" max="31" value="20" style="width:80px;font-size:13.5px;padding:8px 10px;border:1px solid var(--border);border-radius:4px;" aria-label="Día límite de carga" title="Día límite de carga"><button type="button" class="btn btn-primary btn-sm" onclick="agregarPlataforma()">Agregar</button></div>` : ''}
+    <div class="chip-list">${state.plataformas.length ? state.plataformas.map(p => `<span class="chip">${escapeHTML(p.nombre)} <span class="dias-label">día ${p.plazo_dia}</span>${chipBtn('plataformas', p.id)}</span>`).join('') : '<span class="dias-label">Aún no hay plataformas.</span>'}</div>
   </div>
 
   <div class="section-card">
     <h3>Documentos que exige cada rol</h3>
-    <p class="hint">Elige un rol y marca los documentos obligatorios. Con esto se calcula si un trabajador está «incompleto», «vencido» o «por vencer».</p>
+    <p class="hint">Elige un rol y marca los documentos obligatorios de ingreso o con vencimiento. Con esto se calcula si un trabajador está «incompleto», «vencido» o «por vencer». Los documentos mensuales no van aquí: se controlan en «Control mensual».</p>
     ${state.roles.length === 0 ? '<span class="dias-label">Crea al menos un rol para definir sus documentos requeridos.</span>' : `
       <div class="inline-add"><select onchange="elegirRolReq(this.value)">${state.roles.map(r => `<option value="${r.id}" ${r.id === state.reqRolId ? 'selected' : ''}>${escapeHTML(r.nombre)}</option>`).join('')}</select></div>
-      ${(rolSel && state.tipos.length) ? `<div class="checks-box">${state.tipos.map(t => {
+      ${(rolSel && state.tipos.length) ? `<div class="checks-box">${state.tipos.filter(t => t.ambito === 'trabajador' && t.frecuencia !== 'mensual').map(t => {
         const marcado = state.requeridos.some(x => x.rol_faena_id === rolSel.id && x.tipo_documento_id === t.id);
         return `<label class="check-row"><input type="checkbox" ${marcado ? 'checked' : ''} ${ed ? '' : 'disabled'} onchange="toggleRequisito(${rolSel.id}, ${t.id}, this.checked)"> ${escapeHTML(t.nombre)}</label>`;
       }).join('')}</div>` : '<span class="dias-label">Crea tipos de documento para poder marcarlos.</span>'}
@@ -1024,13 +1710,17 @@ function sinAccesoHTML(){
     <button type="button" class="link-btn" onclick="handleLogout()">Cerrar sesión</button>
   </div>`;
 }
-function setTab(t){ state.tab = t; render(); }
+function setTab(t){
+  state.tab = t; render();
+  if(t === 'mensual') cargarMes();
+}
 function toggleMenu(){ state.showAccountMenu = !state.showAccountMenu; render(); }
 
 function mainHTML(){
   const esTrab = state.tab === 'trabajadores';
+  const esMes = state.tab === 'mensual';
   const f = state.filtros;
-  const controles = esTrab ? `
+  const controles = esMes ? controlesMesHTML() : esTrab ? `
     <input type="text" placeholder="Buscar por nombre o RUT…" value="${escapeHTML(f.texto)}" oninput="state.filtros.texto=this.value; actualizarLista();">
     <select onchange="state.filtros.estado=this.value; actualizarLista();">
       <option value="activos" ${f.estado === 'activos' ? 'selected' : ''}>Activos</option>
@@ -1072,22 +1762,26 @@ function mainHTML(){
               </div>` : ''}
           </div>
         </div>
-        <div class="stats-row">${statsHTML()}</div>
+        <div class="stats-row" id="stats-row">${esMes ? statsMesHTML() : statsHTML()}</div>
       </div>
       <div class="tabs-row">
         <button type="button" class="tab-item ${esTrab ? 'active' : ''}" onclick="setTab('trabajadores')">Trabajadores</button>
-        <button type="button" class="tab-item ${!esTrab ? 'active' : ''}" onclick="setTab('catalogos')">Catálogos</button>
+        <button type="button" class="tab-item ${esMes ? 'active' : ''}" onclick="setTab('mensual')">Control mensual</button>
+        <button type="button" class="tab-item ${state.tab === 'catalogos' ? 'active' : ''}" onclick="setTab('catalogos')">Catálogos</button>
       </div>
     </div>
-    ${esTrab ? `<div class="controls"><div class="controls-inner">${controles}</div></div>` : ''}
+    ${(esTrab || esMes) ? `<div class="controls"><div class="controls-inner">${controles}</div></div>` : ''}
     <div class="main">
       ${state.loadError ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(state.loadError)} <button type="button" class="link-btn" onclick="arrancar()">Reintentar</button></div>` : ''}
       ${!state.puedeEscribir ? `<div class="info-banner">Tienes acceso de solo lectura en esta área. Para modificar datos, pide el permiso de editor.</div>` : ''}
-      ${esTrab ? `<div id="list-container">${listaTrabajadoresHTML()}</div>` : catalogosHTML()}
+      ${esMes ? `<div id="mes-container">${contenidoMesHTML()}</div>` : (esTrab ? `<div id="list-container">${listaTrabajadoresHTML()}</div>` : catalogosHTML())}
     </div>
     ${state.modal ? modalTrabajadorHTML() : ''}
     ${state.modalCat ? modalCatHTML() : ''}
-    ${state.modalDocs ? modalDocsHTML() : ''}`;
+    ${state.modalDocs ? modalDocsHTML() : ''}
+    ${state.modalMes ? modalMesHTML() : ''}
+    ${state.modalBloque ? modalBloqueHTML() : ''}
+    ${state.modalMasiva ? modalMasivaHTML() : ''}`;
 }
 function render(){
   const app = document.getElementById('app');
