@@ -484,7 +484,7 @@ function estadoDoc(tipo, doc){
   if(d <= DIAS_POR_VENCER) return { k: 'porvencer', dias: d };
   return { k: 'ok', dias: d };
 }
-// Estado del trabajador según los documentos que exige su rol.
+// Estado del trabajador según los documentos obligatorios (no depende del rol).
 // Prioridad: vencido > incompleto > por vencer > al día.
 // Todo tipo de documento del trabajador que no sea mensual es obligatorio (los mensuales se controlan por mes).
 function tiposObligatorios(){
@@ -1252,7 +1252,7 @@ function verDocMes(id, esEmpresa){
 }
 
 
-/* --- Exportar documentos del mes (ZIP, una carpeta por trabajador) --- */
+/* --- Exportar documentos del mes (ZIP, una carpeta por tipo de documento mensual, sin subcarpetas por trabajador) --- */
 function nombreCarpeta(n){ return String(n || 'Sin nombre').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim(); }
 function nombreCortoTipo(t){
   const n = normTxt(t.nombre);
@@ -1654,9 +1654,8 @@ function usoCat(tabla, id){
   if(tabla === 'roles'){
     const ws = state.trabajadores.filter(w => w.rol_faena_id === id);
     const act = ws.filter(w => w.activo).length;
-    const req = state.requeridos.filter(x => x.rol_faena_id === id).length;
     if(ws.length) return { bloquea: true, detalle: `${pl(ws.length, 'trabajador tiene', 'trabajadores tienen')} este rol (${pl(act, 'activo', 'activos')}). Para eliminarlo, primero reasígnalos a otro rol. Mientras tanto puedes cambiarle el nombre.` };
-    return { bloquea: false, detalle: req ? `Ningún trabajador lo tiene. Al eliminarlo se quitan sus ${pl(req, 'documento requerido', 'documentos requeridos')}.` : 'Ningún trabajador tiene este rol.' };
+    return { bloquea: false, detalle: 'Ningún trabajador tiene este rol.' };
   }
   if(tabla === 'plataformas'){
     const rows = state.tp.filter(x => x.plataforma_id === id);
@@ -1664,10 +1663,11 @@ function usoCat(tabla, id){
     if(rows.length) return { bloquea: true, detalle: `${pl(act, 'trabajador activo', 'trabajadores activos')} y ${pl(rows.length - act, 'registro histórico', 'registros históricos')} en esta plataforma. El historial se conserva, por eso no se puede eliminar. Puedes cambiarle el nombre.` };
     return { bloquea: false, detalle: 'Ningún trabajador ha estado en esta plataforma.' };
   }
-  const req = state.requeridos.filter(x => x.tipo_documento_id === id).length;
-  return { bloquea: false, detalle: req
-    ? `Lo exigen ${pl(req, 'rol', 'roles')}; al eliminarlo se quita de esos requisitos. Si ya hay documentos cargados de este tipo, no se podrá eliminar.`
-    : 'Ningún rol lo exige. Si ya hay documentos cargados de este tipo, no se podrá eliminar.' };
+  const t = state.tipos.find(x => x.id === id);
+  const obligatorio = t && t.ambito === 'trabajador' && t.frecuencia !== 'mensual';
+  return { bloquea: false, detalle: (obligatorio
+    ? 'Hoy se exige a todos los trabajadores activos; al eliminarlo deja de exigirse. '
+    : '') + 'Si ya hay documentos cargados de este tipo, no se podrá eliminar.' };
 }
 function modalCatHTML(){
   const m = state.modalCat, c = CAT[m.tabla];
@@ -1795,7 +1795,7 @@ function catalogosHTML(){
 
   <div class="section-card">
     <h3>Tipos de documento</h3>
-    <p class="hint">Cada documento se sube <b>una sola vez</b> (ej.: contrato), <b>todos los meses</b> (ej.: liquidación; se controla en «Control mensual») o <b>tiene fecha de vencimiento</b> (genera alertas). También puede ser <b>de la empresa</b> (ej.: IVA, F-30) en vez de un trabajador.</p>
+    <p class="hint">Cada documento se sube <b>una sola vez</b> (ej.: contrato), <b>todos los meses</b> (ej.: liquidación; se controla por mes en «Trabajadores» y en «Documentos de la empresa») o <b>tiene fecha de vencimiento</b> (se muestra como «Por vencer» o «Vencido» en pantalla). También puede ser <b>de la empresa</b> (ej.: IVA, F-30) en vez de un trabajador.</p>
     ${ed ? `<div class="inline-add"><input type="text" id="nuevo-tipo" placeholder="Nuevo tipo de documento" onkeydown="if(event.key==='Enter') agregarTipo()"><select id="nuevo-tipo-frec"><option value="unica">Una sola vez</option><option value="mensual">Todos los meses</option><option value="vence">Con fecha de vencimiento</option></select><select id="nuevo-tipo-ambito"><option value="trabajador">De cada trabajador</option><option value="empresa">De la empresa</option></select><button type="button" class="btn btn-primary btn-sm" onclick="agregarTipo()">Agregar</button></div>` : ''}
     <div class="chip-list">${state.tipos.length ? state.tipos.map(t => `<span class="chip">${escapeHTML(t.nombre)} <span class="badge ${t.frecuencia === 'vence' ? 'badge-warn' : (t.frecuencia === 'mensual' ? 'badge-plat' : 'badge-off')}">${escapeHTML(ETIQ_FREC[t.frecuencia] || '')}</span>${t.ambito === 'empresa' ? ' <span class="badge badge-ok">Empresa</span>' : ''}${chipBtn('tipos', t.id)}</span>`).join('') : '<span class="dias-label">Aún no hay tipos.</span>'}</div>
   </div>
