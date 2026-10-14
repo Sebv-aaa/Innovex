@@ -55,11 +55,22 @@ if (!SMTP_EMAIL || !SMTP_PASSWORD) {
   process.exit(1);
 }
 
-function todayISO() { return new Date().toISOString().slice(0, 10); }
+// Fecha de hoy en Chile (AAAA-MM-DD), no en UTC: así un envío manual de noche
+// no sale con la fecha del día siguiente. Este formato se usa solo para calcular.
+function todayISO() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date());
+}
 function daysSince(iso) {
   if (!iso) return 0;
-  const d = new Date(iso + 'T00:00:00'); const t = new Date(); t.setHours(0, 0, 0, 0);
+  const d = Date.parse(String(iso).slice(0, 10) + 'T00:00:00Z');
+  const t = Date.parse(todayISO() + 'T00:00:00Z');
+  if (Number.isNaN(d)) return 0;
   return Math.max(0, Math.round((t - d) / 86400000));
+}
+// Fecha para mostrar en el correo, en formato chileno: DD-MM-AAAA.
+function fechaCL(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : String(iso || '');
 }
 
 async function supaGet(path) {
@@ -81,7 +92,7 @@ async function main() {
   const totalPendientes = vencidos.length + atrasados.length + stockBajo.length;
 
   const lineas = [];
-  lineas.push(`Resumen del día — Innovex Adquisiciones (${hoy})`);
+  lineas.push(`Resumen del día — Innovex Adquisiciones (${fechaCL(hoy)})`);
   lineas.push('');
 
   if (totalPendientes === 0) {
@@ -90,7 +101,7 @@ async function main() {
   } else {
     if (vencidos.length > 0) {
       lineas.push(`PEDIDOS VENCIDOS (ya pasó la fecha estimada, ${vencidos.length}):`);
-      vencidos.forEach((p) => lineas.push(`  - ${p.proveedor} (estado: ${p.estado}, debía llegar el ${p.fecha_estimada})`));
+      vencidos.forEach((p) => lineas.push(`  - ${p.proveedor} (estado: ${p.estado}, debía llegar el ${fechaCL(p.fecha_estimada)})`));
       lineas.push('');
     }
     if (atrasados.length > 0) {
@@ -119,8 +130,8 @@ async function main() {
     from: SMTP_EMAIL,
     to: NOTIFICAR_EMAIL,
     subject: totalPendientes > 0
-      ? `Resumen Innovex — ${totalPendientes} pendientes (${hoy})`
-      : `Resumen Innovex — todo al día (${hoy})`,
+      ? `Resumen Innovex — ${totalPendientes} pendientes (${fechaCL(hoy)})`
+      : `Resumen Innovex — todo al día (${fechaCL(hoy)})`,
     text: lineas.join('\n'),
   });
 
