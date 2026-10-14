@@ -1,11 +1,11 @@
 name: Notificar alertas
 
 on:
-  schedule:
-    # 8:15 am hora Chile (UTC-3, horario de verano vigente hasta abril
-    # de 2027 — hay que revisar y ajustar este cronograma después de esa fecha)
-    - cron: '15 11 * * 1-5'   # lunes a viernes
-  workflow_dispatch: {}       # permite correrlo manualmente desde la pestaña "Actions"
+  # Sin "schedule": GitHub atrasaba la ejecución programada entre 3 y 9 horas.
+  # Ahora la dispara Supabase (pg_cron + pg_net, tarea "disparar-notificar-alertas")
+  # lunes a viernes a las 8:15 hora Chile, llamando a la API de GitHub.
+  # El horario se ajusta en Supabase (cron.schedule), no aquí; revisarlo en abril de 2027.
+  workflow_dispatch: {}       # también permite correrlo manualmente desde la pestaña "Actions"
 
 jobs:
   notificar-alertas:
