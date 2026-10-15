@@ -304,18 +304,44 @@ async function abrirHistorialModal(entidad, entidad_id, nombre){
     );
     if(error) throw error;
     state.historialModal.items = data;
+    // Nombre de quién hizo cada cambio (la base guarda usuario_id sola al insertar).
+    // Si esto falla, el historial se muestra igual, sin nombres.
+    const ids = [...new Set((data || []).map(h=>h.usuario_id).filter(Boolean))];
+    if(ids.length){
+      try{
+        const r = await withTimeout(supabaseClient.rpc('nombres_usuarios', { ids }), 10000);
+        if(r.error) throw r.error;
+        const nombres = {};
+        (r.data || []).forEach(u=>{ nombres[u.id] = u.nombre; });
+        state.historialModal.nombres = nombres;
+      }catch(e2){ console.warn('No se pudieron cargar los nombres del historial', e2); }
+    }
   }catch(e){ state.historialModal.error = 'No se pudo cargar el historial: ' + (e && e.message ? e.message : 'error desconocido'); }
   state.historialModal.loading = false;
   render();
 }
 function cerrarHistorialModal(){ state.historialModal = null; render(); }
+// Texto « · Nombre» para una línea del historial. Las líneas anteriores a este
+// cambio no tienen usuario_id y se muestran solo con la fecha.
+function quienHistorial(m, h){
+  if(!h.usuario_id) return '';
+  const nombres = m.nombres || {};
+  if(!(h.usuario_id in nombres)) return '';
+  return ' · ' + escapeHTML(nombres[h.usuario_id] || 'Usuario sin nombre');
+}
 
 /* ============================================================
    API — PEDIDOS
    ============================================================ */
 async function apiGetPedidos(){
-  const { data, error } = await withTimeout(supabaseClient.from('pedidos').select('*').order('fecha_registro', { ascending:false }), 10000);
+  // Solo los pedidos no eliminados. Los eliminados siguen en la base (ver apiGetPedidosEliminados).
+  const { data, error } = await withTimeout(supabaseClient.from('pedidos').select('*').eq('eliminado', false).order('fecha_registro', { ascending:false }), 10000);
   if(error) throw new Error('Error al leer los pedidos: ' + error.message);
+  return data;
+}
+async function apiGetPedidosEliminados(){
+  const { data, error } = await withTimeout(supabaseClient.from('pedidos').select('*').eq('eliminado', true).order('fecha_eliminacion', { ascending:false }), 10000);
+  if(error) throw new Error('Error al leer los pedidos eliminados: ' + error.message);
   return data;
 }
 async function apiCreatePedido(pedido){
@@ -326,9 +352,13 @@ async function apiUpdatePedido(id, updates){
   const { error } = await withTimeout(supabaseClient.from('pedidos').update(updates).eq('id', id), 10000);
   if(error) throw new Error('Error al actualizar el pedido: ' + error.message);
 }
-async function apiDeletePedido(id){
-  const { error } = await withTimeout(supabaseClient.from('pedidos').delete().eq('id', id), 10000);
-  if(error) throw new Error('Error al eliminar el pedido: ' + error.message);
+// «Eliminar» no borra el pedido de la base: lo marca como eliminado y lo oculta.
+// La base ya no permite borrar pedidos desde la página (sin política DELETE).
+async function apiEliminarPedido(id){
+  await apiUpdatePedido(id, { eliminado: true, fecha_eliminacion: new Date().toISOString() });
+}
+async function apiRestaurarPedido(id){
+  await apiUpdatePedido(id, { eliminado: false, fecha_eliminacion: null });
 }
 
 /* ============================================================
@@ -545,10 +575,13 @@ function computePedidoStats(){
   return { activos, atrasados, conAgente, pendientesRevision, vencidos };
 }
 function getFilteredPedidos(){
-  const { search, destino, estado, filtroRapido } = state.pedidosFilters;
-  return state.pedidos.filter(p=>{
+  const { search, destino, estado } = state.pedidosFilters;
+  const verEliminados = estado === ESTADO_ELIMINADOS;
+  const filtroRapido = verEliminados ? null : state.pedidosFilters.filtroRapido;
+  const base = verEliminados ? (state.pedidosEliminados || []) : state.pedidos;
+  return base.filter(p=>{
     if(destino!=='Todos' && p.destino!==destino) return false;
-    if(estado!=='Todos' && p.estado!==estado) return false;
+    if(!verEliminados && estado!=='Todos' && p.estado!==estado) return false;
     if(filtroRapido==='activos' && p.estado==='Recibido') return false;
     if(filtroRapido==='atrasados' && !(p.estado!=='Recibido' && daysSince(p.fecha_ultima_actualizacion)>=5)) return false;
     if(filtroRapido==='agente' && !p.agente_aduanero) return false;
@@ -565,9 +598,10 @@ function getFilteredPedidos(){
 function pedidoRowHTML(p){
   const meta = STATUS_META[p.estado] || STATUS_META['En proceso'];
   const dias = daysSince(p.fecha_ultima_actualizacion);
-  const atrasado = p.estado!=='Recibido' && dias>=5;
-  const vencido = estaVencido(p);
-  const alertasIzquierda = [
+  const eliminado = !!p.eliminado;
+  const atrasado = !eliminado && p.estado!=='Recibido' && dias>=5;
+  const vencido = !eliminado && estaVencido(p);
+  const alertasIzquierda = eliminado ? [] : [
     vencido ? { icono:'⏰', titulo:'Vencido — pasó la fecha estimada de llegada' } : null,
     atrasado ? { icono:'⚠', titulo:'Sin novedades hace ' + dias + ' días' } : null,
     p.agente_aduanero ? { icono:'🛂', titulo:'Requiere agente aduanero' } : null,
@@ -593,7 +627,7 @@ function pedidoRowHTML(p){
       ${p.agente_aduanero ? '<span class="badge badge-agente">Agente aduanero</span>' : ''}
     </div>
     <div class="col col-estado">
-      <select class="estado-select" style="--sel-color:${meta.color}" onchange="updateEstado('${p.id}', this.value)" ${puedeEditar()?'':'disabled'}>
+      <select class="estado-select" style="--sel-color:${meta.color}" onchange="updateEstado('${p.id}', this.value)" ${puedeEditar() && !eliminado?'':'disabled'}>
         ${ESTADOS.map(e=>`<option value="${e}" ${e===p.estado?'selected':''}>${e}</option>`).join('')}
       </select>
       ${atrasado
@@ -607,7 +641,11 @@ function pedidoRowHTML(p){
       ${vencido ? `<span class="badge badge-atrasado" style="margin-top:4px;">⚠ Vencido</span>` : ''}
     </div>
     <div class="col col-acciones" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-      ${state.deletePedidoConfirmId === p.id ? `
+      ${eliminado ? `
+        <span class="dias-label">Eliminado el ${escapeHTML(p.fecha_eliminacion ? new Date(p.fecha_eliminacion).toLocaleDateString('es-CL') : '—')}</span>
+        ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="restaurarPedido('${p.id}')">Restaurar</button>` : ''}
+        <button class="btn-ghost btn-sm" onclick="abrirHistorialModal('pedido','${p.id}','${escapeHTML(p.proveedor).replace(/'/g,"\\'")}')">Ver historial</button>
+      ` : state.deletePedidoConfirmId === p.id ? `
         <span class="dias-label">¿Eliminar este pedido?</span>
         <div style="display:flex;gap:8px;">
           <button class="link-btn" onclick="confirmDeletePedido('${p.id}')">Sí, eliminar</button>
@@ -627,8 +665,13 @@ function pedidoRowHTML(p){
   </div>`;
 }
 function pedidosListInnerHTML(){
+  if(state.pedidosFilters.estado === ESTADO_ELIMINADOS){
+    if(state.cargandoEliminados) return `<div class="empty-state">Cargando pedidos eliminados…</div>`;
+    if(state.errorEliminados) return `<div class="empty-state">${escapeHTML(state.errorEliminados)}</div>`;
+    if(!(state.pedidosEliminados || []).length) return `<div class="empty-state">No hay pedidos eliminados.</div>`;
+  }
   const list = getFilteredPedidos();
-  if(state.pedidos.length===0){
+  if(state.pedidosFilters.estado !== ESTADO_ELIMINADOS && state.pedidos.length===0){
     return `<div class="empty-state">Aún no hay pedidos registrados.<br><span style="font-family:var(--font-ui);font-size:13px;">Usa «+ Nuevo pedido» para agregar el primero.</span></div>`;
   }
   if(list.length===0) return `<div class="empty-state">Ningún pedido coincide con el filtro actual.</div>`;
@@ -812,12 +855,43 @@ async function markAsReviewed(id){
 }
 function askDeletePedidoConfirm(id){ state.deletePedidoConfirmId = id; renderPedidosList(); }
 function cancelDeletePedidoConfirm(){ state.deletePedidoConfirmId = null; renderPedidosList(); }
+const ESTADO_ELIMINADOS = 'Eliminados';
+async function cargarPedidosEliminados(){
+  state.cargandoEliminados = true; state.errorEliminados = null; renderPedidosList();
+  try{ state.pedidosEliminados = await apiGetPedidosEliminados(); }
+  catch(e){ state.errorEliminados = 'No se pudieron cargar los pedidos eliminados.'; }
+  state.cargandoEliminados = false;
+  renderPedidosList();
+}
+function cambiarFiltroEstadoPedidos(valor){
+  state.pedidosFilters.estado = valor;
+  state.pedidosFilters.filtroRapido = null;
+  if(valor === ESTADO_ELIMINADOS){ cargarPedidosEliminados(); return; }
+  render();
+}
+async function restaurarPedido(id){
+  const p = (state.pedidosEliminados || []).find(x=>x.id===id);
+  try{
+    await apiRestaurarPedido(id);
+    state.pedidosEliminados = (state.pedidosEliminados || []).filter(x=>x.id!==id);
+    if(p && !state.pedidos.find(x=>x.id===id)) state.pedidos.unshift(Object.assign({}, p, { eliminado:false, fecha_eliminacion:null }));
+    state.toast = 'Pedido restaurado.';
+    if(p) registrarHistorial('pedido', id, 'Pedido restaurado (' + p.proveedor + ')');
+  }
+  catch(e){ state.toast = 'No se pudo restaurar el pedido. Intenta de nuevo.'; }
+  render();
+  setTimeout(()=>{ state.toast = null; render(); }, 2600);
+}
 async function confirmDeletePedido(id){
   state.deletePedidoConfirmId = null;
   const p = state.pedidos.find(x=>x.id===id);
   try{
-    await apiDeletePedido(id);
+    await apiEliminarPedido(id);
     state.pedidos = state.pedidos.filter(x=>x.id!==id);
+    if(p && state.pedidosEliminados){
+      state.pedidosEliminados = state.pedidosEliminados.filter(x=>x.id!==id);
+      state.pedidosEliminados.unshift(Object.assign({}, p, { eliminado:true, fecha_eliminacion:new Date().toISOString() }));
+    }
     state.toast = 'Pedido eliminado.';
     if(p) registrarHistorial('pedido', id, 'Pedido eliminado (' + p.proveedor + ')');
   }
@@ -994,14 +1068,6 @@ async function handleResetDemo(){
   const seeds = seedPedidos();
   try{ for(const p of seeds){ await apiCreatePedido(p); } state.pedidos = await apiGetPedidos(); state.toast = 'Datos de ejemplo agregados.'; }
   catch(e){ state.toast = 'Hubo un problema agregando los datos de ejemplo: ' + (e && e.message ? e.message : 'error desconocido'); try{ state.pedidos = await apiGetPedidos(); }catch(e2){} }
-  render();
-  setTimeout(()=>{ state.toast = null; render(); }, 2800);
-}
-async function handleClearAll(){
-  state.confirmAction = null;
-  const idsAEliminar = state.pedidos.map(p=>p.id);
-  try{ for(const id of idsAEliminar){ await apiDeletePedido(id); } state.pedidos = []; state.toast = 'Todos los pedidos fueron eliminados.'; }
-  catch(e){ state.toast = 'Hubo un problema eliminando algunos pedidos: ' + (e && e.message ? e.message : 'error desconocido'); try{ state.pedidos = await apiGetPedidos(); }catch(e2){} }
   render();
   setTimeout(()=>{ state.toast = null; render(); }, 2800);
 }
@@ -1526,7 +1592,7 @@ function historialModalHTML(){
         `<div style="max-height:360px;overflow-y:auto;">${m.items.map(h=>`
           <div style="padding:10px 0;border-bottom:1px solid var(--border);">
             <div style="font-size:13px;">${escapeHTML(h.descripcion)}</div>
-            <div class="dias-label">${escapeHTML(new Date(h.fecha).toLocaleString('es-CL'))}</div>
+            <div class="dias-label">${escapeHTML(new Date(h.fecha).toLocaleString('es-CL'))}${quienHistorial(m, h)}</div>
           </div>`).join('')}</div>`
       }
       <div class="form-actions"><button class="btn btn-ghost" onclick="cerrarHistorialModal()">Cerrar</button></div>
@@ -1753,6 +1819,7 @@ function insumoModalHTML(){
    RENDER PRINCIPAL
    ============================================================ */
 function toggleFiltroRapidoPedidos(valor){
+  if(state.pedidosFilters.estado === ESTADO_ELIMINADOS) state.pedidosFilters.estado = 'Todos';
   state.pedidosFilters.filtroRapido = (state.pedidosFilters.filtroRapido === valor) ? null : valor;
   render();
 }
@@ -1900,9 +1967,10 @@ function render(){
           <option ${state.pedidosFilters.destino==='Todos'?'selected':''}>Todos</option>
           ${DESTINOS.map(d=>`<option ${state.pedidosFilters.destino===d?'selected':''}>${d}</option>`).join('')}
         </select>
-        <select onchange="state.pedidosFilters.estado=this.value; state.pedidosFilters.filtroRapido=null; renderPedidosList();">
+        <select onchange="cambiarFiltroEstadoPedidos(this.value)">
           <option ${state.pedidosFilters.estado==='Todos'?'selected':''}>Todos</option>
           ${ESTADOS.map(e=>`<option ${state.pedidosFilters.estado===e?'selected':''}>${e}</option>`).join('')}
+          <option ${state.pedidosFilters.estado===ESTADO_ELIMINADOS?'selected':''}>${ESTADO_ELIMINADOS}</option>
         </select>
         <div class="spacer"></div>
         <button class="btn-ghost" onclick="abrirExportar()">Exportar</button>
@@ -1996,8 +2064,23 @@ function handleRealtimeChangePedidos(payload){
   if(payload.eventType === 'INSERT'){
     if(!state.pedidos.find(p=>p.id===payload.new.id)){ state.pedidos.unshift(payload.new); mensaje = 'Nuevo pedido recibido: ' + payload.new.proveedor; }
   } else if(payload.eventType === 'UPDATE'){
-    const p = state.pedidos.find(x=>x.id===payload.new.id); if(p) Object.assign(p, payload.new);
-  } else if(payload.eventType === 'DELETE'){ state.pedidos = state.pedidos.filter(p=>p.id!==payload.old.id); }
+    const n = payload.new;
+    if(n.eliminado){
+      // Eliminado (aquí o en otro computador): sale de la lista normal.
+      state.pedidos = state.pedidos.filter(x=>x.id!==n.id);
+      if(state.pedidosEliminados){
+        const e = state.pedidosEliminados.find(x=>x.id===n.id);
+        if(e) Object.assign(e, n); else state.pedidosEliminados.unshift(n);
+      }
+    } else {
+      if(state.pedidosEliminados) state.pedidosEliminados = state.pedidosEliminados.filter(x=>x.id!==n.id);
+      const p = state.pedidos.find(x=>x.id===n.id);
+      if(p) Object.assign(p, n); else state.pedidos.unshift(n);
+    }
+  } else if(payload.eventType === 'DELETE'){
+    state.pedidos = state.pedidos.filter(p=>p.id!==payload.old.id);
+    if(state.pedidosEliminados) state.pedidosEliminados = state.pedidosEliminados.filter(p=>p.id!==payload.old.id);
+  }
   if(!state.showPedidoModal && !state.showInsumoModal){
     if(mensaje) state.toast = mensaje;
     render();
