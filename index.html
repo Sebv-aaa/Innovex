@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Innovex — Adquisiciones</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
 <style>
   :root{
     --bg:#F5F4EF; --surface:#FFFFFF; --surface-alt:#EFEEE6; --border:#DEDCD1;
@@ -644,7 +644,7 @@ function pedidoRowHTML(p){
       ${eliminado ? `
         <span class="dias-label">Eliminado el ${escapeHTML(p.fecha_eliminacion ? new Date(p.fecha_eliminacion).toLocaleDateString('es-CL') : '—')}</span>
         ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="restaurarPedido('${p.id}')">Restaurar</button>` : ''}
-        <button class="btn-ghost btn-sm" onclick="abrirHistorialModal('pedido','${p.id}','${escapeHTML(p.proveedor).replace(/'/g,"\\'")}')">Ver historial</button>
+        <button class="btn-ghost btn-sm" onclick="abrirHistorialModal('pedido','${p.id}',${escapeHTML(JSON.stringify(String(p.proveedor ?? '')))})">Ver historial</button>
       ` : state.deletePedidoConfirmId === p.id ? `
         <span class="dias-label">¿Eliminar este pedido?</span>
         <div style="display:flex;gap:8px;">
@@ -658,7 +658,7 @@ function pedidoRowHTML(p){
         ${p.documento_path
           ? `<button class="btn-ghost btn-sm" onclick="verDocumento('${p.id}')">Ver documento</button>${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="eliminarDocumento('${p.id}')">Quitar documento</button>` : ''}`
           : (puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="abrirAdjuntarModal('${p.id}')">Adjuntar documento</button>` : '')}
-        <button class="btn-ghost btn-sm" onclick="abrirHistorialModal('pedido','${p.id}','${escapeHTML(p.proveedor).replace(/'/g,"\\'")}')">Ver historial</button>
+        <button class="btn-ghost btn-sm" onclick="abrirHistorialModal('pedido','${p.id}',${escapeHTML(JSON.stringify(String(p.proveedor ?? '')))})">Ver historial</button>
         ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="askDeletePedidoConfirm('${p.id}')">Eliminar</button>` : ''}
       `}
     </div>
@@ -1136,7 +1136,7 @@ function insumoRowHTML(i){
       ` : `
         ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="openInsumoModal('${i.id}')">Editar</button>` : ''}
         ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="abrirTransferirModal('${i.id}')">Transferir</button>` : ''}
-        <button class="btn-ghost btn-sm" onclick="abrirHistorialModal('insumo','${i.id}','${escapeHTML(i.nombre).replace(/'/g,"\\'")}')">Ver historial</button>
+        <button class="btn-ghost btn-sm" onclick="abrirHistorialModal('insumo','${i.id}',${escapeHTML(JSON.stringify(String(i.nombre ?? '')))})">Ver historial</button>
         ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="askDeleteInsumoConfirm('${i.id}')">Eliminar</button>` : ''}
       `}
     </div>
