@@ -180,7 +180,7 @@ async function cargarAccesoCompleto(){
   }catch(e){ state.accesoCompleto = false; }
 }
 async function apiGetPedidos(){
-  const { data, error } = await withTimeout(supabaseClient.from('pedidos').select('*'), 10000);
+  const { data, error } = await withTimeout(supabaseClient.from('pedidos').select('*').eq('eliminado', false), 10000);
   if(error) throw new Error('Error al leer los pedidos: ' + error.message);
   return data;
 }
@@ -219,7 +219,7 @@ function pedidosPorMes(){
   return {
     labels: meses.map(ym=>{
       const [y,m] = ym.split('-');
-      return MESES[parseInt(m,10)-1] + ' ' + y.slice(2);
+      return MESES[parseInt(m,10)-1] + ' ' + y;
     }),
     valores: meses.map(ym=>conteo[ym])
   };
