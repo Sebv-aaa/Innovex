@@ -82,7 +82,7 @@ async function supaGet(path) {
 }
 
 async function main() {
-  const pedidos = await supaGet('pedidos?estado=neq.Recibido&select=proveedor,estado,fecha_estimada,fecha_ultima_actualizacion');
+  const pedidos = await supaGet('pedidos?estado=neq.Recibido&eliminado=eq.false&select=proveedor,estado,fecha_estimada,fecha_ultima_actualizacion');
   const insumos = await supaGet('inventario?stock_minimo=not.is.null&select=nombre,ubicacion,cantidad,stock_minimo');
 
   const hoy = todayISO();
