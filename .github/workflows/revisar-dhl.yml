@@ -5,6 +5,10 @@ on:
     - cron: '0 */4 * * *'   # cada 4 horas
   workflow_dispatch: {}      # permite correrlo manualmente desde la pestaña "Actions"
 
+# Permisos mínimos: el workflow solo lee el código del repo.
+permissions:
+  contents: read
+
 jobs:
   revisar-dhl:
     runs-on: ubuntu-latest

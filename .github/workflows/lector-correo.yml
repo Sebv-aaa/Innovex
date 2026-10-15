@@ -22,6 +22,10 @@ on:
 
   workflow_dispatch: {}       # permite correrlo manualmente desde la pestaña "Actions"
 
+# Permisos mínimos: el workflow solo lee el código del repo.
+permissions:
+  contents: read
+
 jobs:
   lector-correo:
     runs-on: ubuntu-latest

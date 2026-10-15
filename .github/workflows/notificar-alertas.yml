@@ -7,6 +7,10 @@ on:
   # El horario se ajusta en Supabase (cron.schedule), no aquí; revisarlo en abril de 2027.
   workflow_dispatch: {}       # también permite correrlo manualmente desde la pestaña "Actions"
 
+# Permisos mínimos: el workflow solo lee el código del repo.
+permissions:
+  contents: read
+
 jobs:
   notificar-alertas:
     runs-on: ubuntu-latest
