@@ -166,6 +166,13 @@
     .form-grid{ grid-template-columns:1fr; }
     .assistant-panel{ width:100%; max-width:100%; }
   }
+  /* Mostrar / ocultar contraseña en el inicio de sesión */
+  .pw-wrap{ position:relative; display:flex; }
+  .pw-wrap input{ flex:1; width:100%; box-sizing:border-box; padding-right:42px; }
+  .pw-toggle{ position:absolute; right:4px; top:50%; transform:translateY(-50%); display:flex; align-items:center; justify-content:center;
+    background:none; border:none; padding:6px; border-radius:4px; cursor:pointer; color:var(--ink-muted); }
+  .pw-toggle:hover{ color:var(--ink); }
+  .pw-toggle:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
 </style>
 </head>
 <body>
@@ -450,6 +457,23 @@ Si el texto pegado no parece ser de una página de seguimiento o no tiene inform
 /* ============================================================
    LOGIN — COMPARTIDO
    ============================================================ */
+// Mostrar / ocultar contraseña: cambia el tipo del campo sin volver a dibujar la pantalla,
+// así no se pierde lo escrito. Cada vez que se dibuja el inicio de sesión, parte oculta.
+const ICONO_OJO = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const ICONO_OJO_TACHADO = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 19c-6.5 0-10-7-10-7a18.5 18.5 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 5c6.5 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
+function alternarContrasena(){
+  const input = document.getElementById('login-password');
+  const boton = document.getElementById('pw-toggle');
+  if(!input || !boton) return;
+  const mostrar = input.type === 'password';
+  input.type = mostrar ? 'text' : 'password';
+  boton.innerHTML = mostrar ? ICONO_OJO_TACHADO : ICONO_OJO;
+  const texto = mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña';
+  boton.setAttribute('aria-label', texto);
+  boton.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
+  boton.title = texto;
+  input.focus();
+}
 function loginScreenHTML(){
   return `
   <div class="center-loading" style="flex-direction:column;">
@@ -463,7 +487,10 @@ function loginScreenHTML(){
       </div>
       <div class="form-field full" style="margin-bottom:20px;">
         <label>Contraseña</label>
-        <input type="password" id="login-password" onkeydown="if(event.key==='Enter') handleLogin()">
+        <div class="pw-wrap">
+          <input type="password" id="login-password" onkeydown="if(event.key==='Enter') handleLogin()">
+          <button type="button" class="pw-toggle" id="pw-toggle" onclick="alternarContrasena()" aria-label="Mostrar contraseña" aria-pressed="false" title="Mostrar contraseña">${ICONO_OJO}</button>
+        </div>
       </div>
       <button class="btn btn-primary" style="width:100%;" id="btn-login" onclick="handleLogin()" ${state.loginLoading?'disabled':''}>${state.loginLoading?'Ingresando…':'Iniciar sesión'}</button>
     </div>
