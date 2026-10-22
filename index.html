@@ -104,6 +104,7 @@
   .badge{ display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; background:var(--surface-alt); border:1px solid var(--border); color:var(--ink-muted); }
   .badge-agente{ background:var(--accent-warm-bg); color:var(--accent-warm); margin-left:8px; border:none; }
   .badge-revision{ background:var(--st-transito-bg); color:var(--st-transito); margin-left:8px; border:none; }
+  .badge-incompleto{ background:var(--st-atrasado-bg); color:var(--st-atrasado); margin-left:8px; border:none; }
   .badge-atrasado{ background:var(--st-atrasado-bg); color:var(--st-atrasado); border:none; }
   .dias-label{ font-size:11.5px; color:var(--ink-muted); }
   .estado-select{ font-family:var(--font-ui); font-size:12.5px; font-weight:600; border-radius:20px; padding:4px 22px 4px 10px; border:1px solid var(--border);
@@ -596,6 +597,18 @@ function trackingUrl(p){
   if(p.courier === 'FedEx') return `https://www.fedex.com/fedextrack/?trknbr=${num}`;
   return null;
 }
+// Datos que le faltan a un pedido. Pasa sobre todo con los pedidos que Claude crea a partir
+// de un aviso de courier (traen guía y courier, pero no proveedor ni monto). Se calcula al
+// mostrar la lista, no se guarda: desaparece sola cuando se completan los datos.
+function camposFaltantes(p){
+  const faltan = [];
+  if(!p.proveedor || /^por confirmar/i.test(String(p.proveedor).trim())) faltan.push('proveedor');
+  const m = pedidoMonto(p);
+  if(m.monto == null || isNaN(m.monto) || Number(m.monto) <= 0) faltan.push('monto');
+  if(!p.destino) faltan.push('destino');
+  if(!p.fecha_estimada) faltan.push('fecha estimada');
+  return faltan;
+}
 function estaVencido(p){
   return p.estado !== 'Recibido' && !!p.fecha_estimada && p.fecha_estimada < todayISO();
 }
@@ -634,11 +647,13 @@ function pedidoRowHTML(p){
   const eliminado = !!p.eliminado;
   const atrasado = !eliminado && p.estado!=='Recibido' && dias>=5;
   const vencido = !eliminado && estaVencido(p);
+  const faltantes = eliminado ? [] : camposFaltantes(p);
   const alertasIzquierda = eliminado ? [] : [
     vencido ? { icono:'⏰', titulo:'Vencido — pasó la fecha estimada de llegada' } : null,
     atrasado ? { icono:'⚠', titulo:'Sin novedades hace ' + dias + ' días' } : null,
     p.agente_aduanero ? { icono:'🛂', titulo:'Requiere agente aduanero' } : null,
-    p.pendiente_revision ? { icono:'✦', titulo:'Creado por IA — pendiente de revisión' } : null
+    p.pendiente_revision ? { icono:'✦', titulo:'Creado por Claude — pendiente de revisión' } : null,
+    faltantes.length ? { icono:'✎', titulo:'Incompleto — falta: ' + faltantes.join(', ') } : null
   ].filter(Boolean);
   return `
   <div class="row-item" style="border-left-color:${meta.color}">
@@ -646,7 +661,7 @@ function pedidoRowHTML(p){
       ${alertasIzquierda.map(a=>`<span class="alerta-icono" title="${escapeHTML(a.titulo)}">${a.icono}</span>`).join('')}
     </div>
     <div class="col col-proveedor">
-      <div class="proveedor-name">${escapeHTML(p.proveedor)} ${p.pendiente_revision ? '<span class="badge badge-revision">✦ Creado por IA — pendiente de revisión</span>' : ''}</div>
+      <div class="proveedor-name">${escapeHTML(p.proveedor)} ${p.pendiente_revision ? '<span class="badge badge-revision">✦ Creado por Claude — pendiente de revisión</span>' : ''}${faltantes.length ? `<span class="badge badge-incompleto" title="Complétalo en «Actualizar estado»">Incompleto: falta ${escapeHTML(faltantes.join(', '))}</span>` : ''}</div>
       <div class="tracking-line">
         <span class="courier-badge">${escapeHTML(p.courier||'—')}</span>
         <span class="tracking-num">${escapeHTML(p.numero_seguimiento||'sin N° de seguimiento')}</span>
