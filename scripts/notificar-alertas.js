@@ -116,7 +116,7 @@ async function main() {
     }
   }
 
-  lineas.push('Revísalo en el dashboard: https://sebv-aaa.github.io/Innovex/');
+  lineas.push('Revísalo en Adquisiciones: https://sebv-aaa.github.io/Innovex/');
 
   const transporter = nodemailer.createTransport({
     host: SMTP_HOST,
