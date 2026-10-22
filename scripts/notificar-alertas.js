@@ -1,7 +1,7 @@
 // ============================================================
 // Innovex — Adquisiciones
 // Manda TODOS LOS DÍAS (lunes a viernes) un resumen con pedidos
-// vencidos, pedidos atrasados e insumos con stock bajo — si no hay
+// vencidos, pedidos atrasados, pedidos incompletos e insumos con stock bajo — si no hay
 // nada pendiente, igual manda el correo, avisando que está todo al día.
 //
 // IMPORTANTE: este script envía el correo a través de una cuenta de
@@ -81,22 +81,39 @@ async function supaGet(path) {
   return res.json();
 }
 
+// Datos que le faltan a un pedido (misma regla que la etiqueta «Incompleto» de la
+// página): proveedor (o «Por confirmar»), monto, destino o fecha estimada. Pasa con
+// los pedidos que Claude crea desde los avisos de courier, que no traen esos datos.
+function camposFaltantes(p) {
+  const faltan = [];
+  if (!p.proveedor || /^por confirmar/i.test(String(p.proveedor).trim())) faltan.push('proveedor');
+  const monto = p.monto != null ? p.monto : (p.moneda_ingreso === 'CLP' ? p.monto_clp : p.monto_usd);
+  if (monto == null || Number.isNaN(Number(monto)) || Number(monto) <= 0) faltan.push('monto');
+  if (!p.destino) faltan.push('destino');
+  if (!p.fecha_estimada) faltan.push('fecha estimada');
+  return faltan;
+}
+
 async function main() {
   const pedidos = await supaGet('pedidos?estado=neq.Recibido&eliminado=eq.false&select=proveedor,estado,fecha_estimada,fecha_ultima_actualizacion');
+  // Incompletos: se revisan todos los no eliminados (también los recibidos), para que
+  // el registro quede completo aunque el pedido ya haya llegado.
+  const todos = await supaGet('pedidos?eliminado=eq.false&select=proveedor,estado,courier,numero_seguimiento,monto,monto_usd,monto_clp,moneda_ingreso,destino,fecha_estimada,pendiente_revision');
   const insumos = await supaGet('inventario?stock_minimo=not.is.null&select=nombre,ubicacion,cantidad,stock_minimo');
 
   const hoy = todayISO();
   const vencidos = pedidos.filter((p) => p.fecha_estimada && p.fecha_estimada < hoy);
   const atrasados = pedidos.filter((p) => daysSince(p.fecha_ultima_actualizacion) >= 5);
+  const incompletos = todos.map((p) => ({ ...p, faltan: camposFaltantes(p) })).filter((p) => p.faltan.length > 0);
   const stockBajo = insumos.filter((i) => parseFloat(i.cantidad) < parseFloat(i.stock_minimo));
-  const totalPendientes = vencidos.length + atrasados.length + stockBajo.length;
+  const totalPendientes = vencidos.length + atrasados.length + incompletos.length + stockBajo.length;
 
   const lineas = [];
   lineas.push(`Resumen del día — Innovex Adquisiciones (${fechaCL(hoy)})`);
   lineas.push('');
 
   if (totalPendientes === 0) {
-    lineas.push('Todo al día — sin pedidos vencidos, sin atrasos y sin insumos con stock bajo.');
+    lineas.push('Todo al día — sin pedidos vencidos, sin atrasos, sin pedidos incompletos y sin insumos con stock bajo.');
     lineas.push('');
   } else {
     if (vencidos.length > 0) {
@@ -107,6 +124,15 @@ async function main() {
     if (atrasados.length > 0) {
       lineas.push(`PEDIDOS SIN NOVEDADES HACE 5+ DÍAS (${atrasados.length}):`);
       atrasados.forEach((p) => lineas.push(`  - ${p.proveedor} (estado: ${p.estado}, sin actualizar hace ${daysSince(p.fecha_ultima_actualizacion)} días)`));
+      lineas.push('');
+    }
+    if (incompletos.length > 0) {
+      lineas.push(`PEDIDOS INCOMPLETOS (faltan datos, ${incompletos.length}) — complétalos en «Actualizar estado»:`);
+      incompletos.forEach((p) => {
+        const envio = [p.courier, p.numero_seguimiento].filter(Boolean).join(' ');
+        const extra = p.pendiente_revision ? ', creado por Claude, sin revisar' : '';
+        lineas.push(`  - ${p.proveedor}${envio ? ' — ' + envio : ''} (estado: ${p.estado}${extra}; falta: ${p.faltan.join(', ')})`);
+      });
       lineas.push('');
     }
     if (stockBajo.length > 0) {
@@ -135,7 +161,7 @@ async function main() {
     text: lineas.join('\n'),
   });
 
-  console.log(`Correo enviado a ${NOTIFICAR_EMAIL} — ${vencidos.length} vencidos, ${atrasados.length} atrasados, ${stockBajo.length} con stock bajo.`);
+  console.log(`Correo enviado a ${NOTIFICAR_EMAIL} — ${vencidos.length} vencidos, ${atrasados.length} atrasados, ${incompletos.length} incompletos, ${stockBajo.length} con stock bajo.`);
 }
 
 main().catch((err) => {
