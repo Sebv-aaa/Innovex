@@ -186,6 +186,13 @@ const SUPABASE_URL = 'https://wncejgicemnaneptrrsq.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_DrQ2zuhGaxF09jQUrssLWQ_lLKtVbnL';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const CLAUDE_PROXY_URL = SUPABASE_URL + '/functions/v1/claude-proxy';
+// IA dentro de la plataforma (API de Claude vía la Edge Function claude-proxy).
+// Desactivada el 22-10-2026: se usaba poco y esas tareas (registrar pedidos desde
+// correos o mensajes, actualizar estados, resumen para el agente, consultas) pasan a
+// Claude en la app de escritorio, que opera la plataforma con el navegador integrado.
+// Así la plataforma no depende de una clave de API personal. Para volver a activarla:
+// poner true aquí y configurar ANTHROPIC_API_KEY en los secretos de claude-proxy.
+const IA_EN_PLATAFORMA = false;
 
 const ESTADOS = ['En proceso','En tránsito','En aduana','En destino','Recibido'];
 const COURIERS = ['DHL','UPS','FedEx','MercadoLibre','Otro'];
@@ -680,7 +687,7 @@ function pedidoRowHTML(p){
       ` : `
         ${p.pendiente_revision && puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="markAsReviewed('${p.id}')">Marcar como revisado</button>` : ''}
         ${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="openActualizarEstadoModal('${p.id}')">Actualizar estado</button>` : ''}
-        ${p.agente_aduanero ? `<button class="btn-ghost btn-sm" onclick="handleAgenteSummary('${p.id}')">Resumen para agente</button>` : ''}
+        ${p.agente_aduanero && IA_EN_PLATAFORMA ? `<button class="btn-ghost btn-sm" onclick="handleAgenteSummary('${p.id}')">Resumen para agente</button>` : ''}
         ${p.documento_path
           ? `<button class="btn-ghost btn-sm" onclick="verDocumento('${p.id}')">Ver documento</button>${puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="eliminarDocumento('${p.id}')">Quitar documento</button>` : ''}`
           : (puedeEditar() ? `<button class="btn-ghost btn-sm" onclick="abrirAdjuntarModal('${p.id}')">Adjuntar documento</button>` : '')}
@@ -952,7 +959,7 @@ async function copyAgenteText(){
   if(el) el.textContent = ok ? 'Copiado ✓' : 'No se pudo copiar automáticamente — selecciona el texto y cópialo manualmente.';
 }
 let imagenEstado = null; // { data, media_type } o null
-function openActualizarEstadoModal(id){ imagenEstado = null; state.actualizarEstadoModal = { pedidoId:id, modo:'ia', texto:'', loading:false, resultado:null, error:null }; render(); }
+function openActualizarEstadoModal(id){ imagenEstado = null; state.actualizarEstadoModal = { pedidoId:id, modo: IA_EN_PLATAFORMA ? 'ia' : 'manual', texto:'', loading:false, resultado:null, error:null }; render(); if(!IA_EN_PLATAFORMA) precargarFormularioEstadoManual(); }
 function cambiarModoEstadoModal(modo){
   state.actualizarEstadoModal.modo = modo;
   state.actualizarEstadoModal.error = null;
@@ -1380,8 +1387,8 @@ function pedidoModalHTML(){
     <div class="modal">
       <button class="modal-close" onclick="closePedidoModal()">×</button>
       <h2 class="modal-title">Nuevo pedido</h2>
-      <p style="color:var(--ink-muted);font-size:13px;margin:0;">Registra el pedido manualmente o pega el correo de confirmación para que la IA complete los datos.</p>
-      <div class="modal-tabs">
+      <p style="color:var(--ink-muted);font-size:13px;margin:0;">${IA_EN_PLATAFORMA ? 'Registra el pedido manualmente o pega el correo de confirmación para que la IA complete los datos.' : 'Registra el pedido con sus datos.'}</p>
+      ${IA_EN_PLATAFORMA ? `<div class="modal-tabs">
         <button class="tab-btn active" id="tabbtn-manual" onclick="showTab('manual')">Datos manuales</button>
         <button class="tab-btn" id="tabbtn-pegar" onclick="showTab('pegar')">Pegar correo / mensaje</button>
       </div>
@@ -1397,7 +1404,7 @@ function pedidoModalHTML(){
         </div>
         <button class="btn btn-primary" id="btn-extract" onclick="handleExtract()" type="button" style="margin-top:10px;">Extraer datos con IA</button>
         <div class="extract-status" id="extract-status"></div>
-      </div>
+      </div>` : ''}
       <div id="tab-manual" class="form-grid">
         <div class="field-note" id="extract-note" style="display:none;grid-column:1 / -1;">Datos completados automáticamente por IA — revisa antes de guardar.</div>
         <div class="field-note" id="form-error" style="display:none;grid-column:1 / -1;background:var(--st-atrasado-bg);color:var(--st-atrasado);">No se puede guardar: completa todos los campos.</div>
@@ -1499,10 +1506,10 @@ function actualizarEstadoModalHTML(){
     <div class="modal" style="max-width:${m.modo==='manual'?'560px':'520px'};">
       <button class="modal-close" onclick="closeActualizarEstadoModal()">×</button>
       <h2 class="modal-title">Actualizar estado</h2>
-      <div class="modal-tabs">
+      ${IA_EN_PLATAFORMA ? `<div class="modal-tabs">
         <button class="tab-btn ${m.modo==='ia'?'active':''}" onclick="cambiarModoEstadoModal('ia')">Con IA</button>
         <button class="tab-btn ${m.modo==='manual'?'active':''}" onclick="cambiarModoEstadoModal('manual')">Manual</button>
-      </div>
+      </div>` : ''}
       ${m.error ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(m.error)}</div>` : ''}
       ${m.modo === 'manual' ? `
         <p style="color:var(--ink-muted);font-size:13px;margin:0 0 10px;">Corrige o completa cualquier dato del pedido, incluido el estado.</p>
@@ -2058,8 +2065,8 @@ function render(){
       <div class="footer-actions">${footerHTML}</div>
     </div>
 
-    ${!state.showAssistant ? '<button class="assistant-toggle" onclick="toggleAssistant()">✦ Asistente IA</button>' : ''}
-    ${state.showAssistant ? assistantPanelHTML() : ''}
+    ${IA_EN_PLATAFORMA && !state.showAssistant ? '<button class="assistant-toggle" onclick="toggleAssistant()">✦ Asistente IA</button>' : ''}
+    ${IA_EN_PLATAFORMA && state.showAssistant ? assistantPanelHTML() : ''}
     ${state.showPedidoModal ? pedidoModalHTML() : ''}
     ${state.agenteSummaryModal ? agenteModalHTML() : ''}
     ${state.actualizarEstadoModal ? actualizarEstadoModalHTML() : ''}
