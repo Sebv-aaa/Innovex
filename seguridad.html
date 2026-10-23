@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Innovex — Seguridad Ocupacional</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
+<style>
+  :root{
+    --bg:#F5F4EF; --surface:#FFFFFF; --surface-alt:#EFEEE6; --border:#DEDCD1;
+    --ink:#1B2321; --ink-muted:#5C665F; --accent:#1B4B43; --accent-hover:#143A34;
+    --accent-warm:#A6692E; --accent-warm-bg:#F3E6D6;
+    --st-proceso:#6B7563;  --st-proceso-bg:#EEF0EC;
+    --st-transito:#2E5C8A; --st-transito-bg:#E7EEF5;
+    --st-aduana:#A6761D;   --st-aduana-bg:#F5EEDD;
+    --st-recibido:#2F6B3A; --st-recibido-bg:#E7F0E8;
+    --st-atrasado:#A6332F; --st-atrasado-bg:#F6E5E4;
+    --font-display: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:var(--font-ui); font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  #app{min-height:100vh;}
+  .center-loading{ display:flex;align-items:center;justify-content:center;height:100vh; color:var(--ink-muted); font-family:var(--font-display); font-size:18px; }
+  .login-box{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:36px 34px; width:100%; max-width:380px; text-align:left; }
+
+  .topbar{ padding:24px 40px 0; border-bottom:1px solid var(--border); background:var(--surface); }
+  .topbar-inner{ display:flex; flex-direction:column; gap:16px; max-width:1280px; margin:0 auto; padding-bottom:18px; }
+  .topbar-row1{ display:flex; justify-content:space-between; align-items:flex-start; gap:24px; flex-wrap:wrap; }
+  .account-menu-wrap{ position:relative; }
+  .account-menu-btn{ font-size:18px; line-height:1; padding:6px 10px; }
+  .account-menu-dropdown{ position:absolute; top:calc(100% + 6px); right:0; background:var(--surface); border:1px solid var(--border); border-radius:6px; box-shadow:0 8px 20px rgba(0,0,0,0.12); min-width:190px; padding:6px; z-index:30; display:flex; flex-direction:column; }
+  .account-menu-item{ display:block; width:100%; text-align:left; background:none; border:none; padding:9px 12px; font-size:13.5px; color:var(--ink); border-radius:4px; cursor:pointer; font-family:var(--font-ui); text-decoration:none; }
+  .account-menu-item:hover{ background:var(--surface-alt); }
+  .page-title{ font-family:var(--font-display); font-size:26px; font-weight:600; margin:0 0 4px 0; letter-spacing:-0.01em; }
+  .page-sub{ color:var(--ink-muted); font-size:13px; margin:0; }
+  .stats-row{ display:flex; gap:22px; flex-wrap:wrap; justify-content:center; }
+  .stat-chip{ border-left:3px solid var(--accent); padding-left:10px; min-width:90px; }
+  .stat-chip.warn{ border-left-color:var(--st-aduana); }
+  .stat-chip.bad{ border-left-color:var(--st-atrasado); }
+  .stat-chip.rev{ border-left-color:var(--st-transito); }
+  .stat-chip.off{ border-left-color:var(--st-proceso); }
+  .stat-value{ font-family:var(--font-display); font-size:22px; font-weight:600; line-height:1.1; }
+  .stat-label{ font-size:11.5px; color:var(--ink-muted); margin-top:2px; }
+
+  .tabs-row{ max-width:1280px; margin:0 auto; display:flex; gap:4px; }
+  .tab-item{ background:none; border:none; padding:10px 4px; margin-right:22px; font-size:14px; font-family:var(--font-ui); color:var(--ink-muted); cursor:pointer; border-bottom:2px solid transparent; }
+  .tab-item.active{ color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+
+  .controls{ padding:14px 40px; background:var(--surface-alt); border-bottom:1px solid var(--border); }
+  .controls-inner{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; max-width:1280px; margin:0 auto; width:100%; }
+  .controls input[type=text], .controls select{ font-family:var(--font-ui); font-size:13.5px; color:var(--ink); background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:8px 10px; outline:none; }
+  .controls input[type=text]:focus, .controls select:focus{ border-color:var(--accent); }
+  .controls input[type=text]{ min-width:200px; flex:1; }
+  .controls label.chk{ display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink); cursor:pointer; }
+
+  .btn{ font-family:var(--font-ui); font-size:13.5px; font-weight:500; cursor:pointer; border-radius:4px; padding:9px 16px; border:1px solid transparent; }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-primary:hover{ background:var(--accent-hover); }
+  .btn-ghost{ background:transparent; border-color:var(--border); color:var(--ink); }
+  .btn-ghost:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn-sm{ padding:5px 10px; font-size:12.5px; }
+  .btn:disabled{ opacity:0.55; cursor:default; }
+  .link-btn{ background:none;border:none;color:var(--ink-muted);font-size:12.5px; text-decoration:underline; cursor:pointer; font-family:var(--font-ui); padding:0; }
+  .link-btn:hover{ color:var(--ink); }
+
+  .main{ max-width:1280px; margin:0 auto; padding:24px 40px 80px; }
+  .info-banner{ background:var(--accent-warm-bg); border:1px solid #E0C9A6; color:#5C4322; border-radius:4px; padding:10px 14px; font-size:13px; margin-bottom:18px; }
+  .field-note{ font-size:12px; color:var(--accent-warm); background:var(--accent-warm-bg); padding:8px 10px; border-radius:4px; margin-bottom:14px; }
+  .empty-state{ padding:48px 16px; text-align:center; color:var(--ink-muted); font-family:var(--font-display); font-size:16px; }
+  .dias-label{ font-size:11.5px; color:var(--ink-muted); }
+  .form-field{ display:flex; flex-direction:column; gap:5px; }
+  .form-field label{ font-size:12px; color:var(--ink-muted); }
+  .form-field input{ font-family:var(--font-ui); font-size:14px; color:var(--ink); background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:9px 11px; outline:none; }
+  .form-field input:focus{ border-color:var(--accent); }
+  .pw-wrap{ position:relative; display:flex; }
+  .pw-wrap input{ flex:1; width:100%; padding-right:42px; }
+  .pw-toggle{ position:absolute; right:4px; top:50%; transform:translateY(-50%); display:flex; align-items:center; justify-content:center; background:none; border:none; padding:6px; border-radius:4px; cursor:pointer; color:var(--ink-muted); }
+  .pw-toggle:hover{ color:var(--ink); }
+  .pw-toggle:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+  .toast{ position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:60; background:var(--ink); color:#fff; padding:11px 22px; border-radius:6px; font-size:13.5px; font-weight:500; box-shadow:0 8px 22px rgba(0,0,0,0.25); }
+
+  .badge{ display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; background:var(--surface-alt); color:var(--ink-muted); white-space:nowrap; }
+  .badge-ok{ background:var(--st-recibido-bg); color:var(--st-recibido); }
+  .badge-warn{ background:var(--st-aduana-bg); color:var(--st-aduana); }
+  .badge-bad{ background:var(--st-atrasado-bg); color:var(--st-atrasado); }
+  .badge-rev{ background:var(--st-transito-bg); color:var(--st-transito); }
+  .badge-off{ background:var(--st-proceso-bg); color:var(--st-proceso); }
+
+  /* Tarjetas por plataforma */
+  .plat-cards{ display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:12px; margin-bottom:22px; }
+  .plat-card{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:12px 14px; border-left:4px solid var(--st-recibido); }
+  .plat-card.no{ border-left-color:var(--st-atrasado); }
+  .plat-card h3{ font-family:var(--font-display); font-size:16px; margin:0 0 4px; }
+  .plat-card .linea{ font-size:12.5px; color:var(--ink-muted); }
+  .plat-card .vieja{ color:var(--st-atrasado); font-weight:600; }
+
+  /* Tabla trabajador × plataforma */
+  .tabla-wrap{ background:var(--surface); border:1px solid var(--border); border-radius:6px; overflow-x:auto; }
+  table.mx{ border-collapse:collapse; width:100%; }
+  table.mx th, table.mx td{ padding:9px 12px; border-bottom:1px solid var(--border); text-align:left; white-space:nowrap; vertical-align:middle; }
+  table.mx th{ background:var(--surface-alt); font-size:12px; color:var(--ink-muted); font-weight:600; }
+  table.mx th.c, table.mx td.c{ text-align:center; }
+  table.mx td.n, table.mx th.n{ position:sticky; left:0; background:var(--surface); z-index:1; }
+  table.mx th.n{ background:var(--surface-alt); }
+  table.mx tr:last-child td{ border-bottom:none; }
+  .celda{ background:none; border:1px solid transparent; border-radius:6px; padding:6px 8px; cursor:pointer; font-family:var(--font-ui); width:100%; min-width:130px; }
+  .celda:hover, .celda:focus-visible{ border-color:var(--accent); outline:none; }
+  .celda small{ display:block; font-size:11.5px; color:var(--ink-muted); margin-top:3px; }
+  .no-esta{ color:#B3B7AE; font-size:12.5px; }
+  .rut{ font-size:12px; color:var(--ink-muted); }
+
+  /* Modal de documentos */
+  .modal-backdrop{ position:fixed; inset:0; background:rgba(20,20,18,0.45); z-index:50; display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; overflow-y:auto; }
+  .modal{ background:var(--surface); border-radius:6px; max-width:760px; width:100%; padding:26px 28px 22px; box-shadow:0 12px 32px rgba(0,0,0,0.18); }
+  .modal-title{ font-family:var(--font-display); font-size:20px; margin:0 0 2px; }
+  .modal-close{ float:right; background:none; border:none; font-size:20px; color:var(--ink-muted); cursor:pointer; line-height:1; }
+  .doc-fila{ display:flex; justify-content:space-between; align-items:center; gap:14px; padding:9px 0; border-bottom:1px solid var(--border); font-size:13.5px; }
+  .doc-fila:last-child{ border-bottom:none; }
+  .doc-fila .der{ text-align:right; flex:0 0 auto; }
+
+  @media (max-width:760px){
+    .topbar, .controls, .main{ padding-left:16px; padding-right:16px; }
+    .stats-row{ justify-content:flex-start; }
+    .modal{ padding:20px 18px; }
+    .doc-fila{ flex-wrap:wrap; }
+    table.mx td.n{ white-space:normal; min-width:140px; max-width:170px; }
+  }
+</style>
+</head>
+<body>
+<div id="app"><div class="center-loading">Cargando sistema…</div></div>
+
+<script>
+/* ============================================================
+   CONFIGURACIÓN (misma conexión que index.html)
+   ============================================================ */
+const SUPABASE_URL = 'https://wncejgicemnaneptrrsq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_DrQ2zuhGaxF09jQUrssLWQ_lLKtVbnL';
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const AREA = 'seguridad';
+const DIAS_REVISION_ANTIGUA = 7;   // si la última revisión de una plataforma es más antigua, se avisa en su tarjeta
+
+// Los datos vienen de las vistas seg_ultima_revision y seg_vigencias_actuales
+// (última revisión de cada plataforma, leída por Claude con el navegador).
+// Esta página solo muestra: no tiene botones para modificar datos.
+
+const ESTADOS = {
+  vencido:     { etiqueta:'Vencido',                 clase:'badge-bad',  orden:0 },
+  rechazado:   { etiqueta:'Probablemente rechazado', clase:'badge-bad',  orden:1 },
+  falta:       { etiqueta:'Falta',                   clase:'badge-off',  orden:2 },
+  en_revision: { etiqueta:'En revisión',             clase:'badge-rev',  orden:3 },
+  por_vencer:  { etiqueta:'Por vencer',              clase:'badge-warn', orden:4 },
+  vigente:     { etiqueta:'Vigente',                 clase:'badge-ok',   orden:5 }
+};
+
+let state = {
+  session: null, loginError: null, loginLoading: false,
+  cargando: true, loadError: null, acceso: false,
+  tab: 'matriz',
+  revisiones: [], docs: [],
+  filtros: { texto: '', plataforma: '', estado: '' },
+  pronto: { plataforma: '', incluirFaltantes: false },
+  modal: null,          // { rut, plataformaId }
+  showAccountMenu: false
+};
+
+/* ============================================================
+   UTILIDADES
+   ============================================================ */
+function escapeHTML(str){
+  if(str===null || str===undefined) return '';
+  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function withTimeout(promise, ms){
+  return Promise.race([ promise, new Promise((_, reject)=> setTimeout(()=> reject(new Error('La operación tardó demasiado')), ms)) ]);
+}
+function val(id){ const el = document.getElementById(id); return el ? el.value : ''; }
+function mensajeError(e){ return (e && e.message) ? e.message : 'error desconocido'; }
+function fmtRut(r){
+  const m = /^(\d{7,8})-([0-9K])$/.exec(r || '');
+  if(!m) return r || '';
+  return m[1].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + m[2];
+}
+function fmtFecha(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+  return m ? m[3] + '-' + m[2] + '-' + m[1] : (iso || '');
+}
+function hoyChile(){ return new Intl.DateTimeFormat('en-CA', { timeZone:'America/Santiago' }).format(new Date()); }
+function fechaChile(ts){ return new Intl.DateTimeFormat('en-CA', { timeZone:'America/Santiago' }).format(new Date(ts)); }
+function diasEntre(a, b){
+  const x = a.split('-').map(Number), y = b.split('-').map(Number);
+  return Math.round((Date.UTC(y[0], y[1]-1, y[2]) - Date.UTC(x[0], x[1]-1, x[2])) / 86400000);
+}
+function plural(n, s, p){ return n + ' ' + (n === 1 ? s : p); }
+function textoDias(d){
+  if(d === null || d === undefined) return '';
+  if(d < 0) return 'venció hace ' + plural(-d, 'día', 'días');
+  if(d === 0) return 'vence hoy';
+  return 'vence en ' + plural(d, 'día', 'días');
+}
+function badge(estado, texto){ const e = ESTADOS[estado] || { clase:'', etiqueta:estado }; return `<span class="badge ${e.clase}">${escapeHTML(texto || e.etiqueta)}</span>`; }
+
+/* ============================================================
+   INICIO DE SESIÓN (igual que las demás páginas)
+   ============================================================ */
+const ICONO_OJO = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const ICONO_OJO_TACHADO = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 19c-6.5 0-10-7-10-7a18.5 18.5 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 5c6.5 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
+function alternarContrasena(){
+  const input = document.getElementById('login-password');
+  const boton = document.getElementById('pw-toggle');
+  if(!input || !boton) return;
+  const mostrar = input.type === 'password';
+  input.type = mostrar ? 'text' : 'password';
+  boton.innerHTML = mostrar ? ICONO_OJO_TACHADO : ICONO_OJO;
+  const texto = mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña';
+  boton.setAttribute('aria-label', texto);
+  boton.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
+  boton.title = texto;
+  input.focus();
+}
+function loginHTML(){
+  return `
+  <div class="center-loading" style="flex-direction:column;">
+    <div class="login-box">
+      <h1 class="page-title" style="margin-bottom:4px;">Innovex</h1>
+      <p class="page-sub" style="margin-bottom:24px;">Seguridad Ocupacional</p>
+      ${state.loginError ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(state.loginError)}</div>` : ''}
+      <div class="form-field" style="margin-bottom:12px;">
+        <label>Correo</label>
+        <input type="email" id="login-email" placeholder="tu@innovex.cl" onkeydown="if(event.key==='Enter') handleLogin()">
+      </div>
+      <div class="form-field" style="margin-bottom:20px;">
+        <label>Contraseña</label>
+        <div class="pw-wrap">
+          <input type="password" id="login-password" onkeydown="if(event.key==='Enter') handleLogin()">
+          <button type="button" class="pw-toggle" id="pw-toggle" onclick="alternarContrasena()" aria-label="Mostrar contraseña" aria-pressed="false" title="Mostrar contraseña">${ICONO_OJO}</button>
+        </div>
+      </div>
+      <button type="button" class="btn btn-primary" style="width:100%;" onclick="handleLogin()" ${state.loginLoading ? 'disabled' : ''}>${state.loginLoading ? 'Ingresando…' : 'Iniciar sesión'}</button>
+    </div>
+  </div>`;
+}
+async function handleLogin(){
+  const email = val('login-email').trim();
+  const password = val('login-password');
+  if(!email || !password){ state.loginError = 'Ingresa tu correo y contraseña.'; render(); return; }
+  state.loginLoading = true; state.loginError = null; render();
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  state.loginLoading = false;
+  if(error){ state.loginError = 'No se pudo iniciar sesión: ' + error.message; render(); return; }
+  state.session = data.session;
+  await arrancar();
+}
+async function handleLogout(){ await supabaseClient.auth.signOut(); limpiarEstado(); render(); }
+function limpiarEstado(){
+  state.session = null; state.acceso = false; state.revisiones = []; state.docs = [];
+  state.modal = null; state.showAccountMenu = false; state.tab = 'matriz';
+}
+
+/* ============================================================
+   DATOS
+   ============================================================ */
+async function cargarAcceso(){
+  const uid = state.session.user.id;
+  let completo = false;
+  try{
+    const p = await supabaseClient.from('perfiles').select('acceso_completo').eq('id', uid).single();
+    completo = !!(p.data && p.data.acceso_completo);
+  }catch(e){ /* queda en false */ }
+  const a = await supabaseClient.from('perfiles_acceso').select('area,rol').eq('perfil_id', uid);
+  if(a.error) throw new Error(a.error.message);
+  state.acceso = completo || (a.data || []).some(x => x.area === AREA);
+}
+// Supabase entrega como máximo 1.000 filas por consulta: se piden por tramos.
+async function leerTodo(vista, orden){
+  const TRAMO = 1000; let desde = 0, filas = [];
+  while(true){
+    let q = supabaseClient.from(vista).select('*');
+    orden.forEach(c => { q = q.order(c); });
+    const { data, error } = await q.range(desde, desde + TRAMO - 1);
+    if(error) throw new Error(error.message);
+    filas = filas.concat(data || []);
+    if(!data || data.length < TRAMO) return filas;
+    desde += TRAMO;
+  }
+}
+async function cargarDatos(){
+  const [revs, docs] = await withTimeout(Promise.all([
+    leerTodo('seg_ultima_revision', ['plataforma']),
+    leerTodo('seg_vigencias_actuales', ['plataforma_id', 'rut', 'documento'])
+  ]), 20000);
+  state.revisiones = revs; state.docs = docs;
+}
+async function arrancar(){
+  state.cargando = true; render();
+  try{
+    await cargarAcceso();
+    if(state.acceso) await cargarDatos();
+    state.loadError = null;
+  }catch(e){
+    state.loadError = 'No se pudo conectar con la base de datos (' + mensajeError(e) + '). Revisa la conexión e inténtalo de nuevo.';
+  }
+  state.cargando = false;
+  render();
+}
+
+/* ============================================================
+   CÁLCULOS (el estado de cada documento viene calculado de la base)
+   ============================================================ */
+function docsDe(rut, platId){ return state.docs.filter(d => d.rut === rut && d.plataforma_id === platId); }
+function trabajadores(){
+  const m = new Map();
+  state.docs.forEach(d => { if(!m.has(d.rut)) m.set(d.rut, { rut: d.rut, nombre: d.nombre, plats: new Set() }); m.get(d.rut).plats.add(d.plataforma_id); });
+  return [...m.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+}
+function conteo(docs){
+  const c = { vencido:0, rechazado:0, falta:0, en_revision:0, por_vencer:0, vigente:0 };
+  docs.forEach(d => { if(c[d.estado] !== undefined) c[d.estado]++; });
+  return c;
+}
+function apto(c){ return c.vencido + c.rechazado + c.falta + c.en_revision === 0; }
+// Resumen de un trabajador en una plataforma: [estado principal, texto, detalle]
+function resumenCelda(docs){
+  const c = conteo(docs);
+  const extra = excluir => [
+    excluir !== 'vencido' && c.vencido ? plural(c.vencido, 'vencido', 'vencidos') : '',
+    excluir !== 'rechazado' && c.rechazado ? plural(c.rechazado, 'rechazado', 'rechazados') : '',
+    excluir !== 'falta' && c.falta ? plural(c.falta, 'falta', 'faltan') : '',
+    excluir !== 'en_revision' && c.en_revision ? c.en_revision + ' en revisión' : '',
+    excluir !== 'por_vencer' && c.por_vencer ? c.por_vencer + ' por vencer' : ''
+  ].filter(Boolean).join(' · ');
+  if(c.vencido) return ['vencido', plural(c.vencido, 'vencido', 'vencidos'), extra('vencido')];
+  if(c.rechazado) return ['rechazado', plural(c.rechazado, 'prob. rechazado', 'prob. rechazados'), extra('rechazado')];
+  if(c.falta) return ['falta', plural(c.falta, 'falta', 'faltan'), extra('falta')];
+  if(c.en_revision) return ['en_revision', c.en_revision + ' en revisión', extra('en_revision')];
+  const conFecha = docs.filter(d => d.dias_restantes !== null && d.dias_restantes !== undefined);
+  const prox = conFecha.length ? conFecha.reduce((a, b) => a.dias_restantes <= b.dias_restantes ? a : b) : null;
+  if(c.por_vencer) return ['por_vencer', textoDias(prox.dias_restantes), plural(c.por_vencer, 'doc. por vencer', 'docs. por vencer')];
+  return ['vigente', 'Al día', prox ? 'próx. ' + fmtFecha(prox.vigencia) : ''];
+}
+function totales(){
+  const docs = state.filtros.plataforma ? state.docs.filter(d => String(d.plataforma_id) === state.filtros.plataforma) : state.docs;
+  return conteo(docs);
+}
+function plataformasVisibles(){
+  return state.filtros.plataforma ? state.revisiones.filter(r => String(r.plataforma_id) === state.filtros.plataforma) : state.revisiones;
+}
+function trabajadoresFiltrados(){
+  const f = state.filtros, txt = f.texto.trim().toLowerCase();
+  const plats = plataformasVisibles().map(r => r.plataforma_id);
+  return trabajadores().filter(w => {
+    if(!plats.some(p => w.plats.has(p))) return false;
+    if(txt && !(w.nombre.toLowerCase().includes(txt) || w.rut.toLowerCase().includes(txt) || fmtRut(w.rut).toLowerCase().includes(txt))) return false;
+    if(!f.estado) return true;
+    const cs = plats.filter(p => w.plats.has(p)).map(p => conteo(docsDe(w.rut, p)));
+    if(f.estado === 'vencido') return cs.some(c => c.vencido);
+    if(f.estado === 'por_vencer') return cs.some(c => c.por_vencer);
+    if(f.estado === 'falta') return cs.some(c => c.falta || c.rechazado);
+    if(f.estado === 'en_revision') return cs.some(c => c.en_revision);
+    if(f.estado === 'no_apto') return cs.some(c => !apto(c));
+    if(f.estado === 'apto') return cs.every(c => apto(c));
+    return true;
+  });
+}
+
+/* ============================================================
+   VISTAS
+   ============================================================ */
+function statsHTML(){
+  const t = totales();
+  const chip = (cls, n, txt) => `<div class="stat-chip ${cls}"><div class="stat-value">${n}</div><div class="stat-label">${txt}</div></div>`;
+  return chip('bad', t.vencido, 'Vencidos') +
+    chip('warn', t.por_vencer, 'Vencen en 30 días o menos') +
+    chip('rev', t.en_revision, 'En revisión') +
+    chip('off', t.falta + t.rechazado, 'Faltan o rechazados') +
+    chip('', state.revisiones.length, 'Plataformas revisadas');
+}
+function tarjetasHTML(){
+  if(!state.revisiones.length) return '';
+  const hoy = hoyChile();
+  return `<div class="plat-cards">${state.revisiones.map(r => {
+    const dias = diasEntre(fechaChile(r.revisado_en), hoy);
+    const vieja = dias > DIAS_REVISION_ANTIGUA;
+    const acred = r.empresa_acreditada === true ? 'Sí' : (r.empresa_acreditada === false ? 'No' : 'Sin dato');
+    const pct = r.pct_doc_general !== null && r.pct_doc_general !== undefined ? `Cumplimiento: contratista ${r.pct_contratista}% · doc. trabajadores ${r.pct_doc_general}%` : '';
+    return `<div class="plat-card ${r.empresa_acreditada === false ? 'no' : ''}">
+      <h3>${escapeHTML(r.plataforma)}</h3>
+      <div class="linea ${vieja ? 'vieja' : ''}">Revisada el ${fmtFecha(fechaChile(r.revisado_en))} (${dias === 0 ? 'hoy' : 'hace ' + plural(dias, 'día', 'días')})${vieja ? ' · conviene volver a revisarla' : ''}</div>
+      <div class="linea">Empresa acreditada: <b style="color:${r.empresa_acreditada === false ? 'var(--st-atrasado)' : 'var(--ink)'}">${acred}</b>${r.observacion ? ' — ' + escapeHTML(r.observacion) : ''}</div>
+      ${pct ? `<div class="linea">${pct}</div>` : ''}
+      ${r.trabajadores_activos !== null && r.trabajadores_activos !== undefined ? `<div class="linea">${plural(r.trabajadores_activos, 'trabajador activo', 'trabajadores activos')}</div>` : ''}
+    </div>`;
+  }).join('')}</div>`;
+}
+function matrizHTML(){
+  const plats = plataformasVisibles();
+  const ws = trabajadoresFiltrados();
+  if(!state.revisiones.length) return `<div class="empty-state">Todavía no hay revisiones de plataformas.</div>`;
+  if(!ws.length) return `<div class="empty-state">Ningún trabajador coincide con los filtros.</div>`;
+  return `<div class="tabla-wrap"><table class="mx">
+    <tr><th class="n">Trabajador</th>${plats.map(p => `<th class="c">${escapeHTML(p.plataforma)}</th>`).join('')}</tr>
+    ${ws.map(w => `<tr><td class="n"><b>${escapeHTML(w.nombre)}</b><br><span class="rut">${fmtRut(w.rut)}</span></td>${plats.map(p => {
+      if(!w.plats.has(p.plataforma_id)) return `<td class="c"><span class="no-esta">no está</span></td>`;
+      const [est, txt, det] = resumenCelda(docsDe(w.rut, p.plataforma_id));
+      return `<td class="c"><button type="button" class="celda" onclick='abrirDetalle(${escapeHTML(JSON.stringify(w.rut))}, ${p.plataforma_id})' title="Ver documentos">${badge(est, txt)}${det ? `<small>${escapeHTML(det)}</small>` : ''}</button></td>`;
+    }).join('')}</tr>`).join('')}
+  </table></div>
+  <p class="dias-label" style="margin-top:10px;">Cada celda resume al trabajador en esa plataforma: en verde está apto para un permiso de trabajo con ese cliente. «No está» = no está acreditado en esa plataforma. Haz clic en una celda para ver sus documentos.</p>`;
+}
+function filasPronto(){
+  const f = state.pronto;
+  const estados = f.incluirFaltantes ? ['vencido', 'por_vencer', 'rechazado', 'falta'] : ['vencido', 'por_vencer'];
+  return state.docs
+    .filter(d => estados.includes(d.estado) && (!f.plataforma || String(d.plataforma_id) === f.plataforma))
+    .sort((a, b) => {
+      const ra = a.dias_restantes ?? 99999, rb = b.dias_restantes ?? 99999;
+      const ga = (a.estado === 'vencido' || a.estado === 'por_vencer') ? 0 : 1, gb = (b.estado === 'vencido' || b.estado === 'por_vencer') ? 0 : 1;
+      return ga - gb || ra - rb || ESTADOS[a.estado].orden - ESTADOS[b.estado].orden || a.nombre.localeCompare(b.nombre, 'es');
+    });
+}
+function prontoHTML(){
+  const filas = filasPronto();
+  if(!filas.length) return `<div class="empty-state">No hay documentos vencidos ni por vencer${state.pronto.plataforma ? ' en esta plataforma' : ''}.</div>`;
+  return `<p class="dias-label" style="margin:0 0 10px;">${plural(filas.length, 'documento', 'documentos')}, del más urgente al menos urgente. Cada fila es un documento en una plataforma: si vence en dos plataformas, aparece dos veces, cada una con su fecha.</p>
+  <div class="tabla-wrap"><table class="mx">
+    <tr><th>Situación</th><th>Vence</th><th>Trabajador</th><th>Plataforma</th><th>Documento</th></tr>
+    ${filas.map(d => `<tr>
+      <td>${badge(d.estado, d.estado === 'por_vencer' || d.estado === 'vencido' ? textoDias(d.dias_restantes) : null)}</td>
+      <td>${d.vigencia ? fmtFecha(d.vigencia) : (d.vigencia_anterior ? '<span class="dias-label">antes: ' + fmtFecha(d.vigencia_anterior) + '</span>' : '—')}</td>
+      <td><b>${escapeHTML(d.nombre)}</b> <span class="rut">${fmtRut(d.rut)}</span></td>
+      <td>${escapeHTML(d.plataforma)}</td>
+      <td style="white-space:normal;min-width:240px;">${escapeHTML(d.documento)}</td>
+    </tr>`).join('')}
+  </table></div>`;
+}
+function modalHTML(){
+  const m = state.modal;
+  const docs = docsDe(m.rut, m.plataformaId).slice().sort((a, b) => ESTADOS[a.estado].orden - ESTADOS[b.estado].orden || (a.dias_restantes ?? 99999) - (b.dias_restantes ?? 99999));
+  if(!docs.length) return '';
+  const r = state.revisiones.find(x => x.plataforma_id === m.plataformaId);
+  const c = conteo(docs);
+  return `<div class="modal-backdrop" onclick="if(event.target===this) cerrarDetalle()">
+    <div class="modal" role="dialog" aria-modal="true">
+      <button type="button" class="modal-close" onclick="cerrarDetalle()" aria-label="Cerrar">×</button>
+      <h2 class="modal-title">${escapeHTML(docs[0].nombre)}</h2>
+      <p class="page-sub">${fmtRut(m.rut)} · ${escapeHTML(docs[0].plataforma)} · revisada el ${fmtFecha(fechaChile(r.revisado_en))}</p>
+      <p style="margin:12px 0 6px;">${apto(c) ? badge('vigente', 'Apto para permiso con este cliente') : badge('vencido', 'No apto para permiso con este cliente')}</p>
+      <div style="margin-top:8px;">${docs.map(d => `<div class="doc-fila">
+        <span>${escapeHTML(d.documento)}</span>
+        <span class="der">${badge(d.estado, d.estado === 'por_vencer' || d.estado === 'vencido' ? textoDias(d.dias_restantes) : null)}<br><span class="dias-label">${d.vigencia ? 'Vigencia: ' + fmtFecha(d.vigencia) : (d.vigencia_anterior ? 'Vigencia anterior: ' + fmtFecha(d.vigencia_anterior) : (d.estado === 'en_revision' ? 'Subido, sin visar' : 'Sin archivo en la plataforma'))}</span></span>
+      </div>`).join('')}</div>
+      <p class="dias-label" style="margin-top:12px;">«Probablemente rechazado»: en la revisión anterior estaba subido y ahora ya no aparece. Revisa las notificaciones de la plataforma.</p>
+    </div>
+  </div>`;
+}
+function controlesHTML(){
+  const opPlat = sel => `<option value="">Todas las plataformas</option>${state.revisiones.map(r => `<option value="${r.plataforma_id}" ${sel === String(r.plataforma_id) ? 'selected' : ''}>${escapeHTML(r.plataforma)}</option>`).join('')}`;
+  if(state.tab === 'pronto'){
+    return `<select onchange="state.pronto.plataforma=this.value; actualizar()">${opPlat(state.pronto.plataforma)}</select>
+      <label class="chk"><input type="checkbox" ${state.pronto.incluirFaltantes ? 'checked' : ''} onchange="state.pronto.incluirFaltantes=this.checked; actualizar()"> Incluir los que faltan o fueron rechazados</label>`;
+  }
+  const f = state.filtros;
+  const op = (v, t) => `<option value="${v}" ${f.estado === v ? 'selected' : ''}>${t}</option>`;
+  return `<input type="text" placeholder="Buscar por nombre o RUT…" value="${escapeHTML(f.texto)}" oninput="state.filtros.texto=this.value; actualizar()">
+    <select onchange="state.filtros.plataforma=this.value; actualizar(true)">${opPlat(f.plataforma)}</select>
+    <select onchange="state.filtros.estado=this.value; actualizar()">
+      ${op('', 'Todos los trabajadores')}${op('vencido', 'Con documentos vencidos')}${op('por_vencer', 'Con documentos por vencer')}${op('falta', 'Con documentos que faltan o rechazados')}${op('en_revision', 'Con documentos en revisión')}${op('no_apto', 'No aptos en alguna plataforma')}${op('apto', 'Aptos en todas sus plataformas')}
+    </select>`;
+}
+function contenidoHTML(){ return state.tab === 'pronto' ? prontoHTML() : matrizHTML(); }
+// Redibuja solo la lista (sin perder el foco del buscador)
+function actualizar(conStats){
+  const c = document.getElementById('contenido'); if(c) c.innerHTML = contenidoHTML();
+  if(conStats){ const s = document.getElementById('stats-row'); if(s) s.innerHTML = statsHTML(); }
+}
+function setTab(t){ state.tab = t; render(); }
+function toggleMenu(){ state.showAccountMenu = !state.showAccountMenu; render(); }
+function abrirDetalle(rut, plataformaId){ state.modal = { rut, plataformaId }; render(); }
+function cerrarDetalle(){ state.modal = null; render(); }
+document.addEventListener('keydown', e => { if(e.key === 'Escape' && state.modal) cerrarDetalle(); });
+
+function sinAccesoHTML(){
+  return `
+  <div class="center-loading" style="flex-direction:column;gap:12px;">
+    <p style="font-family:var(--font-display);font-size:20px;margin:0;">Sin acceso</p>
+    <p class="page-sub" style="max-width:340px;text-align:center;">Tu cuenta no tiene acceso a Seguridad Ocupacional. Si lo necesitas, pídelo a quien administra el sistema.</p>
+    <a class="link-btn" href="./index.html">Volver al inicio</a>
+    <button type="button" class="link-btn" onclick="handleLogout()">Cerrar sesión</button>
+  </div>`;
+}
+function mainHTML(){
+  return `
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-row1">
+          <div>
+            <h1 class="page-title">Seguridad Ocupacional</h1>
+            <p class="page-sub">Innovex · vigencia de documentos en las plataformas de clientes</p>
+          </div>
+          <div class="account-menu-wrap">
+            <button type="button" class="btn-ghost btn-sm account-menu-btn" onclick="toggleMenu()" aria-label="Menú de cuenta">☰</button>
+            ${state.showAccountMenu ? `
+              <div style="position:fixed;inset:0;z-index:29;" onclick="toggleMenu()"></div>
+              <div class="account-menu-dropdown">
+                <span class="dias-label" style="padding:6px 12px 8px;border-bottom:1px solid var(--border);margin-bottom:4px;display:block;">${escapeHTML(state.session.user.email)}</span>
+                <a href="./index.html" class="account-menu-item">Cambiar de área</a>
+                <button type="button" class="account-menu-item" onclick="state.showAccountMenu=false; arrancar();">Actualizar datos</button>
+                <button type="button" class="account-menu-item" onclick="state.showAccountMenu=false; handleLogout();">Cerrar sesión</button>
+              </div>` : ''}
+          </div>
+        </div>
+        <div class="stats-row" id="stats-row">${statsHTML()}</div>
+      </div>
+      <div class="tabs-row">
+        <button type="button" class="tab-item ${state.tab === 'matriz' ? 'active' : ''}" onclick="setTab('matriz')">Trabajador × plataforma</button>
+        <button type="button" class="tab-item ${state.tab === 'pronto' ? 'active' : ''}" onclick="setTab('pronto')">Vence pronto</button>
+      </div>
+    </div>
+    <div class="controls"><div class="controls-inner">${controlesHTML()}</div></div>
+    <div class="main">
+      ${state.loadError ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(state.loadError)} <button type="button" class="link-btn" onclick="arrancar()">Reintentar</button></div>` : ''}
+      <div class="info-banner">Los datos vienen de la última revisión de cada plataforma. Un documento renovado en la plataforma seguirá apareciendo como «por vencer» hasta la próxima revisión.</div>
+      ${tarjetasHTML()}
+      <div id="contenido">${contenidoHTML()}</div>
+    </div>
+    ${state.modal ? modalHTML() : ''}`;
+}
+function render(){
+  const app = document.getElementById('app');
+  if(!app) return;
+  if(!state.session){ app.innerHTML = loginHTML(); return; }
+  if(state.cargando){ app.innerHTML = '<div class="center-loading">Conectando con la base de datos…</div>'; return; }
+  if(state.loadError && !state.acceso){
+    app.innerHTML = `<div class="center-loading" style="flex-direction:column;gap:12px;"><p class="page-sub" style="max-width:380px;text-align:center;">${escapeHTML(state.loadError)}</p><button type="button" class="btn btn-primary" onclick="arrancar()">Reintentar</button></div>`;
+    return;
+  }
+  if(!state.acceso){ app.innerHTML = sinAccesoHTML(); return; }
+  app.innerHTML = mainHTML();
+}
+
+/* ============================================================
+   INICIO
+   ============================================================ */
+async function init(){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  state.session = session;
+  if(session){ await arrancar(); } else { state.cargando = false; render(); }
+}
+init();
+supabaseClient.auth.onAuthStateChange((event)=>{
+  if(event === 'SIGNED_OUT'){ limpiarEstado(); state.cargando = false; render(); }
+});
+</script>
+</body>
+</html>

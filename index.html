@@ -205,12 +205,12 @@ const AREAS_SUGERIDAS = ['Adquisiciones','Bodega','Logística','Mantenimiento','
 const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const DEFAULT_TC = 930;
 
-// Destinos posibles de la pantalla selectora. Se agregan acá cuando
-// exista una página real para Subcontrataciones / Seguridad Ocupacional.
+// Destinos posibles de la pantalla selectora (cada área tiene su página).
 // url:null significa "quedarse en esta misma página" (Adquisiciones).
 const TODOS_LOS_DESTINOS = [
   { area:'adquisiciones', nombre:'Adquisiciones', descripcion:'Pedidos e Inventario', url:null },
-  { area:'subcontrataciones', nombre:'Subcontrataciones', descripcion:'Trabajadores y documentos', url:'./subcontrataciones.html' }
+  { area:'subcontrataciones', nombre:'Subcontrataciones', descripcion:'Trabajadores y documentos', url:'./subcontrataciones.html' },
+  { area:'seguridad', nombre:'Seguridad Ocupacional', descripcion:'Vigencia de documentos en plataformas', url:'./seguridad.html' }
 ];
 
 const STATUS_META = {
