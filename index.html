@@ -277,9 +277,6 @@ function fmtUSD(n){ if(n===null||n===undefined||n==='') return '—'; return Num
 function fmtCLP(n){ if(n===null||n===undefined||n==='') return '—'; return Math.round(n).toLocaleString('es-CL'); }
 function pedidoMonto(p){
   if(p.monto != null && p.moneda) return { monto: p.monto, moneda: p.moneda };
-  // Respaldo para pedidos guardados antes de simplificar el monto (sin tipo de cambio).
-  if(p.moneda_ingreso === 'CLP') return { monto: p.monto_clp, moneda: 'CLP' };
-  if(p.monto_usd != null) return { monto: p.monto_usd, moneda: 'USD' };
   return { monto: null, moneda: null };
 }
 function fmtMonto(moneda, monto){
@@ -430,7 +427,7 @@ Si un dato no aparece explícitamente en el texto, usa null. No inventes informa
 function assistantSystemPromptPedidos(contextData){
   return `Eres el asistente de IA del sistema de seguimiento de pedidos del área de Adquisiciones de Innovex.
 Respondes en español, de forma breve, clara y directa, basándote únicamente en los datos de pedidos entregados a continuación.
-Cada pedido tiene su monto en dólares (monto_usd) y su equivalente en pesos chilenos (monto_clp).
+Cada pedido tiene su monto (monto) y su moneda (moneda: CLP, USD o EUR).
 "fecha_registro" es cuándo se agregó el pedido al sistema — úsala para responder preguntas sobre pedidos nuevos o recientes.
 "pendiente_revision" en true significa que el pedido lo creó automáticamente el lector de correo con IA y nadie lo ha confirmado todavía.
 Si la pregunta no se puede responder con estos datos, dilo con honestidad.
