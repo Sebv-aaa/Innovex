@@ -146,14 +146,16 @@ const DIAS_REVISION_ANTIGUA = 7;   // si la última revisión de una plataforma 
 // (última revisión de cada plataforma, leída por Claude con el navegador).
 // Esta página solo muestra: no tiene botones para modificar datos.
 
+// En la plataforma, un documento vencido, rechazado o que nunca se subió se ve igual
+// (sin archivo), así que los tres se muestran con un solo estado: «Sin documento vigente».
 const ESTADOS = {
-  vencido:     { etiqueta:'Vencido',                 clase:'badge-bad',  orden:0 },
-  rechazado:   { etiqueta:'Probablemente rechazado', clase:'badge-bad',  orden:1 },
-  falta:       { etiqueta:'Falta',                   clase:'badge-off',  orden:2 },
-  en_revision: { etiqueta:'En revisión',             clase:'badge-rev',  orden:3 },
-  por_vencer:  { etiqueta:'Por vencer',              clase:'badge-warn', orden:4 },
-  vigente:     { etiqueta:'Vigente',                 clase:'badge-ok',   orden:5 }
+  sin_vigente: { etiqueta:'Sin documento vigente', clase:'badge-bad',  orden:0 },
+  en_revision: { etiqueta:'En revisión',           clase:'badge-rev',  orden:1 },
+  por_vencer:  { etiqueta:'Por vencer',            clase:'badge-warn', orden:2 },
+  vigente:     { etiqueta:'Vigente',               clase:'badge-ok',   orden:3 }
 };
+// Por si la base todavía entrega los estados antiguos
+const ESTADO_ANTIGUO = { vencido:'sin_vigente', rechazado:'sin_vigente', falta:'sin_vigente' };
 
 let state = {
   session: null, loginError: null, loginLoading: false,
@@ -291,6 +293,7 @@ async function cargarDatos(){
     leerTodo('seg_ultima_revision', ['plataforma']),
     leerTodo('seg_vigencias_actuales', ['plataforma_id', 'rut', 'documento'])
   ]), 20000);
+  docs.forEach(d => { if(ESTADO_ANTIGUO[d.estado]) d.estado = ESTADO_ANTIGUO[d.estado]; });
   state.revisiones = revs; state.docs = docs;
 }
 async function arrancar(){
@@ -316,24 +319,20 @@ function trabajadores(){
   return [...m.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 }
 function conteo(docs){
-  const c = { vencido:0, rechazado:0, falta:0, en_revision:0, por_vencer:0, vigente:0 };
+  const c = { sin_vigente:0, en_revision:0, por_vencer:0, vigente:0 };
   docs.forEach(d => { if(c[d.estado] !== undefined) c[d.estado]++; });
   return c;
 }
-function apto(c){ return c.vencido + c.rechazado + c.falta + c.en_revision === 0; }
+function apto(c){ return c.sin_vigente + c.en_revision === 0; }
 // Resumen de un trabajador en una plataforma: [estado principal, texto, detalle]
 function resumenCelda(docs){
   const c = conteo(docs);
   const extra = excluir => [
-    excluir !== 'vencido' && c.vencido ? plural(c.vencido, 'vencido', 'vencidos') : '',
-    excluir !== 'rechazado' && c.rechazado ? plural(c.rechazado, 'rechazado', 'rechazados') : '',
-    excluir !== 'falta' && c.falta ? plural(c.falta, 'falta', 'faltan') : '',
+    excluir !== 'sin_vigente' && c.sin_vigente ? c.sin_vigente + ' sin documento vigente' : '',
     excluir !== 'en_revision' && c.en_revision ? c.en_revision + ' en revisión' : '',
     excluir !== 'por_vencer' && c.por_vencer ? c.por_vencer + ' por vencer' : ''
   ].filter(Boolean).join(' · ');
-  if(c.vencido) return ['vencido', plural(c.vencido, 'vencido', 'vencidos'), extra('vencido')];
-  if(c.rechazado) return ['rechazado', plural(c.rechazado, 'prob. rechazado', 'prob. rechazados'), extra('rechazado')];
-  if(c.falta) return ['falta', plural(c.falta, 'falta', 'faltan'), extra('falta')];
+  if(c.sin_vigente) return ['sin_vigente', c.sin_vigente + ' sin documento vigente', extra('sin_vigente')];
   if(c.en_revision) return ['en_revision', c.en_revision + ' en revisión', extra('en_revision')];
   const conFecha = docs.filter(d => d.dias_restantes !== null && d.dias_restantes !== undefined);
   const prox = conFecha.length ? conFecha.reduce((a, b) => a.dias_restantes <= b.dias_restantes ? a : b) : null;
@@ -355,9 +354,8 @@ function trabajadoresFiltrados(){
     if(txt && !(w.nombre.toLowerCase().includes(txt) || w.rut.toLowerCase().includes(txt) || fmtRut(w.rut).toLowerCase().includes(txt))) return false;
     if(!f.estado) return true;
     const cs = plats.filter(p => w.plats.has(p)).map(p => conteo(docsDe(w.rut, p)));
-    if(f.estado === 'vencido') return cs.some(c => c.vencido);
+    if(f.estado === 'sin_vigente') return cs.some(c => c.sin_vigente);
     if(f.estado === 'por_vencer') return cs.some(c => c.por_vencer);
-    if(f.estado === 'falta') return cs.some(c => c.falta || c.rechazado);
     if(f.estado === 'en_revision') return cs.some(c => c.en_revision);
     if(f.estado === 'no_apto') return cs.some(c => !apto(c));
     if(f.estado === 'apto') return cs.every(c => apto(c));
@@ -371,10 +369,9 @@ function trabajadoresFiltrados(){
 function statsHTML(){
   const t = totales();
   const chip = (cls, n, txt) => `<div class="stat-chip ${cls}"><div class="stat-value">${n}</div><div class="stat-label">${txt}</div></div>`;
-  return chip('bad', t.vencido, 'Vencidos') +
+  return chip('bad', t.sin_vigente, 'Sin documento vigente') +
     chip('warn', t.por_vencer, 'Vencen en 30 días o menos') +
     chip('rev', t.en_revision, 'En revisión') +
-    chip('off', t.falta + t.rechazado, 'Faltan o rechazados') +
     chip('', state.revisiones.length, 'Plataformas revisadas');
 }
 function tarjetasHTML(){
@@ -411,24 +408,29 @@ function matrizHTML(){
 }
 function filasPronto(){
   const f = state.pronto;
-  const estados = f.incluirFaltantes ? ['vencido', 'por_vencer', 'rechazado', 'falta'] : ['vencido', 'por_vencer'];
+  const estados = f.incluirFaltantes ? ['por_vencer', 'sin_vigente'] : ['por_vencer'];
+  // Orden (pendiente de redefinir): primero por fecha (las ya pasadas arriba), luego los sin fecha.
   return state.docs
     .filter(d => estados.includes(d.estado) && (!f.plataforma || String(d.plataforma_id) === f.plataforma))
     .sort((a, b) => {
       const ra = a.dias_restantes ?? 99999, rb = b.dias_restantes ?? 99999;
-      const ga = (a.estado === 'vencido' || a.estado === 'por_vencer') ? 0 : 1, gb = (b.estado === 'vencido' || b.estado === 'por_vencer') ? 0 : 1;
-      return ga - gb || ra - rb || ESTADOS[a.estado].orden - ESTADOS[b.estado].orden || a.nombre.localeCompare(b.nombre, 'es');
+      return ra - rb || ESTADOS[a.estado].orden - ESTADOS[b.estado].orden || a.nombre.localeCompare(b.nombre, 'es');
     });
+}
+function textoVence(d){
+  if(d.vigencia) return fmtFecha(d.vigencia);
+  if(d.vigencia_anterior) return '<span class="dias-label">última conocida: ' + fmtFecha(d.vigencia_anterior) + '</span>';
+  return '—';
 }
 function prontoHTML(){
   const filas = filasPronto();
-  if(!filas.length) return `<div class="empty-state">No hay documentos vencidos ni por vencer${state.pronto.plataforma ? ' en esta plataforma' : ''}.</div>`;
+  if(!filas.length) return `<div class="empty-state">No hay documentos por vencer${state.pronto.plataforma ? ' en esta plataforma' : ''}.</div>`;
   return `<p class="dias-label" style="margin:0 0 10px;">${plural(filas.length, 'documento', 'documentos')}, del más urgente al menos urgente. Cada fila es un documento en una plataforma: si vence en dos plataformas, aparece dos veces, cada una con su fecha.</p>
   <div class="tabla-wrap"><table class="mx">
     <tr><th>Situación</th><th>Vence</th><th>Trabajador</th><th>Plataforma</th><th>Documento</th></tr>
     ${filas.map(d => `<tr>
-      <td>${badge(d.estado, d.estado === 'por_vencer' || d.estado === 'vencido' ? textoDias(d.dias_restantes) : null)}</td>
-      <td>${d.vigencia ? fmtFecha(d.vigencia) : (d.vigencia_anterior ? '<span class="dias-label">antes: ' + fmtFecha(d.vigencia_anterior) + '</span>' : '—')}</td>
+      <td>${badge(d.estado, d.estado === 'por_vencer' ? textoDias(d.dias_restantes) : null)}</td>
+      <td>${textoVence(d)}</td>
       <td><b>${escapeHTML(d.nombre)}</b> <span class="rut">${fmtRut(d.rut)}</span></td>
       <td>${escapeHTML(d.plataforma)}</td>
       <td style="white-space:normal;min-width:240px;">${escapeHTML(d.documento)}</td>
@@ -446,12 +448,12 @@ function modalHTML(){
       <button type="button" class="modal-close" onclick="cerrarDetalle()" aria-label="Cerrar">×</button>
       <h2 class="modal-title">${escapeHTML(docs[0].nombre)}</h2>
       <p class="page-sub">${fmtRut(m.rut)} · ${escapeHTML(docs[0].plataforma)} · revisada el ${fmtFecha(fechaChile(r.revisado_en))}</p>
-      <p style="margin:12px 0 6px;">${apto(c) ? badge('vigente', 'Apto para permiso con este cliente') : badge('vencido', 'No apto para permiso con este cliente')}</p>
+      <p style="margin:12px 0 6px;">${apto(c) ? badge('vigente', 'Apto para permiso con este cliente') : badge('sin_vigente', 'No apto para permiso con este cliente')}</p>
       <div style="margin-top:8px;">${docs.map(d => `<div class="doc-fila">
         <span>${escapeHTML(d.documento)}</span>
-        <span class="der">${badge(d.estado, d.estado === 'por_vencer' || d.estado === 'vencido' ? textoDias(d.dias_restantes) : null)}<br><span class="dias-label">${d.vigencia ? 'Vigencia: ' + fmtFecha(d.vigencia) : (d.vigencia_anterior ? 'Vigencia anterior: ' + fmtFecha(d.vigencia_anterior) : (d.estado === 'en_revision' ? 'Subido, sin visar' : 'Sin archivo en la plataforma'))}</span></span>
+        <span class="der">${badge(d.estado, d.estado === 'por_vencer' ? textoDias(d.dias_restantes) : null)}<br><span class="dias-label">${d.vigencia ? (d.estado === 'sin_vigente' ? 'Venció el ' : 'Vigencia: ') + fmtFecha(d.vigencia) : (d.vigencia_anterior ? 'Última vigencia conocida: ' + fmtFecha(d.vigencia_anterior) : (d.estado === 'en_revision' ? 'Subido, sin visar' : 'Sin archivo en la plataforma'))}</span></span>
       </div>`).join('')}</div>
-      <p class="dias-label" style="margin-top:12px;">«Probablemente rechazado»: en la revisión anterior estaba subido y ahora ya no aparece. Revisa las notificaciones de la plataforma.</p>
+      <p class="dias-label" style="margin-top:12px;">«Sin documento vigente»: la plataforma no muestra un archivo vigente. Puede que falte, que haya vencido o que lo hayan rechazado; la plataforma no permite distinguirlo. Revisa sus notificaciones.</p>
     </div>
   </div>`;
 }
@@ -459,14 +461,14 @@ function controlesHTML(){
   const opPlat = sel => `<option value="">Todas las plataformas</option>${state.revisiones.map(r => `<option value="${r.plataforma_id}" ${sel === String(r.plataforma_id) ? 'selected' : ''}>${escapeHTML(r.plataforma)}</option>`).join('')}`;
   if(state.tab === 'pronto'){
     return `<select onchange="state.pronto.plataforma=this.value; actualizar()">${opPlat(state.pronto.plataforma)}</select>
-      <label class="chk"><input type="checkbox" ${state.pronto.incluirFaltantes ? 'checked' : ''} onchange="state.pronto.incluirFaltantes=this.checked; actualizar()"> Incluir los que faltan o fueron rechazados</label>`;
+      <label class="chk"><input type="checkbox" ${state.pronto.incluirFaltantes ? 'checked' : ''} onchange="state.pronto.incluirFaltantes=this.checked; actualizar()"> Incluir los sin documento vigente</label>`;
   }
   const f = state.filtros;
   const op = (v, t) => `<option value="${v}" ${f.estado === v ? 'selected' : ''}>${t}</option>`;
   return `<input type="text" placeholder="Buscar por nombre o RUT…" value="${escapeHTML(f.texto)}" oninput="state.filtros.texto=this.value; actualizar()">
     <select onchange="state.filtros.plataforma=this.value; actualizar(true)">${opPlat(f.plataforma)}</select>
     <select onchange="state.filtros.estado=this.value; actualizar()">
-      ${op('', 'Todos los trabajadores')}${op('vencido', 'Con documentos vencidos')}${op('por_vencer', 'Con documentos por vencer')}${op('falta', 'Con documentos que faltan o rechazados')}${op('en_revision', 'Con documentos en revisión')}${op('no_apto', 'No aptos en alguna plataforma')}${op('apto', 'Aptos en todas sus plataformas')}
+      ${op('', 'Todos los trabajadores')}${op('sin_vigente', 'Con algún documento sin vigencia')}${op('por_vencer', 'Con documentos por vencer')}${op('en_revision', 'Con documentos en revisión')}${op('no_apto', 'No aptos en alguna plataforma')}${op('apto', 'Aptos en todas sus plataformas')}
     </select>`;
 }
 function contenidoHTML(){ return state.tab === 'pronto' ? prontoHTML() : matrizHTML(); }
