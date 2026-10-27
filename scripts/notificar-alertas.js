@@ -87,7 +87,7 @@ async function supaGet(path) {
 function camposFaltantes(p) {
   const faltan = [];
   if (!p.proveedor || /^por confirmar/i.test(String(p.proveedor).trim())) faltan.push('proveedor');
-  const monto = p.monto != null ? p.monto : (p.moneda_ingreso === 'CLP' ? p.monto_clp : p.monto_usd);
+  const monto = p.monto;
   if (monto == null || Number.isNaN(Number(monto)) || Number(monto) <= 0) faltan.push('monto');
   if (!p.destino) faltan.push('destino');
   if (!p.fecha_estimada) faltan.push('fecha estimada');
@@ -98,7 +98,7 @@ async function main() {
   const pedidos = await supaGet('pedidos?estado=neq.Recibido&eliminado=eq.false&select=proveedor,estado,fecha_estimada,fecha_ultima_actualizacion');
   // Incompletos: se revisan todos los no eliminados (también los recibidos), para que
   // el registro quede completo aunque el pedido ya haya llegado.
-  const todos = await supaGet('pedidos?eliminado=eq.false&select=proveedor,estado,courier,numero_seguimiento,monto,monto_usd,monto_clp,moneda_ingreso,destino,fecha_estimada,pendiente_revision');
+  const todos = await supaGet('pedidos?eliminado=eq.false&select=proveedor,estado,courier,numero_seguimiento,monto,destino,fecha_estimada,pendiente_revision');
   const insumos = await supaGet('inventario?stock_minimo=not.is.null&select=nombre,ubicacion,cantidad,stock_minimo');
 
   const hoy = todayISO();
