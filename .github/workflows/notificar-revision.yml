@@ -1,0 +1,39 @@
+name: Notificar revisión de pedidos
+
+on:
+  # Lo dispara Supabase cuando Claude guarda una revisión en `revisiones_pedidos`
+  # (disparador `disparar_notificar_revision`). También se puede correr a mano
+  # desde la pestaña «Actions» indicando el número de la revisión.
+  workflow_dispatch:
+    inputs:
+      revision_id:
+        description: 'Número de la revisión (columna id de revisiones_pedidos)'
+        required: true
+        type: string
+
+# Permisos mínimos: el workflow solo lee el código del repo.
+permissions:
+  contents: read
+
+jobs:
+  notificar-revision:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Instalar dependencias
+        working-directory: scripts
+        run: npm install
+      - name: Enviar la revisión por correo
+        run: node scripts/notificar-revision.js
+        env:
+          REVISION_ID: ${{ inputs.revision_id }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SMTP_EMAIL: ${{ secrets.SMTP_EMAIL }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          NOTIFICAR_EMAIL: ${{ secrets.NOTIFICAR_EMAIL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
