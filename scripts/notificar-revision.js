@@ -10,7 +10,10 @@
 // .github/workflows/notificar-revision.yml con el número de la revisión.
 // También se puede correr a mano desde la pestaña «Actions» (pide el número).
 //
-// Se envía siempre, aunque la revisión diga «Sin cambios». Si la revisión ya
+// Se envía siempre, aunque la revisión diga «Sin cambios». Claude la guarda apenas
+// termina de revisar, ANTES de pedir el «sí» de Antoniela: si hay cambios, el
+// resultado es «esperando confirmación» y el correo lo dice (los pedidos solo
+// cambian después del «sí», en el chat de Claude). Si la revisión ya
 // fue enviada (enviado_en con fecha), no se vuelve a enviar.
 //
 // La revisión de la MAÑANA (antes de las 13:00, hora de Chile) agrega al final
@@ -130,6 +133,7 @@ async function pendientesPlataforma() {
 const txt = (s) => (s === null || s === undefined || s === '' ? '—' : String(s));
 
 const RESULTADO = {
+  'esperando confirmación': 'Hay cambios esperando tu confirmación en Claude. Todavía no se ha cambiado ningún pedido: respóndele «sí» en el chat de Claude para aplicarlos.',
   'aplicado': 'Cambios aplicados con la confirmación de Antoniela.',
   'parcial': 'Se aplicó parte de los cambios (ver columna «Resultado»).',
   'no aplicado': 'Antoniela no aprobó los cambios: no se guardó nada.',
@@ -165,7 +169,10 @@ async function main() {
   const turno = h < 13 ? 'mañana' : 'tarde';
   const tabla = (Array.isArray(rev.filas) ? rev.filas : []).map((f) => ({ ...f, courier_guia: courierGuia(f) }));
   const alertas = (Array.isArray(rev.alertas) ? rev.alertas : []).map(String);
-  const resumen = RESULTADO[rev.resultado] || rev.resultado;
+  const porConfirmar = tabla.filter((f) => /esperando/i.test(String(f.resultado || ''))).length;
+  const resumen = rev.resultado === 'esperando confirmación' && porConfirmar
+    ? `Hay ${porConfirmar} ${porConfirmar === 1 ? 'cambio' : 'cambios'} esperando tu confirmación en Claude. Todavía no se ha cambiado ningún pedido: respóndele «sí» en el chat de Claude para aplicarlos.`
+    : (RESULTADO[rev.resultado] || rev.resultado);
   const pend = turno === 'mañana' ? await pendientesPlataforma() : null;
 
   // --- Texto plano (para clientes de correo sin HTML) ---
@@ -239,7 +246,7 @@ async function main() {
   await transporter.sendMail({
     from: SMTP_EMAIL,
     to: NOTIFICAR_EMAIL,
-    subject: `Revisión de pedidos — ${fecha} (${turno})` + (pend ? (pend.total ? ` · ${pend.total} pendientes` : ' · todo al día') : ''),
+    subject: `Revisión de pedidos — ${fecha} (${turno})` + (porConfirmar ? ` · ${porConfirmar} por confirmar` : '') + (pend && pend.total ? ` · ${pend.total} pendientes` : ''),
     text: t.join('\n'),
     html,
   });
