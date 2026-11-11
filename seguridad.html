@@ -95,6 +95,9 @@
   .plat-card h3{ font-family:var(--font-display); font-size:16px; margin:0 0 4px; }
   .plat-card .linea{ font-size:12.5px; color:var(--ink-muted); }
   .plat-card .vieja{ color:var(--st-atrasado); font-weight:600; }
+  .plat-card.aviso{ border-left-color:var(--st-aduana); }
+  .plat-card .acred-pronto{ color:var(--st-aduana); font-weight:600; }
+  .plat-card .acred-vencida{ color:var(--st-atrasado); font-weight:600; }
 
   /* Tabla trabajador × plataforma */
   .tabla-wrap{ background:var(--surface); border:1px solid var(--border); border-radius:6px; overflow-x:auto; }
@@ -120,6 +123,31 @@
   .doc-fila:last-child{ border-bottom:none; }
   .doc-fila .der{ text-align:right; flex:0 0 auto; }
 
+  /* Reporte para gerencia */
+  .rep-head{ display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; margin:6px 0 14px; }
+  .rep-head h2{ font-family:var(--font-display); font-size:20px; margin:0; }
+  .rep-cards{ display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:12px; margin-bottom:22px; }
+  .rep-card{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:14px 16px; }
+  .rep-card h3{ font-family:var(--font-display); font-size:16px; margin:0 0 10px; }
+  .rep-kpi{ display:flex; justify-content:space-between; align-items:baseline; font-size:12.5px; color:var(--ink-muted); margin-top:8px; }
+  .rep-kpi b{ font-family:var(--font-display); font-size:22px; color:var(--ink); white-space:nowrap; margin-left:8px; }
+  .rep-bar{ height:6px; background:var(--surface-alt); border-radius:3px; overflow:hidden; margin-top:4px; }
+  .rep-bar span{ display:block; height:100%; }
+  .nv-ok{ background:var(--st-recibido); } .nv-med{ background:var(--st-aduana); } .nv-bajo{ background:var(--st-atrasado); }
+  .rep-sec{ font-family:var(--font-display); font-size:16px; margin:22px 0 4px; }
+  table.mx td.pc{ text-align:center; font-size:13px; }
+  table.mx td.pc b{ display:block; font-size:14px; }
+  table.mx td.pc small{ color:var(--ink-muted); font-size:11.5px; }
+  td.pc.c-ok{ background:var(--st-recibido-bg); } td.pc.c-med{ background:var(--st-aduana-bg); } td.pc.c-bajo{ background:var(--st-atrasado-bg); }
+  table.mx tr.tot td{ font-weight:600; border-top:2px solid var(--border); }
+  @media print{
+    .controls, .tabs-row, .account-menu-wrap, .info-banner, .no-print{ display:none !important; }
+    body{ background:#fff; }
+    *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .tabla-wrap{ overflow:visible; }
+    table.mx td.n{ position:static; }
+  }
+
   @media (max-width:760px){
     .topbar, .controls, .main{ padding-left:16px; padding-right:16px; }
     .stats-row{ justify-content:flex-start; }
@@ -141,6 +169,7 @@ const SUPABASE_KEY = 'sb_publishable_DrQ2zuhGaxF09jQUrssLWQ_lLKtVbnL';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const AREA = 'seguridad';
 const DIAS_REVISION_ANTIGUA = 7;   // si la última revisión de una plataforma es más antigua, se avisa en su tarjeta
+const DIAS_AVISO_ACREDITACION = 30; // si la acreditación de la empresa vence en estos días o menos, la tarjeta avisa
 
 // Los datos vienen de las vistas seg_ultima_revision y seg_vigencias_actuales
 // (última revisión de cada plataforma, leída por Claude con el navegador).
@@ -161,7 +190,7 @@ let state = {
   session: null, loginError: null, loginLoading: false,
   cargando: true, loadError: null, acceso: false,
   tab: 'matriz',
-  revisiones: [], docs: [],
+  revisiones: [], docs: [], nomina: new Map(),
   filtros: { texto: '', plataforma: '', estado: '' },
   pronto: { plataforma: '', incluirFaltantes: false },
   modal: null,          // { rut, plataformaId }
@@ -257,7 +286,7 @@ async function handleLogin(){
 }
 async function handleLogout(){ await supabaseClient.auth.signOut(); limpiarEstado(); render(); }
 function limpiarEstado(){
-  state.session = null; state.acceso = false; state.revisiones = []; state.docs = [];
+  state.session = null; state.acceso = false; state.revisiones = []; state.docs = []; state.nomina = new Map();
   state.modal = null; state.showAccountMenu = false; state.tab = 'matriz';
 }
 
@@ -289,12 +318,14 @@ async function leerTodo(vista, orden){
   }
 }
 async function cargarDatos(){
-  const [revs, docs] = await withTimeout(Promise.all([
+  const [revs, docs, nomina] = await withTimeout(Promise.all([
     leerTodo('seg_ultima_revision', ['plataforma']),
-    leerTodo('seg_vigencias_actuales', ['plataforma_id', 'rut', 'documento'])
+    leerTodo('seg_vigencias_actuales', ['plataforma_id', 'rut', 'documento']),
+    leerTodo('seg_nomina', ['rut']).catch(() => [])   // la nómina solo se usa en el reporte
   ]), 20000);
   docs.forEach(d => { if(ESTADO_ANTIGUO[d.estado]) d.estado = ESTADO_ANTIGUO[d.estado]; });
   state.revisiones = revs; state.docs = docs;
+  state.nomina = new Map(nomina.map(n => [n.rut, n]));
 }
 async function arrancar(){
   state.cargando = true; render();
@@ -382,10 +413,23 @@ function tarjetasHTML(){
     const vieja = dias > DIAS_REVISION_ANTIGUA;
     const acred = r.empresa_acreditada === true ? 'Sí' : (r.empresa_acreditada === false ? 'No' : 'Sin dato');
     const pct = r.pct_doc_general !== null && r.pct_doc_general !== undefined ? `Cumplimiento: contratista ${r.pct_contratista}% · doc. trabajadores ${r.pct_doc_general}%` : '';
-    return `<div class="plat-card ${r.empresa_acreditada === false ? 'no' : ''}">
+    // Vigencia de la acreditación de Innovex en esta plataforma (aviso con 30 días o menos)
+    let acredLinea = '', aviso = false;
+    if(r.vigencia_acreditacion){
+      const d = diasEntre(hoy, r.vigencia_acreditacion.slice(0, 10));
+      const cuando = d < 0 ? 'venció hace ' + plural(-d, 'día', 'días') : (d === 0 ? 'vence hoy' : 'en ' + plural(d, 'día', 'días'));
+      const cls = d < 0 ? 'acred-vencida' : (d <= DIAS_AVISO_ACREDITACION ? 'acred-pronto' : '');
+      aviso = d <= DIAS_AVISO_ACREDITACION;
+      acredLinea = `<div class="linea ${cls}">Acreditada hasta el ${fmtFecha(r.vigencia_acreditacion)} (${cuando})</div>`;
+    } else if(r.empresa_acreditada === true){
+      acredLinea = `<div class="linea">Sin fecha de vencimiento de la acreditación en la plataforma</div>`;
+    }
+    const claseCard = r.empresa_acreditada === false ? 'no' : (aviso ? 'aviso' : '');
+    return `<div class="plat-card ${claseCard}">
       <h3>${escapeHTML(r.plataforma)}</h3>
       <div class="linea ${vieja ? 'vieja' : ''}">Revisada el ${fmtFecha(fechaChile(r.revisado_en))} (${dias === 0 ? 'hoy' : 'hace ' + plural(dias, 'día', 'días')})${vieja ? ' · conviene volver a revisarla' : ''}</div>
       <div class="linea">Empresa acreditada: <b style="color:${r.empresa_acreditada === false ? 'var(--st-atrasado)' : 'var(--ink)'}">${acred}</b>${r.observacion ? ' — ' + escapeHTML(r.observacion) : ''}</div>
+      ${acredLinea}
       ${pct ? `<div class="linea">${pct}</div>` : ''}
       ${r.trabajadores_activos !== null && r.trabajadores_activos !== undefined ? `<div class="linea">${plural(r.trabajadores_activos, 'trabajador activo', 'trabajadores activos')}</div>` : ''}
     </div>`;
@@ -459,6 +503,9 @@ function modalHTML(){
 }
 function controlesHTML(){
   const opPlat = sel => `<option value="">Todas las plataformas</option>${state.revisiones.map(r => `<option value="${r.plataforma_id}" ${sel === String(r.plataforma_id) ? 'selected' : ''}>${escapeHTML(r.plataforma)}</option>`).join('')}`;
+  if(state.tab === 'reporte'){
+    return `<span class="dias-label">Resumen para gerencia con la última revisión de cada plataforma. Usa «Imprimir o guardar PDF» para compartirlo.</span>`;
+  }
   if(state.tab === 'pronto'){
     return `<select onchange="state.pronto.plataforma=this.value; actualizar()">${opPlat(state.pronto.plataforma)}</select>
       <label class="chk"><input type="checkbox" ${state.pronto.incluirFaltantes ? 'checked' : ''} onchange="state.pronto.incluirFaltantes=this.checked; actualizar()"> Incluir los sin documento vigente</label>`;
@@ -471,7 +518,89 @@ function controlesHTML(){
       ${op('', 'Todos los trabajadores')}${op('sin_vigente', 'Con algún documento sin vigencia')}${op('por_vencer', 'Con documentos por vencer')}${op('en_revision', 'Con documentos en revisión')}${op('no_apto', 'No aptos en alguna plataforma')}${op('apto', 'Aptos en todas sus plataformas')}
     </select>`;
 }
-function contenidoHTML(){ return state.tab === 'pronto' ? prontoHTML() : matrizHTML(); }
+/* ============================================================
+   REPORTE PARA GERENCIA: % de cumplimiento por plataforma y por área
+   - % documentos vigentes = documentos vigentes o por vencer / documentos requeridos
+   - % trabajadores aptos  = trabajadores con todos sus documentos vigentes / trabajadores
+   El área sale de la nómina (seg_nomina), cruzada por RUT.
+   ============================================================ */
+const SIN_AREA = 'Sin área (no está en la nómina)';
+function docOk(d){ return d.estado === 'vigente' || d.estado === 'por_vencer'; }
+function nivel(p){ return p === null ? '' : (p >= 90 ? 'ok' : (p >= 70 ? 'med' : 'bajo')); }
+function pct(a, b){ return b ? Math.round(1000 * a / b) / 10 : null; }
+function fmtPct(p){ return p === null ? '—' : String(p).replace('.', ',') + ' %'; }
+function areaDe(rut){ const n = state.nomina.get(rut); return n ? n.area : SIN_AREA; }
+// Resume un grupo de documentos: % de documentos y trabajadores aptos (por par trabajador-plataforma)
+function resumir(docs){
+  const ok = docs.filter(docOk).length;
+  const pares = new Map();
+  docs.forEach(d => { const k = d.rut + '|' + d.plataforma_id; if(!pares.has(k)) pares.set(k, true); if(!docOk(d)) pares.set(k, false); });
+  const trab = new Map();   // apto en todas sus plataformas del grupo
+  pares.forEach((apto, k) => { const r = k.split('|')[0]; trab.set(r, (trab.has(r) ? trab.get(r) : true) && apto); });
+  const aptos = [...trab.values()].filter(Boolean).length;
+  return { docs: docs.length, ok, pDocs: pct(ok, docs.length), trab: trab.size, aptos, pAptos: pct(aptos, trab.size) };
+}
+function kpiHTML(etiqueta, p, detalle){
+  return `<div class="rep-kpi"><span>${etiqueta}</span><b>${fmtPct(p)}</b></div>
+    <div class="rep-bar"><span class="nv-${nivel(p)}" style="width:${p || 0}%"></span></div>
+    <div class="dias-label" style="margin-top:3px;">${detalle}</div>`;
+}
+function celdaPct(r){
+  if(!r || !r.docs) return `<td class="pc"><span class="no-esta">—</span></td>`;
+  return `<td class="pc c-${nivel(r.pDocs)}"><b>${fmtPct(r.pDocs)}</b><small>${r.aptos}/${r.trab} aptos</small></td>`;
+}
+function reporteHTML(){
+  if(!state.revisiones.length) return `<div class="empty-state">Todavía no hay revisiones de plataformas.</div>`;
+  const plats = state.revisiones;
+  const porPlat = plats.map(p => ({ p, r: resumir(state.docs.filter(d => d.plataforma_id === p.plataforma_id)) }));
+  const total = resumir(state.docs);
+  // Áreas con trabajadores en alguna plataforma, ordenadas por cantidad de trabajadores
+  const areas = new Map();
+  state.docs.forEach(d => { const a = areaDe(d.rut); if(!areas.has(a)) areas.set(a, new Set()); areas.get(a).add(d.rut); });
+  const ordenAreas = [...areas.keys()].sort((a, b) => (a === SIN_AREA) - (b === SIN_AREA) || areas.get(b).size - areas.get(a).size || a.localeCompare(b, 'es'));
+  const fila = a => {
+    const da = state.docs.filter(d => areaDe(d.rut) === a);
+    return `<tr><td class="n"><b>${escapeHTML(a)}</b><br><span class="rut">${plural(areas.get(a).size, 'trabajador', 'trabajadores')}</span></td>
+      ${plats.map(p => celdaPct(resumir(da.filter(d => d.plataforma_id === p.plataforma_id)))).join('')}
+      ${celdaPct(resumir(da))}</tr>`;
+  };
+  const sinArea = [...(areas.get(SIN_AREA) || [])].map(r => {
+    const ds = state.docs.filter(d => d.rut === r);
+    return { rut: r, nombre: ds[0].nombre, plats: [...new Set(ds.map(d => d.plataforma))].join(', ') };
+  }).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const areasNomina = [...new Set([...state.nomina.values()].map(n => n.area))].filter(a => !areas.has(a)).sort((a, b) => a.localeCompare(b, 'es'));
+  return `
+    <div class="rep-head">
+      <h2>Cumplimiento documental al ${fmtFecha(hoyChile())}</h2>
+      <button type="button" class="btn btn-primary btn-sm no-print" onclick="window.print()">Imprimir o guardar PDF</button>
+    </div>
+    <div class="rep-cards">
+      <div class="rep-card"><h3>Total (${plural(plats.length, 'plataforma', 'plataformas')})</h3>
+        ${kpiHTML('Documentos vigentes', total.pDocs, `${total.ok} de ${total.docs} documentos`)}
+        ${kpiHTML('Trabajadores aptos', total.pAptos, `${total.aptos} de ${total.trab} trabajadores (aptos en todas sus plataformas)`)}
+      </div>
+      ${porPlat.map(({ p, r }) => `<div class="rep-card"><h3>${escapeHTML(p.plataforma)}</h3>
+        ${kpiHTML('Documentos vigentes', r.pDocs, `${r.ok} de ${r.docs} documentos`)}
+        ${kpiHTML('Trabajadores aptos', r.pAptos, `${r.aptos} de ${r.trab} trabajadores`)}
+        <div class="dias-label" style="margin-top:8px;">Revisada el ${fmtFecha(fechaChile(p.revisado_en))}${p.pct_doc_general !== null && p.pct_doc_general !== undefined ? ` · la plataforma informa ${String(p.pct_doc_general).replace('.', ',')} % en doc. generales` : ''}</div>
+      </div>`).join('')}
+    </div>
+    <p class="rep-sec">Por área y plataforma</p>
+    <p class="dias-label" style="margin:0 0 10px;">Cada celda: % de documentos vigentes (o por vencer) y trabajadores aptos. Verde: 90 % o más · amarillo: 70 a 89 % · rojo: menos de 70 %. «Apto» = todos sus documentos vigentes en esa plataforma.</p>
+    <div class="tabla-wrap"><table class="mx">
+      <tr><th class="n">Área</th>${plats.map(p => `<th class="c">${escapeHTML(p.plataforma)}</th>`).join('')}<th class="c">Todas</th></tr>
+      ${ordenAreas.map(fila).join('')}
+      <tr class="tot"><td class="n">Total</td>${porPlat.map(({ r }) => celdaPct(r)).join('')}${celdaPct(total)}</tr>
+    </table></div>
+    ${areasNomina.length ? `<p class="dias-label" style="margin-top:8px;">Áreas de la nómina sin trabajadores en estas plataformas: ${areasNomina.map(escapeHTML).join(', ')}.</p>` : ''}
+    ${sinArea.length ? `<p class="rep-sec">Trabajadores en plataformas que no están en la nómina (${sinArea.length})</p>
+      <p class="dias-label" style="margin:0 0 10px;">Pueden ser personas que ya no trabajan en Innovex y siguen activas en la plataforma del cliente, o un RUT distinto. Conviene revisarlos.</p>
+      <div class="tabla-wrap"><table class="mx"><tr><th class="n">Trabajador</th><th>Plataformas</th></tr>
+        ${sinArea.map(s => `<tr><td class="n"><b>${escapeHTML(s.nombre)}</b> <span class="rut">${fmtRut(s.rut)}</span></td><td>${escapeHTML(s.plats)}</td></tr>`).join('')}
+      </table></div>` : ''}
+    <p class="dias-label" style="margin-top:14px;">Fuente: última revisión de cada plataforma leída por Claude y confirmada por la persona; nómina de Innovex${state.nomina.size ? ` (${state.nomina.size} trabajadores)` : ''}.</p>`;
+}
+function contenidoHTML(){ return state.tab === 'pronto' ? prontoHTML() : (state.tab === 'reporte' ? reporteHTML() : matrizHTML()); }
 // Redibuja solo la lista (sin perder el foco del buscador)
 function actualizar(conStats){
   const c = document.getElementById('contenido'); if(c) c.innerHTML = contenidoHTML();
@@ -518,6 +647,7 @@ function mainHTML(){
       <div class="tabs-row">
         <button type="button" class="tab-item ${state.tab === 'matriz' ? 'active' : ''}" onclick="setTab('matriz')">Trabajador × plataforma</button>
         <button type="button" class="tab-item ${state.tab === 'pronto' ? 'active' : ''}" onclick="setTab('pronto')">Vence pronto</button>
+        <button type="button" class="tab-item ${state.tab === 'reporte' ? 'active' : ''}" onclick="setTab('reporte')">Reporte</button>
       </div>
     </div>
     <div class="controls"><div class="controls-inner">${controlesHTML()}</div></div>
