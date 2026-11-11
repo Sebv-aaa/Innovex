@@ -123,17 +123,57 @@
   .doc-fila:last-child{ border-bottom:none; }
   .doc-fila .der{ text-align:right; flex:0 0 auto; }
 
-  /* Reporte para gerencia */
-  .rep-head{ display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; margin:6px 0 14px; }
+  /* Reporte para gerencia (dashboard) */
+  .rep-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin:0 0 14px; }
   .rep-head h2{ font-family:var(--font-display); font-size:20px; margin:0; }
-  .rep-cards{ display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:12px; margin-bottom:22px; }
-  .rep-card{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:14px 16px; }
-  .rep-card h3{ font-family:var(--font-display); font-size:16px; margin:0 0 10px; }
-  .rep-kpi{ display:flex; justify-content:space-between; align-items:baseline; font-size:12.5px; color:var(--ink-muted); margin-top:8px; }
-  .rep-kpi b{ font-family:var(--font-display); font-size:22px; color:var(--ink); white-space:nowrap; margin-left:8px; }
-  .rep-bar{ height:6px; background:var(--surface-alt); border-radius:3px; overflow:hidden; margin-top:4px; }
-  .rep-bar span{ display:block; height:100%; }
+  .ctl-lbl{ display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink-muted); }
+  .chip-filtro{ display:inline-flex; align-items:center; gap:4px; background:var(--accent); color:#fff; border-radius:20px; padding:3px 4px 3px 11px; font-size:12.5px; font-weight:500; }
+  .chip-filtro button{ background:rgba(255,255,255,0.18); border:none; color:#fff; width:20px; height:20px; border-radius:50%; cursor:pointer; font-size:11px; line-height:1; }
+  .chip-filtro button:hover{ background:rgba(255,255,255,0.35); }
+  .kpis{ display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:10px; margin-bottom:14px; }
+  .kpi{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:12px 14px; border-top:3px solid var(--accent); }
+  .kpi.kpi-med{ border-top-color:var(--st-aduana); } .kpi.kpi-bajo{ border-top-color:var(--st-atrasado); }
+  .kpi-lbl{ font-size:12px; color:var(--ink-muted); }
+  .kpi-val{ font-family:var(--font-display); font-size:30px; font-weight:600; line-height:1.15; margin:2px 0; white-space:nowrap; }
+  .kpi-det{ font-size:11.5px; color:var(--ink-muted); }
+  .kpi-ref{ font-style:italic; }
+  .txt-ok{ color:var(--st-recibido); } .txt-med{ color:var(--st-aduana); } .txt-bajo{ color:var(--st-atrasado); }
+  .dash-grid{ display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:12px; }
+  .panel{ background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:14px 16px; min-width:0; }
+  .panel-ancho{ grid-column:1 / -1; }
+  .panel h3{ font-family:var(--font-display); font-size:16px; margin:0; }
+  .panel-sub{ font-size:12px; color:var(--ink-muted); margin:2px 0 10px; }
+  [data-atenuado]{ opacity:0.3; }
+  [role=button]{ cursor:pointer; }
+  [role=button]:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .torta-wrap{ display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  .torta{ width:210px; max-width:100%; flex:0 0 auto; }
+  .tajada{ stroke:var(--surface); stroke-width:2; transition:opacity .15s; }
+  .tajada:hover{ filter:brightness(1.08); }
+  .tajada:focus-visible{ outline:none; stroke:var(--ink); }
+  .leyenda{ flex:1; min-width:210px; font-size:12.5px; }
+  .ley-cab, .ley-item{ display:grid; grid-template-columns:14px 1fr 44px 58px; gap:8px; align-items:center; padding:4px 6px; border-radius:4px; }
+  .ley-cab{ font-size:11px; color:var(--ink-muted); }
+  .ley-cab span:nth-child(n+3), .ley-n, .ley-p{ text-align:right; }
+  .ley-item:hover{ background:var(--surface-alt); }
+  .ley-item.sel{ background:var(--surface-alt); font-weight:600; }
+  .ley-color{ width:12px; height:12px; border-radius:3px; }
+  .ley-n{ color:var(--ink-muted); }
+  .barras{ display:flex; flex-direction:column; gap:2px; }
+  .barra-fila{ display:grid; grid-template-columns:minmax(110px, 38%) 1fr 56px; gap:10px; align-items:center; padding:5px 6px; border-radius:4px; }
+  .barra-fila:hover, .barra-fila.sel{ background:var(--surface-alt); }
+  .barra-fila.sel .barra-nom{ font-weight:600; }
+  .barra-nom{ font-size:12.5px; line-height:1.25; overflow-wrap:anywhere; }
+  .barra-nom small{ display:block; font-size:11px; color:var(--ink-muted); font-weight:400; }
+  .barra-pista{ height:14px; background:var(--surface-alt); border-radius:0 4px 4px 0; overflow:hidden; }
+  .barra{ display:block; height:100%; border-radius:0 4px 4px 0; }
+  .barra-val{ font-size:13px; font-weight:600; text-align:right; white-space:nowrap; }
   .nv-ok{ background:var(--st-recibido); } .nv-med{ background:var(--st-aduana); } .nv-bajo{ background:var(--st-atrasado); }
+  .leyenda-nivel{ display:flex; flex-wrap:wrap; gap:6px 16px; font-size:11.5px; color:var(--ink-muted); margin:10px 0 0; }
+  .leyenda-nivel span{ display:inline-flex; align-items:center; gap:5px; }
+  .leyenda-nivel i{ display:inline-block; width:12px; height:8px; border-radius:2px; }
+  .rep-tip{ position:fixed; z-index:70; display:none; pointer-events:none; background:var(--ink); color:#fff; font-size:12px; line-height:1.45; padding:8px 11px; border-radius:6px; max-width:300px; box-shadow:0 6px 18px rgba(0,0,0,0.22); }
+  .rep-tip b{ display:block; font-size:12.5px; margin-bottom:2px; }
   .rep-sec{ font-family:var(--font-display); font-size:16px; margin:22px 0 4px; }
   table.mx td.pc{ text-align:center; font-size:13px; }
   table.mx td.pc b{ display:block; font-size:14px; }
@@ -141,7 +181,9 @@
   td.pc.c-ok{ background:var(--st-recibido-bg); } td.pc.c-med{ background:var(--st-aduana-bg); } td.pc.c-bajo{ background:var(--st-atrasado-bg); }
   table.mx tr.tot td{ font-weight:600; border-top:2px solid var(--border); }
   @media print{
-    .controls, .tabs-row, .account-menu-wrap, .info-banner, .no-print{ display:none !important; }
+    .controls, .tabs-row, .account-menu-wrap, .info-banner, .no-print, .stats-row, .rep-tip, .panel-sub{ display:none !important; }
+    .panel, .kpi, .tabla-wrap{ break-inside:avoid; }
+    .dash-grid{ grid-template-columns:1fr 1fr; }
     body{ background:#fff; }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     .tabla-wrap{ overflow:visible; }
@@ -154,6 +196,11 @@
     .modal{ padding:20px 18px; }
     .doc-fila{ flex-wrap:wrap; }
     table.mx td.n{ white-space:normal; min-width:140px; max-width:170px; }
+    .dash-grid{ grid-template-columns:minmax(0, 1fr); }
+    .torta{ width:180px; margin:0 auto; }
+    .kpis{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .kpi-val{ font-size:24px; }
+    .ctl-lbl{ flex:1 1 140px; } .ctl-lbl select{ flex:1; min-width:0; }
   }
 </style>
 </head>
@@ -193,6 +240,7 @@ let state = {
   revisiones: [], docs: [], nomina: new Map(),
   filtros: { texto: '', plataforma: '', estado: '' },
   pronto: { plataforma: '', incluirFaltantes: false },
+  rep: { plataforma: '', area: '', foco: null },   // filtros del reporte
   modal: null,          // { rut, plataformaId }
   showAccountMenu: false
 };
@@ -287,7 +335,7 @@ async function handleLogin(){
 async function handleLogout(){ await supabaseClient.auth.signOut(); limpiarEstado(); render(); }
 function limpiarEstado(){
   state.session = null; state.acceso = false; state.revisiones = []; state.docs = []; state.nomina = new Map();
-  state.modal = null; state.showAccountMenu = false; state.tab = 'matriz';
+  state.modal = null; state.showAccountMenu = false; state.tab = 'matriz'; state.rep = { plataforma: '', area: '', foco: null };
 }
 
 /* ============================================================
@@ -504,7 +552,15 @@ function modalHTML(){
 function controlesHTML(){
   const opPlat = sel => `<option value="">Todas las plataformas</option>${state.revisiones.map(r => `<option value="${r.plataforma_id}" ${sel === String(r.plataforma_id) ? 'selected' : ''}>${escapeHTML(r.plataforma)}</option>`).join('')}`;
   if(state.tab === 'reporte'){
-    return `<span class="dias-label">Resumen para gerencia con la última revisión de cada plataforma. Usa «Imprimir o guardar PDF» para compartirlo.</span>`;
+    const g = gruposArea(), f = state.rep;
+    const areas = [...new Set(state.docs.map(d => areaDe(d.rut)))].sort((a, b) => (a === SIN_AREA) - (b === SIN_AREA) || a.localeCompare(b, 'es'));
+    const opArea = (v, t) => `<option value="${escapeHTML(v)}" ${f.area === v ? 'selected' : ''}>${escapeHTML(t)}</option>`;
+    const chip = (campo, txt) => `<span class="chip-filtro">${escapeHTML(txt)}<button type="button" onclick="fijarFiltro('${campo}', '')" aria-label="Quitar filtro ${escapeHTML(txt)}">✕</button></span>`;
+    return `<label class="ctl-lbl">Plataforma <select onchange="fijarFiltro('plataforma', this.value)">${opPlat(f.plataforma)}</select></label>
+      <label class="ctl-lbl">Área <select onchange="fijarFiltro('area', this.value)">${opArea('', 'Todas las áreas')}${areas.map(a => opArea(a, a)).join('')}${g.otras.length ? opArea(OTRAS, OTRAS + ' (torta)') : ''}</select></label>
+      ${f.plataforma ? chip('plataforma', nombrePlat(f.plataforma)) : ''}${f.area ? chip('area', f.area === SIN_AREA ? 'Sin área' : f.area) : ''}
+      ${f.plataforma && f.area ? `<button type="button" class="link-btn" onclick="state.rep.plataforma=''; fijarFiltro('area', '')">Quitar filtros</button>` : ''}
+      <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="window.print()">Imprimir o guardar PDF</button>`;
   }
   if(state.tab === 'pronto'){
     return `<select onchange="state.pronto.plataforma=this.value; actualizar()">${opPlat(state.pronto.plataforma)}</select>
@@ -519,86 +575,253 @@ function controlesHTML(){
     </select>`;
 }
 /* ============================================================
-   REPORTE PARA GERENCIA: % de cumplimiento por plataforma y por área
-   - % documentos vigentes = documentos vigentes o por vencer / documentos requeridos
-   - % trabajadores aptos  = trabajadores con todos sus documentos vigentes / trabajadores
-   El área sale de la nómina (seg_nomina), cruzada por RUT.
+   REPORTE PARA GERENCIA (dashboard interactivo)
+   - % de cumplimiento = documentos vigentes o por vencer / documentos requeridos (indicador principal)
+   - % trabajadores aptos = trabajadores con todos sus documentos vigentes / trabajadores
+   - El área sale de la nómina (seg_nomina), cruzada por RUT.
+   - Filtros: plataforma y área. Clic en la torta o en una barra filtra; volver a hacer clic lo quita.
    ============================================================ */
 const SIN_AREA = 'Sin área (no está en la nómina)';
+const OTRAS = 'Otras áreas';
+// Áreas que se muestran juntas (la nómina ya las guarda así desde el 11-11-2026; esto cubre planillas antiguas)
+const AREAS_AGRUPADAS = { 'Monitoreo Mar Norte':'Monitoreo Mar', 'Monitoreo Mar Sur':'Monitoreo Mar', 'Monitoreo Mar Soporte':'Monitoreo Mar' };
+// Colores de la torta: cada área conserva su color aunque cambie el filtro (orden validado para daltonismo)
+const COLORES_AREA = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6'];
+const COLOR_OTRAS = '#bdbab0', COLOR_SIN_AREA = '#77756d';
 function docOk(d){ return d.estado === 'vigente' || d.estado === 'por_vencer'; }
 function nivel(p){ return p === null ? '' : (p >= 90 ? 'ok' : (p >= 70 ? 'med' : 'bajo')); }
 function pct(a, b){ return b ? Math.round(1000 * a / b) / 10 : null; }
-function fmtPct(p){ return p === null ? '—' : String(p).replace('.', ',') + ' %'; }
-function areaDe(rut){ const n = state.nomina.get(rut); return n ? n.area : SIN_AREA; }
-// Resume un grupo de documentos: % de documentos y trabajadores aptos (por par trabajador-plataforma)
+function fmtPct(p){ return p === null || p === undefined ? '—' : String(p).replace('.', ',') + ' %'; }
+function nombreArea(a){ return AREAS_AGRUPADAS[a] || a; }
+function areaDe(rut){ const n = state.nomina.get(rut); return n ? nombreArea(n.area) : SIN_AREA; }
+// Resume un grupo de documentos: % de documentos y trabajadores aptos (apto en todas sus plataformas del grupo)
 function resumir(docs){
   const ok = docs.filter(docOk).length;
   const pares = new Map();
   docs.forEach(d => { const k = d.rut + '|' + d.plataforma_id; if(!pares.has(k)) pares.set(k, true); if(!docOk(d)) pares.set(k, false); });
-  const trab = new Map();   // apto en todas sus plataformas del grupo
-  pares.forEach((apto, k) => { const r = k.split('|')[0]; trab.set(r, (trab.has(r) ? trab.get(r) : true) && apto); });
+  const trab = new Map();
+  pares.forEach((esApto, k) => { const r = k.split('|')[0]; trab.set(r, (trab.has(r) ? trab.get(r) : true) && esApto); });
   const aptos = [...trab.values()].filter(Boolean).length;
-  return { docs: docs.length, ok, pDocs: pct(ok, docs.length), trab: trab.size, aptos, pAptos: pct(aptos, trab.size) };
+  const c = conteo(docs);
+  return { docs: docs.length, ok, pDocs: pct(ok, docs.length), trab: trab.size, aptos, pAptos: pct(aptos, trab.size),
+           sinVigente: c.sin_vigente, porVencer: c.por_vencer, enRevision: c.en_revision };
 }
-function kpiHTML(etiqueta, p, detalle){
-  return `<div class="rep-kpi"><span>${etiqueta}</span><b>${fmtPct(p)}</b></div>
-    <div class="rep-bar"><span class="nv-${nivel(p)}" style="width:${p || 0}%"></span></div>
-    <div class="dias-label" style="margin-top:3px;">${detalle}</div>`;
+// Grupos de la torta, calculados con todos los datos (no cambian con el filtro):
+// las 7 áreas con más trabajadores tienen color propio; el resto va a «Otras áreas».
+function gruposArea(){
+  const cuenta = new Map();
+  state.docs.forEach(d => { const a = areaDe(d.rut); if(a === SIN_AREA) return; if(!cuenta.has(a)) cuenta.set(a, new Set()); cuenta.get(a).add(d.rut); });
+  const orden = [...cuenta.keys()].sort((a, b) => cuenta.get(b).size - cuenta.get(a).size || a.localeCompare(b, 'es'));
+  const color = new Map(), grupo = new Map();
+  orden.forEach((a, i) => {
+    const propia = i < COLORES_AREA.length;
+    grupo.set(a, propia ? a : OTRAS);
+    if(propia) color.set(a, COLORES_AREA[i]);
+  });
+  color.set(OTRAS, COLOR_OTRAS); color.set(SIN_AREA, COLOR_SIN_AREA); grupo.set(SIN_AREA, SIN_AREA);
+  const claves = [...orden.slice(0, COLORES_AREA.length), ...(orden.length > COLORES_AREA.length ? [OTRAS] : []), SIN_AREA];
+  return { color, grupo, claves, otras: orden.slice(COLORES_AREA.length) };
+}
+function coincideArea(a, filtro, g){ return !filtro || (filtro === OTRAS ? g.grupo.get(a) === OTRAS : a === filtro); }
+function docsReporte(conPlat, conArea, g){
+  const f = state.rep;
+  return state.docs.filter(d => (!conPlat || !f.plataforma || String(d.plataforma_id) === f.plataforma) && (!conArea || coincideArea(areaDe(d.rut), f.area, g)));
+}
+function nombrePlat(id){ const r = state.revisiones.find(x => String(x.plataforma_id) === String(id)); return r ? r.plataforma : ''; }
+
+// --- Interacción ---
+let repAcciones = [];   // acciones de los elementos clicables del último dibujo
+function accion(fn){ repAcciones.push(fn); return repAcciones.length - 1; }
+function repClic(i){ const fn = repAcciones[i]; if(fn) fn(); }
+function repTecla(e, i){ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); repClic(i); } }
+function alternarFiltro(campo, valor){
+  const act = document.activeElement;
+  state.rep.foco = act && act.dataset ? (act.dataset.foco || null) : null;
+  state.rep[campo] = state.rep[campo] === valor ? '' : valor;
+  refrescarReporte();
+}
+function fijarFiltro(campo, valor){ state.rep[campo] = valor; state.rep.foco = null; refrescarReporte(); }
+function refrescarReporte(){
+  ocultarTip();
+  const ctl = document.getElementById('controles'); if(ctl) ctl.innerHTML = controlesHTML();
+  const c = document.getElementById('contenido'); if(c) c.innerHTML = contenidoHTML();
+  // Mantiene el foco del teclado en el elemento que se usó
+  if(state.rep.foco){ const el = [...document.querySelectorAll('[data-foco]')].find(x => x.dataset.foco === state.rep.foco); if(el) el.focus({ preventScroll:true }); }
+}
+// Atributos comunes de un elemento clicable: acción, teclado, detalle (tooltip) y estado atenuado
+function attrsClic(i, tip, foco, atenuado, etiqueta){
+  return `role="button" tabindex="0" onclick="repClic(${i})" onkeydown="repTecla(event, ${i})" data-tip="${escapeHTML(tip)}" data-foco="${escapeHTML(foco)}" aria-label="${escapeHTML(etiqueta)}" ${atenuado ? 'data-atenuado="1"' : ''}`;
+}
+// Detalle al pasar el mouse o al enfocar con el teclado (texto plano, sin HTML)
+function tipEl(){
+  let t = document.getElementById('rep-tip');
+  if(!t){ t = document.createElement('div'); t.id = 'rep-tip'; t.className = 'rep-tip'; t.setAttribute('role', 'tooltip'); document.body.appendChild(t); }
+  return t;
+}
+function mostrarTip(el, x, y){
+  const t = tipEl(); const lineas = el.getAttribute('data-tip').split('\n');
+  t.textContent = '';
+  lineas.forEach((l, i) => { const p = document.createElement(i === 0 ? 'b' : 'div'); p.textContent = l; t.appendChild(p); });
+  t.style.display = 'block';
+  const w = t.offsetWidth, h = t.offsetHeight;
+  t.style.left = Math.max(8, Math.min(x + 14, window.innerWidth - w - 8)) + 'px';
+  t.style.top = (y + 16 + h > window.innerHeight ? y - h - 12 : y + 16) + 'px';
+}
+function ocultarTip(){ const t = document.getElementById('rep-tip'); if(t) t.style.display = 'none'; }
+document.addEventListener('mousemove', e => {
+  const el = e.target.closest ? e.target.closest('[data-tip]') : null;
+  if(el) mostrarTip(el, e.clientX, e.clientY); else ocultarTip();
+});
+document.addEventListener('focusin', e => {
+  const el = e.target.closest ? e.target.closest('[data-tip]') : null;
+  if(el && el.matches(':focus-visible')){ const r = el.getBoundingClientRect(); mostrarTip(el, r.left + r.width / 2, r.bottom); } else ocultarTip();
+});
+document.addEventListener('scroll', ocultarTip, true);
+
+// --- Piezas del dashboard ---
+function kpiGrande(etiqueta, valor, detalle, clase){
+  return `<div class="kpi ${clase || ''}"><div class="kpi-lbl">${etiqueta}</div><div class="kpi-val">${valor}</div>${detalle ? `<div class="kpi-det">${detalle}</div>` : ''}</div>`;
+}
+function textoTrab(r){ return `${r.aptos} de ${r.trab} aptos`; }
+function tortaHTML(g){
+  const docs = docsReporte(true, false, g);
+  const porGrupo = new Map();
+  docs.forEach(d => { const k = g.grupo.get(areaDe(d.rut)); if(!porGrupo.has(k)) porGrupo.set(k, new Set()); porGrupo.get(k).add(d.rut); });
+  const total = [...porGrupo.values()].reduce((s, x) => s + x.size, 0);
+  if(!total) return `<div class="empty-state">Sin trabajadores con este filtro.</div>`;
+  const R = 92, C = 100;
+  let ang = -Math.PI / 2, svg = '', leyenda = '';
+  g.claves.filter(k => porGrupo.has(k)).forEach(k => {
+    const n = porGrupo.get(k).size, frac = n / total;
+    const r = resumir(docs.filter(d => g.grupo.get(areaDe(d.rut)) === k));
+    const sel = state.rep.area === k, atenuado = state.rep.area && !sel && !(state.rep.area !== OTRAS && k === OTRAS && g.grupo.get(state.rep.area) === OTRAS);
+    const pctTrab = String(Math.round(1000 * frac) / 10).replace('.', ',');
+    const incluye = k === OTRAS ? `\nIncluye: ${g.otras.join(', ')}` : '';
+    const tip = `${k}\n${plural(n, 'trabajador', 'trabajadores')} (${pctTrab} % del total)\nCumplimiento: ${fmtPct(r.pDocs)} (${r.ok} de ${r.docs} documentos)\nTrabajadores aptos: ${r.aptos} de ${r.trab}${incluye}\n${sel ? 'Clic para quitar el filtro' : 'Clic para filtrar por esta área'}`;
+    const i = accion(() => alternarFiltro('area', k));
+    const a2 = ang + frac * 2 * Math.PI;
+    const p1 = [C + R * Math.cos(ang), C + R * Math.sin(ang)], p2 = [C + R * Math.cos(a2), C + R * Math.sin(a2)];
+    const d = frac >= 0.9999 ? null : `M${C},${C} L${p1[0].toFixed(2)},${p1[1].toFixed(2)} A${R},${R} 0 ${frac > 0.5 ? 1 : 0} 1 ${p2[0].toFixed(2)},${p2[1].toFixed(2)} Z`;
+    const at = attrsClic(i, tip, 'area:' + k, atenuado, `${k}: ${n} trabajadores, cumplimiento ${fmtPct(r.pDocs)}`);
+    svg += d ? `<path class="tajada" d="${d}" fill="${g.color.get(k)}" ${at}></path>` : `<circle class="tajada" cx="${C}" cy="${C}" r="${R}" fill="${g.color.get(k)}" ${at}></circle>`;
+    leyenda += `<div class="ley-item ${sel ? 'sel' : ''}" ${attrsClic(accion(() => alternarFiltro('area', k)), tip, 'ley:' + k, atenuado, `${k}: ${n} trabajadores`)}>
+      <span class="ley-color" style="background:${g.color.get(k)}"></span><span class="ley-nom">${escapeHTML(k)}</span><span class="ley-n">${n}</span><span class="ley-p">${fmtPct(r.pDocs)}</span></div>`;
+    ang = a2;
+  });
+  return `<div class="torta-wrap">
+    <svg class="torta" viewBox="0 0 200 200" role="group" aria-label="Trabajadores por área">${svg}</svg>
+    <div class="leyenda"><div class="ley-cab"><span></span><span>Área</span><span>Trab.</span><span>Cumpl.</span></div>${leyenda}</div>
+  </div>`;
+}
+// Barras horizontales del % de cumplimiento (color según el nivel: verde, amarillo o rojo)
+function barrasHTML(filas){
+  return `<div class="barras">${filas.map(f => `<div class="barra-fila ${f.sel ? 'sel' : ''}" ${attrsClic(f.i, f.tip, f.foco, f.atenuado, f.etiqueta)}>
+      <span class="barra-nom">${escapeHTML(f.nombre)}<small>${f.sub}</small></span>
+      <span class="barra-pista"><span class="barra nv-${nivel(f.p)}" style="width:${f.p || 0}%"></span></span>
+      <span class="barra-val">${fmtPct(f.p)}</span>
+    </div>`).join('')}</div>`;
+}
+function barrasAreaHTML(g){
+  const docs = docsReporte(true, false, g);
+  const areas = [...new Set(docs.map(d => areaDe(d.rut)))];
+  const filas = areas.map(a => {
+    const r = resumir(docs.filter(d => areaDe(d.rut) === a));
+    const sel = state.rep.area === a, enGrupo = state.rep.area === OTRAS && g.grupo.get(a) === OTRAS;
+    const nombre = a === SIN_AREA ? 'Sin área' : a;
+    return { a, nombre, p: r.pDocs, sub: `${plural(r.trab, 'trabajador', 'trabajadores')} · ${textoTrab(r)}`, sel: sel || enGrupo,
+      atenuado: state.rep.area && !sel && !enGrupo, foco: 'barea:' + a,
+      i: accion(() => alternarFiltro('area', a)), etiqueta: `${a}: cumplimiento ${fmtPct(r.pDocs)}`,
+      tip: `${a}\nCumplimiento: ${fmtPct(r.pDocs)} (${r.ok} de ${r.docs} documentos)\nTrabajadores aptos: ${r.aptos} de ${r.trab}\nSin documento vigente: ${r.sinVigente} · por vencer: ${r.porVencer}\n${sel ? 'Clic para quitar el filtro' : 'Clic para filtrar por esta área'}` };
+  }).sort((x, y) => (x.a === SIN_AREA) - (y.a === SIN_AREA) || (y.p ?? -1) - (x.p ?? -1) || x.nombre.localeCompare(y.nombre, 'es'));
+  return barrasHTML(filas);
+}
+function barrasPlatHTML(g){
+  const docs = docsReporte(false, true, g);
+  const filas = state.revisiones.map(p => {
+    const r = resumir(docs.filter(d => d.plataforma_id === p.plataforma_id));
+    const id = String(p.plataforma_id), sel = state.rep.plataforma === id;
+    return { nombre: p.plataforma, p: r.docs ? r.pDocs : null, sub: r.docs ? `${plural(r.trab, 'trabajador', 'trabajadores')} · ${textoTrab(r)}` : 'sin trabajadores de esta área',
+      sel, atenuado: state.rep.plataforma && !sel, foco: 'bplat:' + id,
+      i: accion(() => alternarFiltro('plataforma', id)), etiqueta: `${p.plataforma}: cumplimiento ${fmtPct(r.pDocs)}`,
+      tip: `${p.plataforma}\nCumplimiento: ${fmtPct(r.pDocs)} (${r.ok} de ${r.docs} documentos)\nTrabajadores aptos: ${r.aptos} de ${r.trab}${p.pct_doc_general !== null && p.pct_doc_general !== undefined ? `\nLa plataforma informa ${String(p.pct_doc_general).replace('.', ',')} % (puede contar otros documentos)` : ''}\nRevisada el ${fmtFecha(fechaChile(p.revisado_en))}\n${sel ? 'Clic para quitar el filtro' : 'Clic para filtrar por esta plataforma'}` };
+  }).sort((x, y) => (y.p ?? -1) - (x.p ?? -1));
+  return barrasHTML(filas);
+}
+function kpiAcreditacion(){
+  const plats = state.rep.plataforma ? state.revisiones.filter(r => String(r.plataforma_id) === state.rep.plataforma) : state.revisiones;
+  const conFecha = plats.filter(r => r.vigencia_acreditacion);
+  if(!conFecha.length) return kpiGrande('Acreditación de Innovex', '—', 'Sin fecha en la plataforma');
+  const hoy = hoyChile();
+  const r = conFecha.reduce((a, b) => a.vigencia_acreditacion <= b.vigencia_acreditacion ? a : b);
+  const d = diasEntre(hoy, r.vigencia_acreditacion.slice(0, 10));
+  const cuando = d < 0 ? 'venció hace ' + plural(-d, 'día', 'días') : (d === 0 ? 'vence hoy' : 'en ' + plural(d, 'día', 'días'));
+  const clase = d < 0 ? 'kpi-bajo' : (d <= DIAS_AVISO_ACREDITACION ? 'kpi-med' : '');
+  return kpiGrande(plats.length > 1 ? 'Próxima acreditación por vencer' : 'Acreditación de Innovex', fmtFecha(r.vigencia_acreditacion), `${plats.length > 1 ? escapeHTML(r.plataforma) + ' · ' : ''}${cuando}`, clase);
 }
 function celdaPct(r){
   if(!r || !r.docs) return `<td class="pc"><span class="no-esta">—</span></td>`;
   return `<td class="pc c-${nivel(r.pDocs)}"><b>${fmtPct(r.pDocs)}</b><small>${r.aptos}/${r.trab} aptos</small></td>`;
 }
 function reporteHTML(){
+  repAcciones = [];
   if(!state.revisiones.length) return `<div class="empty-state">Todavía no hay revisiones de plataformas.</div>`;
-  const plats = state.revisiones;
-  const porPlat = plats.map(p => ({ p, r: resumir(state.docs.filter(d => d.plataforma_id === p.plataforma_id)) }));
-  const total = resumir(state.docs);
-  // Áreas con trabajadores en alguna plataforma, ordenadas por cantidad de trabajadores
+  const g = gruposArea(), f = state.rep;
+  const docs = docsReporte(true, true, g);
+  const t = resumir(docs);
+  const platSel = f.plataforma ? state.revisiones.find(r => String(r.plataforma_id) === f.plataforma) : null;
+  const filtroTxt = [platSel ? 'Plataforma ' + platSel.plataforma : 'Todas las plataformas', f.area ? 'área ' + (f.area === OTRAS ? OTRAS + ' (' + g.otras.join(', ') + ')' : f.area) : 'todas las áreas'].join(' · ');
+  const refPlat = platSel && platSel.pct_doc_general !== null && platSel.pct_doc_general !== undefined && !f.area
+    ? `<br><span class="kpi-ref">La plataforma informa ${String(platSel.pct_doc_general).replace('.', ',')} % (puede contar otros documentos)</span>` : '';
+  // Tabla área × plataforma, con los mismos filtros
+  const platsTabla = platSel ? [platSel] : state.revisiones;
+  const docsPlat = docsReporte(true, false, g);
   const areas = new Map();
-  state.docs.forEach(d => { const a = areaDe(d.rut); if(!areas.has(a)) areas.set(a, new Set()); areas.get(a).add(d.rut); });
+  docsPlat.forEach(d => { const a = areaDe(d.rut); if(!coincideArea(a, f.area, g)) return; if(!areas.has(a)) areas.set(a, new Set()); areas.get(a).add(d.rut); });
   const ordenAreas = [...areas.keys()].sort((a, b) => (a === SIN_AREA) - (b === SIN_AREA) || areas.get(b).size - areas.get(a).size || a.localeCompare(b, 'es'));
   const fila = a => {
-    const da = state.docs.filter(d => areaDe(d.rut) === a);
+    const da = docs.filter(d => areaDe(d.rut) === a);
     return `<tr><td class="n"><b>${escapeHTML(a)}</b><br><span class="rut">${plural(areas.get(a).size, 'trabajador', 'trabajadores')}</span></td>
-      ${plats.map(p => celdaPct(resumir(da.filter(d => d.plataforma_id === p.plataforma_id)))).join('')}
-      ${celdaPct(resumir(da))}</tr>`;
+      ${platsTabla.map(p => celdaPct(resumir(da.filter(d => d.plataforma_id === p.plataforma_id)))).join('')}
+      ${platSel ? '' : celdaPct(resumir(da))}</tr>`;
   };
-  const sinArea = [...(areas.get(SIN_AREA) || [])].map(r => {
-    const ds = state.docs.filter(d => d.rut === r);
+  const sinArea = coincideArea(SIN_AREA, f.area, g) ? [...(areas.get(SIN_AREA) || [])].map(r => {
+    const ds = docsPlat.filter(d => d.rut === r);
     return { rut: r, nombre: ds[0].nombre, plats: [...new Set(ds.map(d => d.plataforma))].join(', ') };
-  }).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
-  const areasNomina = [...new Set([...state.nomina.values()].map(n => n.area))].filter(a => !areas.has(a)).sort((a, b) => a.localeCompare(b, 'es'));
+  }).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')) : [];
+  const conTrab = new Set(docsPlat.map(d => areaDe(d.rut)));
+  const areasNomina = f.area ? [] : [...new Set([...state.nomina.values()].map(n => nombreArea(n.area)))].filter(a => !conTrab.has(a)).sort((a, b) => a.localeCompare(b, 'es'));
   return `
     <div class="rep-head">
-      <h2>Cumplimiento documental al ${fmtFecha(hoyChile())}</h2>
-      <button type="button" class="btn btn-primary btn-sm no-print" onclick="window.print()">Imprimir o guardar PDF</button>
+      <div><h2>Cumplimiento documental al ${fmtFecha(hoyChile())}</h2><p class="page-sub">${escapeHTML(filtroTxt)}</p></div>
     </div>
-    <div class="rep-cards">
-      <div class="rep-card"><h3>Total (${plural(plats.length, 'plataforma', 'plataformas')})</h3>
-        ${kpiHTML('Documentos vigentes', total.pDocs, `${total.ok} de ${total.docs} documentos`)}
-        ${kpiHTML('Trabajadores aptos', total.pAptos, `${total.aptos} de ${total.trab} trabajadores (aptos en todas sus plataformas)`)}
-      </div>
-      ${porPlat.map(({ p, r }) => `<div class="rep-card"><h3>${escapeHTML(p.plataforma)}</h3>
-        ${kpiHTML('Documentos vigentes', r.pDocs, `${r.ok} de ${r.docs} documentos`)}
-        ${kpiHTML('Trabajadores aptos', r.pAptos, `${r.aptos} de ${r.trab} trabajadores`)}
-        <div class="dias-label" style="margin-top:8px;">Revisada el ${fmtFecha(fechaChile(p.revisado_en))}${p.pct_doc_general !== null && p.pct_doc_general !== undefined ? ` · la plataforma informa ${String(p.pct_doc_general).replace('.', ',')} % en doc. generales` : ''}</div>
-      </div>`).join('')}
+    <div class="kpis">
+      ${kpiGrande('Cumplimiento', `<span class="txt-${nivel(t.pDocs)}">${fmtPct(t.pDocs)}</span>`, `${t.ok} de ${t.docs} documentos vigentes${refPlat}`)}
+      ${kpiGrande('Trabajadores aptos', fmtPct(t.pAptos), `${t.aptos} de ${t.trab}${!platSel && state.revisiones.length > 1 ? ' (aptos en todas sus plataformas)' : ''}`)}
+      ${kpiGrande('Trabajadores', t.trab, platSel ? 'en esta plataforma' : `en ${plural(state.revisiones.length, 'plataforma', 'plataformas')}`)}
+      ${kpiGrande('Sin documento vigente', t.sinVigente, 'documentos', t.sinVigente ? 'kpi-bajo' : '')}
+      ${kpiGrande('Por vencer', t.porVencer, `documentos en 30 días o menos${t.enRevision ? ` · ${t.enRevision} en revisión` : ''}`, t.porVencer ? 'kpi-med' : '')}
+      ${kpiAcreditacion()}
     </div>
+    <div class="dash-grid">
+      <section class="panel"><h3>Trabajadores por área</h3><p class="panel-sub">Haz clic en una porción o en la leyenda para filtrar.</p>${tortaHTML(g)}</section>
+      <section class="panel"><h3>Cumplimiento por área</h3><p class="panel-sub">% de documentos vigentes${platSel ? ' en ' + escapeHTML(platSel.plataforma) : ''}. Clic para filtrar.</p>${barrasAreaHTML(g)}</section>
+      ${state.revisiones.length > 1 ? `<section class="panel panel-ancho"><h3>Cumplimiento por plataforma</h3><p class="panel-sub">% de documentos vigentes${f.area ? ' del área seleccionada' : ''}. Clic para filtrar.</p>${barrasPlatHTML(g)}</section>` : ''}
+    </div>
+    <p class="leyenda-nivel"><span><i class="nv-ok"></i>90 % o más</span><span><i class="nv-med"></i>70 a 89 %</span><span><i class="nv-bajo"></i>menos de 70 %</span><span>«Apto» = todos sus documentos vigentes en esa plataforma.</span></p>
     <p class="rep-sec">Por área y plataforma</p>
-    <p class="dias-label" style="margin:0 0 10px;">Cada celda: % de documentos vigentes (o por vencer) y trabajadores aptos. Verde: 90 % o más · amarillo: 70 a 89 % · rojo: menos de 70 %. «Apto» = todos sus documentos vigentes en esa plataforma.</p>
-    <div class="tabla-wrap"><table class="mx">
-      <tr><th class="n">Área</th>${plats.map(p => `<th class="c">${escapeHTML(p.plataforma)}</th>`).join('')}<th class="c">Todas</th></tr>
+    <p class="dias-label" style="margin:0 0 10px;">Cada celda: % de documentos vigentes (o por vencer) y trabajadores aptos.</p>
+    ${ordenAreas.length ? `<div class="tabla-wrap"><table class="mx">
+      <tr><th class="n">Área</th>${platsTabla.map(p => `<th class="c">${escapeHTML(p.plataforma)}</th>`).join('')}${platSel ? '' : '<th class="c">Todas</th>'}</tr>
       ${ordenAreas.map(fila).join('')}
-      <tr class="tot"><td class="n">Total</td>${porPlat.map(({ r }) => celdaPct(r)).join('')}${celdaPct(total)}</tr>
-    </table></div>
-    ${areasNomina.length ? `<p class="dias-label" style="margin-top:8px;">Áreas de la nómina sin trabajadores en estas plataformas: ${areasNomina.map(escapeHTML).join(', ')}.</p>` : ''}
+      ${ordenAreas.length > 1 ? `<tr class="tot"><td class="n">Total</td>${platsTabla.map(p => celdaPct(resumir(docs.filter(d => d.plataforma_id === p.plataforma_id)))).join('')}${platSel ? '' : celdaPct(t)}</tr>` : ''}
+    </table></div>` : `<div class="empty-state">Sin trabajadores con este filtro.</div>`}
+    ${areasNomina.length ? `<p class="dias-label" style="margin-top:8px;">Áreas de la nómina sin trabajadores en ${platSel ? 'esta plataforma' : 'estas plataformas'}: ${areasNomina.map(escapeHTML).join(', ')}.</p>` : ''}
     ${sinArea.length ? `<p class="rep-sec">Trabajadores en plataformas que no están en la nómina (${sinArea.length})</p>
       <p class="dias-label" style="margin:0 0 10px;">Pueden ser personas que ya no trabajan en Innovex y siguen activas en la plataforma del cliente, o un RUT distinto. Conviene revisarlos.</p>
       <div class="tabla-wrap"><table class="mx"><tr><th class="n">Trabajador</th><th>Plataformas</th></tr>
         ${sinArea.map(s => `<tr><td class="n"><b>${escapeHTML(s.nombre)}</b> <span class="rut">${fmtRut(s.rut)}</span></td><td>${escapeHTML(s.plats)}</td></tr>`).join('')}
       </table></div>` : ''}
-    <p class="dias-label" style="margin-top:14px;">Fuente: última revisión de cada plataforma leída por Claude y confirmada por la persona; nómina de Innovex${state.nomina.size ? ` (${state.nomina.size} trabajadores)` : ''}.</p>`;
+    <p class="dias-label" style="margin-top:14px;">Fuente: última revisión de cada plataforma leída por Claude y confirmada por la persona (${state.revisiones.map(r => escapeHTML(r.plataforma) + ' ' + fmtFecha(fechaChile(r.revisado_en))).join(', ')}); nómina de Innovex${state.nomina.size ? ` (${state.nomina.size} trabajadores)` : ''}.</p>`;
 }
 function contenidoHTML(){ return state.tab === 'pronto' ? prontoHTML() : (state.tab === 'reporte' ? reporteHTML() : matrizHTML()); }
 // Redibuja solo la lista (sin perder el foco del buscador)
@@ -650,11 +873,11 @@ function mainHTML(){
         <button type="button" class="tab-item ${state.tab === 'reporte' ? 'active' : ''}" onclick="setTab('reporte')">Reporte</button>
       </div>
     </div>
-    <div class="controls"><div class="controls-inner">${controlesHTML()}</div></div>
+    <div class="controls"><div class="controls-inner" id="controles">${controlesHTML()}</div></div>
     <div class="main">
       ${state.loadError ? `<div class="field-note" style="background:var(--st-atrasado-bg);color:var(--st-atrasado);">${escapeHTML(state.loadError)} <button type="button" class="link-btn" onclick="arrancar()">Reintentar</button></div>` : ''}
       <div class="info-banner">Los datos vienen de la última revisión de cada plataforma. Un documento renovado en la plataforma seguirá apareciendo como «por vencer» hasta la próxima revisión.</div>
-      ${tarjetasHTML()}
+      ${state.tab === 'reporte' ? '' : tarjetasHTML()}
       <div id="contenido">${contenidoHTML()}</div>
     </div>
     ${state.modal ? modalHTML() : ''}`;
